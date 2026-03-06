@@ -6,103 +6,56 @@
 //
 
 import SwiftUI
-import UniformTypeIdentifiers
 import WebKit
+import UniformTypeIdentifiers
 
 struct SingleView: View {
-    @StateObject private var homeViewModel = HomeViewModel()
-    var body: some View{
-        VStack(
-            spacing: 8
-        ) {
+    @StateObject private var viewModel = SingleViewModel()
+
+    var body: some View {
+        VStack(spacing: 8) {
             HStack {
-                TextField(
-                    "https://...",
-                    text: $homeViewModel.urlString
-                )
-                .textFieldStyle(
-                    .roundedBorder
-                )
-                .onSubmit {
-                    homeViewModel
-                        .load()
+                TextField("https://...", text: $viewModel.urlString)
+                    .textFieldStyle(.roundedBorder)
+                    .onSubmit {
+                        viewModel.load()
+                    }
+
+                Button("Load") {
+                    viewModel.load()
                 }
-                
-                Button(
-                    "Load"
-                ) {
-                    homeViewModel
-                        .load()
+
+                Button("Save as PDF") {
+                    viewModel.makePDFForExport()
                 }
-                
-                Button(
-                    "Save as PDF"
-                ) {
-                    homeViewModel
-                        .makePDFForExport()
-                }
-                
-                Button(
-                    "Clear"
-                ) {
-                    homeViewModel
-                        .clear()
+
+                Button("Clear") {
+                    viewModel.clear()
                 }
             }
             .padding()
-            
-            Text(
-                homeViewModel.status
-            )
-            .frame(
-                maxWidth: .infinity,
-                alignment: .leading
-            )
-            .padding(
-                .horizontal
-            )
-            
-            WebViewContainer(
-                webView: homeViewModel.webPage
-            )
-            .frame(
-                maxWidth: .infinity,
-                maxHeight: .infinity
-            )
+
+            Text(viewModel.status)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal)
+
+            WebViewContainer(webView: viewModel.webPage)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .fileExporter(
-            isPresented: $homeViewModel.isExporting,
-            
-            document: homeViewModel.exportData
-                .map {
-                    PDFFileDocument(
-                        data: $0
-                    )
-                },
-            
+            isPresented: $viewModel.isExporting,
+            document: viewModel.exportData.map { PDFFileDocument(data: $0) },
             contentType: .pdf,
-            defaultFilename:
-                homeViewModel
-                .suggestedFileName()
+            defaultFilename: viewModel.suggestedFileName()
         ) { result in
-            
             switch result {
-                
-            case .success(
-                let url
-            ):
-                homeViewModel.status = "Saved: \(url.path)"
-                
-            case .failure(
-                let error
-            ):
-                homeViewModel.status =
-                "Save failed: \(error.localizedDescription)"
+            case .success(let url):
+                viewModel.status = "Saved: \(url.path)"
+            case .failure(let error):
+                viewModel.status = "Save failed: \(error.localizedDescription)"
             }
-            
-            homeViewModel.exportDocument = nil
+
+            viewModel.exportDocument = nil
         }
     }
-    
-    
 }
