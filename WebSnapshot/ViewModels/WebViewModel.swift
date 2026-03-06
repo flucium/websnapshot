@@ -7,8 +7,8 @@
 
 import Foundation
 import WebKit
-import Combine
 import AppKit
+import Combine
 
 @MainActor
 class WebViewModel: ObservableObject {
