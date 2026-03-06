@@ -61,7 +61,7 @@ struct MultipleView: View {
                 }
 
                 DisclosureGroup("Web", isExpanded: $isExpanded2) {
-                    LazyVStack(alignment: .leading, spacing: 16) {
+                    VStack(alignment: .leading, spacing: 16) {
                         ForEach(viewModel.items) { item in
                             VStack(alignment: .leading, spacing: 8) {
                                 Text(item.url.absoluteString)
