@@ -76,7 +76,7 @@ struct MultipleView: View {
                                     .textSelection(.enabled)
                                     .frame(maxWidth: .infinity, alignment: .leading)
 
-                                MultipleWebView(webView: item.webView)
+                                WebViewContainer(webView: item.webView)
                                     .frame(maxWidth: .infinity)
                                     .frame(height: 500)
                                     .background(Color.gray.opacity(0.08))
