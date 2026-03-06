@@ -6,19 +6,15 @@
 //
 
 import SwiftUI
-import UniformTypeIdentifiers
 import WebKit
-
+import UniformTypeIdentifiers
 
 struct MultipleView: View {
 
-    @StateObject private var homeViewModel = HomeViewModel()
+    @StateObject private var viewModel = MultipleViewModel()
 
     @State private var isExpanded1 = true
     @State private var isExpanded2 = true
-
-    @State private var linkText: String = ""
-    @State private var items: [WebItem] = []
 
     var body: some View {
         ScrollView {
@@ -26,12 +22,11 @@ struct MultipleView: View {
 
                 DisclosureGroup("Links", isExpanded: $isExpanded1) {
                     VStack(alignment: .leading, spacing: 8) {
-
                         Text("Enter one link per line")
                             .font(.caption)
                             .foregroundStyle(.secondary)
 
-                        TextEditor(text: $linkText)
+                        TextEditor(text: $viewModel.linkText)
                             .frame(height: 140)
                             .padding(6)
                             .overlay(
@@ -41,26 +36,23 @@ struct MultipleView: View {
 
                         HStack {
                             Button("Load") {
-                                let urls = parseURLs(from: linkText)
-                                items = urls.map { WebItem(url: $0) }
-                            }
-                            
-                            Button("Save all PDFs") {
-                                homeViewModel.makePDFsForExport(items: items)
+                                viewModel.loadLinks()
                             }
 
                             Button("Clear") {
-                                linkText = ""
-                                items = []
+                                viewModel.clear()
                             }
 
-                           
-                            Text("Valid links: \(items.count)")
+                            Button("Save all PDFs") {
+                                viewModel.makePDFsForExport()
+                            }
+
+                            Text("Valid links: \(viewModel.items.count)")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
 
-                        Text(homeViewModel.status)
+                        Text(viewModel.status)
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -69,7 +61,7 @@ struct MultipleView: View {
 
                 DisclosureGroup("Web", isExpanded: $isExpanded2) {
                     LazyVStack(alignment: .leading, spacing: 16) {
-                        ForEach(items) { item in
+                        ForEach(viewModel.items) { item in
                             VStack(alignment: .leading, spacing: 8) {
                                 Text(item.url.absoluteString)
                                     .font(.caption)
@@ -79,7 +71,6 @@ struct MultipleView: View {
                                 WebViewContainer(webView: item.webView)
                                     .frame(maxWidth: .infinity)
                                     .frame(height: 500)
-                                    .background(Color.gray.opacity(0.08))
                                     .clipShape(RoundedRectangle(cornerRadius: 8))
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -95,25 +86,5 @@ struct MultipleView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    private func parseURLs(from text: String) -> [URL] {
-        text
-            .components(separatedBy: .newlines)
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-            .compactMap { normalizeURL(from: $0) }
-    }
-
-    private func normalizeURL(from string: String) -> URL? {
-        if let url = URL(string: string), url.scheme != nil {
-            return url
-        }
-
-        if let url = URL(string: "https://\(string)") {
-            return url
-        }
-
-        return nil
     }
 }
