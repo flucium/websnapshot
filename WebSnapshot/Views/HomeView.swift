@@ -8,58 +8,267 @@ import SwiftUI
 import UniformTypeIdentifiers
 import WebKit
 
+private enum NavigationDestination: Hashable {
+    case single
+    case multiple
+}
+
 struct HomeView: View {
-    @StateObject private var homeViewModel = HomeViewModel()
+    
+
+    @State private var destination: NavigationDestination? = .single
 
     var body: some View {
-        VStack(spacing: 8) {
-            HStack {
-                TextField("https://...", text: $homeViewModel.urlString)
-                    .textFieldStyle(.roundedBorder)
-                    .onSubmit {
-                        homeViewModel.load()
-                    }
+        NavigationSplitView {
+            List(
+                selection: $destination
+            ) {
+                
+                NavigationLink(
+                    value: NavigationDestination.single
+                ) {
+                    Label(
+                        "Single",
+                        systemImage: "timer"
+                    )
+                }
+                NavigationLink(
+                    value: NavigationDestination.multiple
+                ) {
+                    Label(
+                        "Multiple",
+                        systemImage: "timer"
+                    )
+                }
+            }
+        } detail: {
+            detail(
+                for: destination
+            )
+            
+        }
+        
+    }
+    
+    @ViewBuilder
+    private func detail(
+        for destination: NavigationDestination?
+    ) -> some View {
+        switch destination {
+        case .single:
+            SingleView()
+        case .multiple:
+            MultipleView()
+        default:
+            EmptyView()
+        }
+    }
+}
 
-                Button("Load") { homeViewModel.load() }
+struct SingleView: View {
+    @StateObject private var homeViewModel = HomeViewModel()
+    var body: some View{
+        VStack(
+            spacing: 8
+        ) {
+            HStack {
+                TextField(
+                    "https://...",
+                    text: $homeViewModel.urlString
+                )
+                .textFieldStyle(
+                    .roundedBorder
+                )
+                .onSubmit {
+                    homeViewModel
+                        .load()
+                }
                 
-                Button("Save as PDF") { homeViewModel.makePDFForExport() }
+                Button(
+                    "Load"
+                ) {
+                    homeViewModel
+                        .load()
+                }
                 
-                Button("Clear") {
-                    homeViewModel.clear()
+                Button(
+                    "Save as PDF"
+                ) {
+                    homeViewModel
+                        .makePDFForExport()
+                }
+                
+                Button(
+                    "Clear"
+                ) {
+                    homeViewModel
+                        .clear()
                 }
             }
             .padding()
-
-            Text(homeViewModel.status)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal)
-
-            WebViewContainer(webView: homeViewModel.webPage)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            
+            Text(
+                homeViewModel.status
+            )
+            .frame(
+                maxWidth: .infinity,
+                alignment: .leading
+            )
+            .padding(
+                .horizontal
+            )
+            
+            WebViewContainer(
+                webView: homeViewModel.webPage
+            )
+            .frame(
+                maxWidth: .infinity,
+                maxHeight: .infinity
+            )
         }
         .fileExporter(
             isPresented: $homeViewModel.isExporting,
             
-            document: homeViewModel.exportData.map {
-                PDFFileDocument(data: $0)
-            },
+            document: homeViewModel.exportData
+                .map {
+                    PDFFileDocument(
+                        data: $0
+                    )
+                },
             
             contentType: .pdf,
-            defaultFilename: homeViewModel.suggestedFileName()
+            defaultFilename:
+                homeViewModel
+                .suggestedFileName()
         ) { result in
             
             switch result {
-            
-            case .success(let url):
+                
+            case .success(
+                let url
+            ):
                 homeViewModel.status = "Saved: \(url.path)"
-            
-            case .failure(let error):
+                
+            case .failure(
+                let error
+            ):
                 homeViewModel.status =
-                    "Save failed: \(error.localizedDescription)"
+                "Save failed: \(error.localizedDescription)"
             }
-
+            
             homeViewModel.exportDocument = nil
         }
+    }
+    
+    
+}
+
+
+struct MultipleView: View {
+
+    @StateObject private var homeViewModel = HomeViewModel()
+
+    @State private var isExpanded1 = true
+    @State private var isExpanded2 = true
+
+    @State private var linkText: String = ""
+    @State private var items: [WebItem] = []
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+
+                DisclosureGroup("Links", isExpanded: $isExpanded1) {
+                    VStack(alignment: .leading, spacing: 8) {
+
+                        Text("Enter one link per line")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+
+                        TextEditor(text: $linkText)
+                            .frame(height: 140)
+                            .padding(6)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .stroke(.separator, lineWidth: 1)
+                            )
+
+                        HStack {
+                            Button("Load") {
+                                let urls = parseURLs(from: linkText)
+                                items = urls.map { WebItem(url: $0) }
+                            }
+                            
+                            Button("Save all PDFs") {
+                                homeViewModel.makePDFsForExport(items: items)
+                            }
+
+                            Button("Clear") {
+                                linkText = ""
+                                items = []
+                            }
+
+                           
+                            Text("Valid links: \(items.count)")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Text(homeViewModel.status)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.top, 8)
+                }
+
+                DisclosureGroup("Web", isExpanded: $isExpanded2) {
+                    LazyVStack(alignment: .leading, spacing: 16) {
+                        ForEach(items) { item in
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text(item.url.absoluteString)
+                                    .font(.caption)
+                                    .textSelection(.enabled)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                                MultipleWebView(webView: item.webView)
+                                    .frame(maxWidth: .infinity)
+                                    .frame(height: 500)
+                                    .background(Color.gray.opacity(0.08))
+                                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
+                    .padding(.top, 8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+
+                Spacer(minLength: 0)
+            }
+            .padding()
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func parseURLs(from text: String) -> [URL] {
+        text
+            .components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .compactMap { normalizeURL(from: $0) }
+    }
+
+    private func normalizeURL(from string: String) -> URL? {
+        if let url = URL(string: string), url.scheme != nil {
+            return url
+        }
+
+        if let url = URL(string: "https://\(string)") {
+            return url
+        }
+
+        return nil
     }
 }
 
