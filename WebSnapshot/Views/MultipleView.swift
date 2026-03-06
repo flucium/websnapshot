@@ -39,12 +39,13 @@ struct MultipleView: View {
                                 viewModel.loadLinks()
                             }
 
-                            Button("Clear") {
-                                viewModel.clear()
-                            }
-
+                            
                             Button("Save all PDFs") {
                                 viewModel.makePDFsForExport()
+                            }
+
+                            Button("Clear") {
+                                viewModel.clear()
                             }
 
                             Text("Valid links: \(viewModel.items.count)")
