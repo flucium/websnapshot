@@ -5,8 +5,9 @@
 //  Created by flucium on 2026/03/06.
 //
 import SwiftUI
-import UniformTypeIdentifiers
 import WebKit
+import UniformTypeIdentifiers
+
 
 private enum NavigationDestination: Hashable {
     case single
