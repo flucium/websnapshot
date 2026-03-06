@@ -28,7 +28,7 @@ struct HomeView: View {
                 ) {
                     Label(
                         "Single",
-                        systemImage: "timer"
+                        systemImage: "magnifyingglass"
                     )
                 }
                 NavigationLink(
@@ -36,7 +36,7 @@ struct HomeView: View {
                 ) {
                     Label(
                         "Multiple",
-                        systemImage: "timer"
+                        systemImage: "magnifyingglass.circle"
                     )
                 }
             }
