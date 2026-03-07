@@ -48,6 +48,9 @@ final class SingleViewModel: WebViewModel {
     func clear() {
         urlString = ""
         status = ""
+        exportData = nil
+        exportDocument = nil
+        isExporting = false
         webPage.loadHTMLString("", baseURL: nil)
     }
 
@@ -63,12 +66,15 @@ final class SingleViewModel: WebViewModel {
             case .success(let data):
                 DispatchQueue.main.async {
                     self.exportData = data
+                    self.exportDocument = PDFFileDocument(data: data)
                     self.isExporting = true
                     self.status = "Ready to export"
                 }
 
             case .failure(let error):
                 DispatchQueue.main.async {
+                    self.exportDocument = nil
+                    self.isExporting = false
                     self.status = "PDF failed: \(error.localizedDescription)"
                 }
             }
