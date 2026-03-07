@@ -5,6 +5,7 @@
 //  Created by flucium on 2026/03/06.
 //
 
+
 import Foundation
 import WebKit
 import Combine
@@ -14,6 +15,8 @@ final class MultipleViewModel: WebViewModel {
 
     @Published var linkText: String = ""
     @Published var items: [WebItem] = []
+
+    var onFileSaved: ((URL) -> Void)?
 
     func loadLinks() {
         let urls = parseURLs(from: linkText)
@@ -55,6 +58,7 @@ final class MultipleViewModel: WebViewModel {
                         try data.write(to: fileURL)
 
                         await MainActor.run {
+                            self.onFileSaved?(fileURL)
                             self.status = "Saved \(index + 1)/\(self.items.count)"
                         }
                     }
