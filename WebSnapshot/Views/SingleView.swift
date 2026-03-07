@@ -59,3 +59,7 @@ struct SingleView: View {
         }
     }
 }
+
+#Preview {
+    SingleView()
+}
