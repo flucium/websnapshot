@@ -7,19 +7,21 @@
 
 import SwiftUI
 import WebKit
+import SwiftData
 import UniformTypeIdentifiers
 
 struct MultipleView: View {
-
+    @Environment(\.modelContext) private var modelContext
     @StateObject private var viewModel = MultipleViewModel()
 
     @State private var isExpanded1 = true
     @State private var isExpanded2 = true
 
+    @Query private var historyItems: [PDFHistoryEntry]
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
-
                 DisclosureGroup("Links", isExpanded: $isExpanded1) {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Enter one link per line")
@@ -39,7 +41,6 @@ struct MultipleView: View {
                                 viewModel.loadLinks()
                             }
 
-                            
                             Button("Save all PDFs") {
                                 viewModel.makePDFsForExport()
                             }
@@ -67,12 +68,17 @@ struct MultipleView: View {
                                 Text(item.url.absoluteString)
                                     .font(.caption)
                                     .textSelection(.enabled)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .frame(
+                                        maxWidth: .infinity,
+                                        alignment: .leading
+                                    )
 
                                 WebViewContainer(webView: item.webView)
                                     .frame(maxWidth: .infinity)
                                     .frame(height: 500)
-                                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                                    .clipShape(
+                                        RoundedRectangle(cornerRadius: 8)
+                                    )
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
                         }
@@ -85,11 +91,24 @@ struct MultipleView: View {
             }
             .padding()
             .frame(maxWidth: .infinity, alignment: .leading)
+            .onAppear {
+                viewModel.onFileSaved = { fileURL in
+                    do {
+                        try PDFHistoryStore.save(
+                            path: fileURL.path,
+                            modelContext: modelContext,
+                            existingItems: historyItems
+                        )
+                    } catch {
+                        viewModel.status =
+                            "History save failed: \(error.localizedDescription)"
+                    }
+                }
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
-
 
 #Preview {
     MultipleView()
