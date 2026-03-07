@@ -7,6 +7,7 @@
 
 import SwiftUI
 import AppKit
+import SwiftData
 
 
 @main
@@ -27,6 +28,7 @@ struct WebSnapshotApp: App {
             CommandGroup(replacing: .windowArrangement) {}
             CommandGroup(replacing: .help) {}
         }
+        .modelContainer(for: PDFHistoryEntry.self)
     }
 }
 
