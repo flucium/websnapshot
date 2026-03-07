@@ -23,8 +23,6 @@ struct WebSnapshotApp: App {
             CommandGroup(replacing: .importExport) {}
             CommandGroup(replacing: .toolbar) {}
             CommandGroup(replacing: .undoRedo) {}
-            CommandGroup(replacing: .pasteboard) {}
-            CommandGroup(replacing: .textEditing) {}
             CommandGroup(replacing: .windowArrangement) {}
             CommandGroup(replacing: .help) {}
         }
