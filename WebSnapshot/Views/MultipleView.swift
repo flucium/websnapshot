@@ -89,3 +89,8 @@ struct MultipleView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
+
+
+#Preview {
+    MultipleView()
+}
