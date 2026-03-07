@@ -37,6 +37,7 @@ struct HistoryView: View {
                     .contextMenu {
                         Button("Delete") {
                             onDelete(item)
+                            deletePDFFile(path: item.path)
                         }
                     }
             }
