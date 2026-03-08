@@ -9,7 +9,7 @@ import Foundation
 import SwiftData
 
 @Model
-final class PDFHistoryEntry {
+final class PDFFileHistoryEntry {
     var path: String
 
     init(path: String) {
@@ -17,7 +17,7 @@ final class PDFHistoryEntry {
     }
 }
 
-extension PDFHistoryEntry {
+extension PDFFileHistoryEntry {
     var fileURL: URL {
         URL(fileURLWithPath: path)
     }
