@@ -32,3 +32,6 @@ When this happens, the corresponding saved file will also be deleted.
 
 ## Under Consideration
 Support for iPadOS.
+
+## Other
+- [ToDo](/TODO.md)
