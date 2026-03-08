@@ -9,6 +9,9 @@ This makes it particularly useful for preserving technical or scientific article
 
 Because pages are saved as standard PDF files, they can easily be found using the OS built-in search features. You can also save them anywhere you like, using any directory structure you prefer.
 
+**Download**\
+[github.com/flucium/websnapshot/releases](https://github.com/flucium/websnapshot/releases)
+
 ## Features
 ### Single
 Save a single website as a PDF.
@@ -24,10 +27,8 @@ You can double click a file name to open the PDF inside WebSnapshot.
 You can also remove an item from the history by left clicking the file name.
 When this happens, the corresponding saved file will also be deleted.
 
-## ToDo
-- Improve the UI
-- Add search functionality for saved PDFs
-- Other improvements
+## Supported Platforms
+- macOS (Apple silicon, aarch64)
 
 ## Under Consideration
 Support for iPadOS.
