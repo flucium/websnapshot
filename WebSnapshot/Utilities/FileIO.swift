@@ -6,11 +6,20 @@
 //
 
 import Foundation
+import CoreGraphics
 
-func deletePDFFile(path: String) {
-    do {
-        try FileManager.default.removeItem(atPath: path)
-    } catch {
-        //
+
+
+func delete(url: URL) -> Bool{
+    do{
+        try FileManager.default.removeItem(atPath: url.path)
+        
+        return true
+    }catch{
+        return false
     }
+}
+
+func exists(url: URL) -> Bool {
+    FileManager.default.fileExists(atPath: url.path)
 }
