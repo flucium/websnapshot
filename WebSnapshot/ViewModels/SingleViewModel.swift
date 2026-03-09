@@ -20,6 +20,8 @@ final class SingleViewModel: WebViewModel {
     let webPage = WKWebView(frame: .zero)
 
     private let navigationDelegate = NavigationDelegate()
+    private var canExportPDF = false
+    private var isClearingWebView = false
 
     override init() {
         super.init()
@@ -27,34 +29,56 @@ final class SingleViewModel: WebViewModel {
         webPage.navigationDelegate = navigationDelegate
 
         navigationDelegate.onFinish = { [weak self] in
-            self?.status = ""
+            guard let self else { return }
+
+            if self.isClearingWebView {
+                self.isClearingWebView = false
+                self.canExportPDF = false
+                return
+            }
+
+            self.canExportPDF = true
+            self.clearError()
+            self.status = ""
         }
 
         navigationDelegate.onError = { [weak self] message in
-            self?.status = "Load failed: \(message)"
+            self?.canExportPDF = false
+            self?.setError(.display(message: "Load failed: \(message)"))
         }
     }
 
     func load() {
         guard let url = normalizedURL(from: urlString) else {
-            status = "Invalid URL"
+            setError(.invalidURL)
             return
         }
 
+        canExportPDF = false
+        clearError()
         status = "Loading..."
         webPage.load(URLRequest(url: url))
     }
 
     func clear() {
         urlString = ""
+        clearError()
         status = ""
         exportData = nil
         exportDocument = nil
         isExporting = false
+        canExportPDF = false
+        isClearingWebView = true
         webPage.loadHTMLString("", baseURL: nil)
     }
 
     func makePDFForExport() {
+        guard canExportPDF else {
+            setError(.display(message: "No pages to save"))
+            return
+        }
+        
+        clearError()
         status = "Rendering PDF..."
 
         let config = WKPDFConfiguration()
@@ -75,7 +99,7 @@ final class SingleViewModel: WebViewModel {
                 DispatchQueue.main.async {
                     self.exportDocument = nil
                     self.isExporting = false
-                    self.status = "PDF failed: \(error.localizedDescription)"
+                    self.setError(error)
                 }
             }
         }
