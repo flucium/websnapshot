@@ -26,15 +26,17 @@ final class MultipleViewModel: WebViewModel {
     func clear() {
         linkText = ""
         items = []
+        clearError()
         status = ""
     }
 
     func makePDFsForExport() {
         guard !items.isEmpty else {
-            status = "No pages to save"
+            setError(.display(message: "No pages to save"))
             return
         }
 
+        clearError()
         status = "Rendering PDFs..."
 
         chooseDirectory { [weak self] folderURL in
@@ -42,7 +44,7 @@ final class MultipleViewModel: WebViewModel {
 
             guard let folderURL else {
                 DispatchQueue.main.async {
-                    self.status = "Export cancelled"
+                    self.setError(.display(message: "Export cancelled"))
                 }
                 return
             }
@@ -68,7 +70,7 @@ final class MultipleViewModel: WebViewModel {
                     }
                 } catch {
                     await MainActor.run {
-                        self.status = "PDF export failed: \(error.localizedDescription)"
+                        self.setError(error)
                     }
                 }
             }
