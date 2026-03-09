@@ -15,6 +15,7 @@ enum AppError: Error, Equatable {
     case display(message: String)
     case invalidURL
     case permissionDenied
+    case notFound
 }
 
 extension AppError {
@@ -24,7 +25,33 @@ extension AppError {
             return
         }
 
-        self = .notImplemented
+        if let urlError = error as? URLError {
+            switch urlError.code {
+            case .badURL, .unsupportedURL:
+                self = .invalidURL
+            case .fileDoesNotExist:
+                self = .notFound
+            case .noPermissionsToReadFile:
+                self = .permissionDenied
+            default:
+                self = .unknown(message: urlError.localizedDescription)
+            }
+            return
+        }
+
+        if let cocoaError = error as? CocoaError {
+            switch cocoaError.code {
+            case .fileNoSuchFile:
+                self = .notFound
+            case .fileReadNoPermission, .fileWriteNoPermission:
+                self = .permissionDenied
+            default:
+                self = .unknown(message: cocoaError.localizedDescription)
+            }
+            return
+        }
+
+        self = .unknown(message: error.localizedDescription)
     }
 
     static func from(
@@ -57,10 +84,13 @@ extension AppError: LocalizedError {
             return message
 
         case .invalidURL:
-            return "invalid url"
+            return "invalidURL"
 
         case .permissionDenied:
             return "permission denied"
+            
+        case .notFound:
+            return "not found"
 
         }
     }
