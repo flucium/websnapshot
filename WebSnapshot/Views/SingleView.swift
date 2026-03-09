@@ -11,7 +11,7 @@ import UniformTypeIdentifiers
 struct SingleView: View {
     @Environment(\.modelContext) private var modelContext
     @StateObject private var viewModel = SingleViewModel()
-    @Query private var historyItems: [PDFHistoryEntry]
+    @Query private var historyItems: [PDFFileHistoryEntry]
 
     var body: some View {
         VStack(spacing: 8) {
@@ -52,21 +52,22 @@ struct SingleView: View {
             switch result {
             case .success(let url):
                 do {
-                    try PDFHistoryStore.save(
-                        path: url.path,
+                    try PDFFileHistoryService.save(
+                        url:url,
                         modelContext: modelContext,
                         existingItems: historyItems
                     )
+                    viewModel.clearError()
                     viewModel.status = "Saved: \(url.lastPathComponent)"
                 } catch {
-                    viewModel.status = "History save failed: \(error.localizedDescription)"
+                    viewModel.setError(error)
                 }
 
                 viewModel.exportDocument = nil
                 viewModel.isExporting = false
 
             case .failure(let error):
-                viewModel.status = "Save failed: \(error.localizedDescription)"
+                viewModel.setError(error)
                 viewModel.exportDocument = nil
                 viewModel.isExporting = false
             }
