@@ -14,6 +14,7 @@ import Combine
 class WebViewModel: ObservableObject {
 
     @Published var status: String = ""
+    @Published var appError: AppError? = nil
 
     func makePDF(webView: WKWebView) async throws -> Data {
         try await pdfData(from: webView)
@@ -21,6 +22,19 @@ class WebViewModel: ObservableObject {
 
     func createPDFData(from webView: WKWebView) async throws -> Data {
         try await pdfData(from: webView)
+    }
+
+    func setError(_ appError: AppError) {
+        self.appError = appError
+        status = appError.errorDescription ?? "unknown"
+    }
+
+    func setError(_ error: Error) {
+        setError(AppError(error: error))
+    }
+
+    func clearError() {
+        appError = nil
     }
 
     func chooseDirectory(completion: @escaping (URL?) -> Void) {
