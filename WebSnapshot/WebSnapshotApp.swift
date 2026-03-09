@@ -26,7 +26,7 @@ struct WebSnapshotApp: App {
             CommandGroup(replacing: .windowArrangement) {}
             CommandGroup(replacing: .help) {}
         }
-        .modelContainer(for: PDFHistoryEntry.self)
+        .modelContainer(for: PDFFileHistoryEntry.self)
     }
 }
 
