@@ -10,10 +10,11 @@ import PDFKit
 
 struct HistoryView: View {
 
-    @State private var selectedItem: PDFHistoryEntry? = nil
+    @State private var selectedItem: PDFFileHistoryEntry? = nil
+    @State private var searchText: String = ""
 
-    let items: [PDFHistoryEntry]
-    let onDelete: (PDFHistoryEntry) -> Void
+    let items: [PDFFileHistoryEntry]
+    let onDelete: (PDFFileHistoryEntry) -> Void
     
     var body: some View {
         Group {
@@ -26,25 +27,44 @@ struct HistoryView: View {
     }
 
     private var historyListView: some View {
-        List {
-            ForEach(items, id: \.persistentModelID) { item in
-                Text(item.fileName)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .contentShape(Rectangle())
-                    .onTapGesture(count: 2) {
-                        selectedItem = item
-                    }
-                    .contextMenu {
-                        Button("Delete") {
-                            onDelete(item)
-                            deletePDFFile(path: item.path)
+        VStack {
+            TextField("Search", text: $searchText)
+                .padding()
+            List {
+                ForEach(filteredItems, id: \.persistentModelID) { item in
+                    Text(item.fileName)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
+                        .onTapGesture(count: 2) {
+                            selectedItem = item
                         }
-                    }
+                        .contextMenu {
+                            Button("Delete") {
+                                onDelete(item)
+                                do {
+                                    try deletePDFFile(url: item.fileURL)
+                                } catch {
+                                    print(error)
+                                }
+                            }
+                        }
+                }
             }
         }
     }
 
-    private func historyPDFDetailView(for item: PDFHistoryEntry) -> some View {
+    private var filteredItems: [PDFFileHistoryEntry] {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else {
+            return items
+        }
+
+        return items.filter {
+            $0.fileName.localizedCaseInsensitiveContains(query)
+        }
+    }
+
+    private func historyPDFDetailView(for item: PDFFileHistoryEntry) -> some View {
         VStack(spacing: 8) {
             HStack {
                 Button("Back") {
@@ -59,14 +79,15 @@ struct HistoryView: View {
             .padding(.horizontal)
             .padding(.top, 8)
 
-            if FileManager.default.fileExists(atPath: item.path) {
+            if isPDFFile(url: item.fileURL) {
                 HistoryPDFView(url: item.fileURL)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
+                let error = AppError.notFound
                 ContentUnavailableView(
-                    "File Not Found.",
+                    "Load failed: \(error.errorDescription ?? "unknown")",
                     systemImage: "exclamationmark.triangle",
-                    description: Text(item.path)
+                    description: Text(item.fileURL.path)
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
