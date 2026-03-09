@@ -21,9 +21,9 @@ struct HomeView: View {
     @Environment(\.modelContext) private var modelContext
 
     @State private var destination: NavigationDestination? = .single
-    @State private var selectedHistoryItem: PDFHistoryEntry? = nil
+    @State private var selectedHistoryItem: PDFFileHistoryEntry? = nil
 
-    @Query private var historyItems: [PDFHistoryEntry]
+    @Query private var historyItems: [PDFFileHistoryEntry]
 
     var body: some View {
         NavigationSplitView {
@@ -86,7 +86,7 @@ struct HomeView: View {
         }
     }
 
-    private func deleteHistory(_ item: PDFHistoryEntry) {
+    private func deleteHistory(_ item: PDFFileHistoryEntry) {
         if selectedHistoryItem?.persistentModelID == item.persistentModelID {
             selectedHistoryItem = nil
         }
