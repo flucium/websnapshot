@@ -17,7 +17,7 @@ struct MultipleView: View {
     @State private var isExpanded1 = true
     @State private var isExpanded2 = true
 
-    @Query private var historyItems: [PDFHistoryEntry]
+    @Query private var historyItems: [PDFFileHistoryEntry]
 
     var body: some View {
         ScrollView {
@@ -92,16 +92,16 @@ struct MultipleView: View {
             .padding()
             .frame(maxWidth: .infinity, alignment: .leading)
             .onAppear {
-                viewModel.onFileSaved = { fileURL in
+                viewModel.onFileSaved = { url in
                     do {
-                        try PDFHistoryStore.save(
-                            path: fileURL.path,
+                        try PDFFileHistoryService.save(
+                            url: url,
                             modelContext: modelContext,
                             existingItems: historyItems
                         )
+                        viewModel.clearError()
                     } catch {
-                        viewModel.status =
-                            "History save failed: \(error.localizedDescription)"
+                        viewModel.setError(error)
                     }
                 }
             }
