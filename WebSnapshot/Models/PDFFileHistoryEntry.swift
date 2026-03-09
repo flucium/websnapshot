@@ -10,16 +10,17 @@ import SwiftData
 
 @Model
 final class PDFFileHistoryEntry {
-    var path: String
+    var url: URL
 
-    init(path: String) {
-        self.path = path
+    init(url: URL) {
+        self.url = url
     }
 }
 
 extension PDFFileHistoryEntry {
+    
     var fileURL: URL {
-        URL(fileURLWithPath: path)
+        url
     }
 
     var fileName: String {
