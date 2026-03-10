@@ -17,16 +17,6 @@ struct WebSnapshotApp: App {
         WindowGroup {
             HomeView()
         }
-        .modelContainer(for: [PDFFileHistoryEntry.self])
-        .commands {
-            CommandGroup(replacing: .newItem) {}
-            CommandGroup(replacing: .saveItem) {}
-            CommandGroup(replacing: .importExport) {}
-            CommandGroup(replacing: .toolbar) {}
-            CommandGroup(replacing: .undoRedo) {}
-            CommandGroup(replacing: .windowArrangement) {}
-            CommandGroup(replacing: .help) {}
-        }
         
     }
 }
