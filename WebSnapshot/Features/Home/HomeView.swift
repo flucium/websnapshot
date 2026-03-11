@@ -19,15 +19,11 @@ struct HomeView: View {
     @Environment(\.modelContext) private var modelContext
 
     @State private var destination: NavigationDestination? = .single
-    
-    @State private var selectedHistoryItem: HistoryEntry? = nil
 
-    @Query private var historyEntries:[HistoryEntry]
-    
+    @Query private var historyEntries: [HistoryEntry]
+
     @ViewBuilder
-    private func detail(
-        for destination: NavigationDestination?
-    ) -> some View {
+    private func detail(for destination: NavigationDestination?) -> some View {
         switch destination {
         case .single:
             SingleView()
@@ -43,16 +39,9 @@ struct HomeView: View {
         default:
             EmptyView()
         }
-    
-        
     }
-    
-    
-    private func deleteHistory(_ item: HistoryEntry) {
-        if selectedHistoryItem?.persistentModelID == item.persistentModelID {
-            selectedHistoryItem = nil
-        }
 
+    private func deleteHistory(_ item: HistoryEntry) {
         modelContext.delete(item)
 
         do {
@@ -61,48 +50,23 @@ struct HomeView: View {
             print("History delete failed: \(error.localizedDescription)")
         }
     }
-    
 
-    
     var body: some View {
-        
         NavigationSplitView {
-            List(
-                selection: $destination
-            ) {
-
-                NavigationLink(
-                    value: NavigationDestination.single
-                ) {
-                    Label(
-                        "Single",
-                        systemImage: "magnifyingglass"
-                    )
+            List(selection: $destination) {
+                NavigationLink(value: NavigationDestination.single) {
+                    Label("Single", systemImage: "magnifyingglass")
                 }
-                NavigationLink(
-                    value: NavigationDestination.multiple
-                ) {
-                    Label(
-                        "Multiple",
-                        systemImage: "magnifyingglass.circle"
-                    )
+                NavigationLink(value: NavigationDestination.multiple) {
+                    Label("Multiple", systemImage: "magnifyingglass.circle")
                 }
-                NavigationLink(
-                    value: NavigationDestination.history
-                ) {
-                    Label(
-                        "History",
-                        systemImage: "list.bullet.circle"
-                    )
+                NavigationLink(value: NavigationDestination.history) {
+                    Label("History", systemImage: "list.bullet.circle")
                 }
             }
         } detail: {
-            detail(
-                for: destination
-            )
-
+            detail(for: destination)
         }
-
     }
 }
 
