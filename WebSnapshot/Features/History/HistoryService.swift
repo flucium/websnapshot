@@ -7,89 +7,32 @@
 
 
 import Foundation
-import CoreGraphics
+import PDFKit
 
-func deletePDFFile(url:URL) throws {
-    
-    switch FileIO().exists(url: url) {
-    case .success(true):
-        break
-    case .success(false):
-        throw CocoaError(.fileNoSuchFile)
-    case .failure:
-        
+func deletePDFFile(url: URL) throws {
+    guard FileManager.default.fileExists(atPath: url.path) else {
         throw CocoaError(.fileNoSuchFile)
     }
-    
+
     guard isPDFFile(url: url) else {
         throw CocoaError(.fileReadCorruptFile)
     }
-    
-    
-    switch FileIO().delete(url: url) {
-    case .success:
-        break
-    case .failure:
+
+    do {
+        try FileManager.default.removeItem(at: url)
+    } catch {
         throw CocoaError(.fileWriteNoPermission)
     }
-    
 }
 
-
 func isPDFFile(url: URL) -> Bool {
-  
-    do {
-        
-        guard let fileSize = ((try FileManager.default.attributesOfItem(atPath: url.path))[.size] as? NSNumber)?.uint64Value, fileSize >= 8 else {
-            return false
-        }
-        
-        let fileHandle = try FileHandle(forReadingFrom: url)
-        
-        defer {
-            try? fileHandle.close()
-        }
-        
-        
-        let fileHeader = try fileHandle.read(upToCount: 8) ?? Data()
-        guard fileHeader.count >= 8 else {
-            return false
-        }
-        
-        guard fileHeader.starts(with: Data("%PDF-".utf8)) else {
-            return false
-        }
-        
-        
-        guard let version = String(data: fileHeader.subdata(in: 5..<8), encoding: .ascii),
-              version.range(of: #"^1\.[0-7]$"#, options: .regularExpression) != nil else {
-            
-            return false
-        }
-        
-        
-        try fileHandle.seek(toOffset: fileSize - UInt64(Int(min(fileSize, 4096))))
-        
-        
-        let end = try fileHandle.readToEnd() ?? Data()
-        
-        guard end.range(of: Data("startxref".utf8), options: .backwards) != nil else {
-            return false
-            
-        }
-    
-        guard end.range(of: Data("%%EOF".utf8), options: .backwards) != nil else {
-            return false
-        }
-        
-    } catch {
+    guard FileManager.default.fileExists(atPath: url.path) else {
         return false
     }
 
-    guard let doc = CGPDFDocument(url as CFURL) else {
+    guard let document = PDFDocument(url: url) else {
         return false
     }
-    
-    return doc.numberOfPages > 0
-    
+
+    return document.pageCount > 0
 }
