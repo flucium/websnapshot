@@ -70,10 +70,9 @@ final class MultipleState: WebState {
         }
 
         let didStartAccessing = folderURL.startAccessingSecurityScopedResource()
-        defer {
-            if didStartAccessing {
-                folderURL.stopAccessingSecurityScopedResource()
-            }
+        guard didStartAccessing else {
+            setError(.display(message: "Cannot access selected folder"))
+            return
         }
 
         clearError()
@@ -88,7 +87,7 @@ final class MultipleState: WebState {
                 }
 
                 let data = try await makePDF(webView: item.webView)
-                let defaultName = URL.filename(for: item.url)
+                let defaultName = suggestedPDFFileName(for: item, index: index + 1)
                 let destinationURL = uniqueDestinationURL(
                     in: folderURL,
                     defaultFileName: defaultName
@@ -224,5 +223,23 @@ final class MultipleState: WebState {
         }
 
         return candidate
+    }
+    
+    private func suggestedPDFFileName(for item: WebItem, index: Int) -> String {
+        let invalid = CharacterSet(charactersIn: "/\\?%*|\"<>:")
+        let title = (item.webView.title ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .components(separatedBy: invalid)
+            .joined()
+        
+        let baseName: String
+        if !title.isEmpty {
+            baseName = title
+        } else {
+            baseName = URL.filename(for: item.url).replacingOccurrences(of: ".pdf", with: "")
+        }
+        
+        let normalizedBaseName = baseName.isEmpty ? "page-\(index)" : baseName
+        return "\(normalizedBaseName).pdf"
     }
 }
