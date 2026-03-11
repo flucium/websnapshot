@@ -12,7 +12,7 @@ import WebKit
 @MainActor
 final class SingleViewState: WebState {
     var canTapSaveButton: Bool {
-        !urlString.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        hasInputURL
     }
 
     func saveAsPDF() async {
@@ -37,28 +37,18 @@ final class SingleViewState: WebState {
     }
 
     func suggestedFileName() -> String {
-        let rawTitle = wkWebView.title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let invalid = CharacterSet(charactersIn: "/\\?%*|\"<>:")
-        let cleaned = rawTitle.components(separatedBy: invalid).joined()
-
-        if !cleaned.isEmpty {
-            return cleaned
-        }
-
-        if let currentURL = wkWebView.url {
-            return URL.filename(for: currentURL).replacingOccurrences(of: ".pdf", with: "")
-        }
-
-        return "page"
+        URL.pdfBaseName(
+            title: wkWebView.title,
+            fallbackURL: wkWebView.url
+        )
     }
 
     private func validateSaveRequest() -> AppError? {
-        let trimmedInput = urlString.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedInput.isEmpty else {
+        guard hasInputURL else {
             return .display(message: "URL is empty. Load a page first.")
         }
 
-        guard let loadedURL = wkWebView.url, isHTTPURL(loadedURL) else {
+        guard let loadedURL = wkWebView.url, loadedURL.isSupportedWebURL else {
             return .display(message: "No website is loaded. Load a page first.")
         }
 
@@ -67,12 +57,5 @@ final class SingleViewState: WebState {
         }
 
         return nil
-    }
-
-    private func isHTTPURL(_ url: URL) -> Bool {
-        guard let scheme = url.scheme?.lowercased() else {
-            return false
-        }
-        return scheme == "http" || scheme == "https"
     }
 }
