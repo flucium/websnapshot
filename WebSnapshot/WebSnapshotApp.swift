@@ -16,7 +16,16 @@ struct WebSnapshotApp: App {
     var body: some Scene {
         WindowGroup {
             HomeView()
+        }.commands {
+            CommandGroup(replacing: .newItem) {}
+            CommandGroup(replacing: .saveItem) {}
+            CommandGroup(replacing: .importExport) {}
+            CommandGroup(replacing: .toolbar) {}
+            CommandGroup(replacing: .undoRedo) {}
+            CommandGroup(replacing: .windowArrangement) {}
+            CommandGroup(replacing: .help) {}
         }
+        .modelContainer(for: HistoryEntry.self)
         
     }
 }
