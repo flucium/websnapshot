@@ -108,16 +108,20 @@ private extension MultipleView {
 
     func configureState() {
         multipleState.setOnFileSaved { url in
-            do {
-                try PDFFileHistoryService.save(
-                    url: url,
-                    modelContext: modelContext,
-                    existingItems: historyItems
-                )
-                multipleState.clearError()
-            } catch {
-                multipleState.setError(error)
-            }
+            saveHistory(url: url)
+        }
+    }
+    
+    func saveHistory(url: URL) {
+        do {
+            try PDFFileHistoryService.save(
+                url: url,
+                modelContext: modelContext,
+                existingItems: historyItems
+            )
+            multipleState.clearError()
+        } catch {
+            multipleState.setError(error)
         }
     }
 
