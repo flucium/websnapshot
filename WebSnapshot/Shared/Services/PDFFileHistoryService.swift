@@ -30,4 +30,21 @@ enum PDFFileHistoryService {
         
         try modelContext.save()
     }
+
+    static func record(
+        url: URL,
+        modelContext: ModelContext,
+        existingItems: [HistoryEntry]
+    ) -> AppError? {
+        do {
+            try save(
+                url: url,
+                modelContext: modelContext,
+                existingItems: existingItems
+            )
+            return nil
+        } catch {
+            return AppError(error: error)
+        }
+    }
 }
