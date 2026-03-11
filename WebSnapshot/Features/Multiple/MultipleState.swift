@@ -19,19 +19,16 @@ final class MultipleState: WebState {
     var validLinkCount: Int {
         items.count
     }
-    
+
     var canTapSaveButton: Bool {
-        hasEditorInput && !hasInvalidLinks
-    }
-    
-    var errorMessage: String? {
-        appError?.errorDescription
+        hasInputURL && parsedInput.invalidLineNumbers.isEmpty
     }
 
     override func load() {
-        guard let urls = validatedURLs() else {
+        guard let urls = validatedInputURLs() else {
             return
         }
+
         items = urls.map { WebItem(url: $0) }
         status = "Loaded \(items.count) links"
     }
@@ -45,12 +42,17 @@ final class MultipleState: WebState {
     }
 
     func preparePDFExport() {
-        guard validatedURLs() != nil else {
+        guard let urls = validatedInputURLs() else {
             return
         }
-        
+
         guard !items.isEmpty else {
             setError(.display(message: "No loaded pages to save. Press Load first."))
+            return
+        }
+
+        guard items.count == urls.count else {
+            setError(.display(message: "Links changed. Press Load again before saving."))
             return
         }
 
@@ -69,8 +71,7 @@ final class MultipleState: WebState {
             return
         }
 
-        let didStartAccessing = folderURL.startAccessingSecurityScopedResource()
-        guard didStartAccessing else {
+        guard folderURL.startAccessingSecurityScopedResource() else {
             setError(.display(message: "Cannot access selected folder"))
             return
         }
@@ -79,134 +80,60 @@ final class MultipleState: WebState {
         status = "Saving \(items.count) PDFs..."
 
         do {
-            var savedCount = 0
-
             for (index, item) in items.enumerated() {
                 guard !item.webView.isLoading else {
                     throw AppError.display(message: "Some pages are still loading. Try again in a moment.")
                 }
 
                 let data = try await makePDF(webView: item.webView)
-                let defaultName = suggestedPDFFileName(for: item, index: index + 1)
+                let defaultFileName = suggestedPDFFileName(for: item, index: index + 1)
                 let destinationURL = uniqueDestinationURL(
                     in: folderURL,
-                    defaultFileName: defaultName
+                    defaultFileName: defaultFileName
                 )
 
                 try data.write(to: destinationURL, options: .atomic)
                 onFileSaved?(destinationURL)
 
-                savedCount += 1
-                status = "Saved \(savedCount)/\(items.count)"
-                if index == items.count - 1 {
-                    status = "Saved \(savedCount) PDFs"
-                }
+                let savedCount = index + 1
+                status = savedCount == items.count
+                    ? "Saved \(savedCount) PDFs"
+                    : "Saved \(savedCount)/\(items.count)"
             }
         } catch {
-            setError(.display(message: "Failed to save PDFs: \(error.localizedDescription)"))
+            setError(AppError(error: error))
         }
     }
 
-    private var hasEditorInput: Bool {
-        !urlString.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    private var parsedInput: (urls: [URL], invalidLineNumbers: [Int]) {
+        URL.parseWebURLs(from: urlString)
     }
-    
-    private var hasInvalidLinks: Bool {
-        !parseURLsWithInvalidLines(from: urlString).invalidLines.isEmpty
-    }
-    
-    private func validatedURLs() -> [URL]? {
-        guard hasEditorInput else {
+
+    private func validatedInputURLs() -> [URL]? {
+        guard hasInputURL else {
             setError(.display(message: "Enter at least one link."))
             return nil
         }
-        
-        let parsed = parseURLsWithInvalidLines(from: urlString)
-        guard parsed.invalidLines.isEmpty else {
-            let invalidText = parsed.invalidLines.prefix(3).joined(separator: ", ")
-            let suffix = parsed.invalidLines.count > 3 ? "..." : ""
-            setError(.display(message: "Invalid link: \(invalidText)\(suffix)"))
+
+        let parsed = parsedInput
+        guard parsed.invalidLineNumbers.isEmpty else {
+            setError(.display(message: invalidLinesMessage(from: parsed.invalidLineNumbers)))
             return nil
         }
-        
+
         guard !parsed.urls.isEmpty else {
             setError(.display(message: "Enter at least one valid link."))
             return nil
         }
-        
+
         clearError()
         return parsed.urls
     }
-    
-    private func parseURLsWithInvalidLines(from text: String) -> (urls: [URL], invalidLines: [String]) {
-        var urls: [URL] = []
-        var invalidLines: [String] = []
-        
-        let lines = text.components(separatedBy: .newlines)
-        for (index, rawLine) in lines.enumerated() {
-            let trimmed = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty else {
-                continue
-            }
-            
-            if let url = URL.normalized(from: trimmed), isValidWebURL(url) {
-                urls.append(url)
-            } else {
-                invalidLines.append("line \(index + 1)")
-            }
-        }
-        
-        return (urls, invalidLines)
-    }
-    
-    private func isValidWebURL(_ url: URL) -> Bool {
-        guard let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" else {
-            return false
-        }
-        
-        guard let host = url.host?.lowercased(), !host.isEmpty else {
-            return false
-        }
-        
-        return isValidHost(host)
-    }
-    
-    private func isValidHost(_ host: String) -> Bool {
-        if host == "localhost" {
-            return true
-        }
-        
-        if isIPv4(host) {
-            return true
-        }
-        
-        guard host.contains(".") else {
-            return false
-        }
-        
-        let labels = host.split(separator: ".", omittingEmptySubsequences: false)
-        guard labels.count >= 2 else {
-            return false
-        }
-        
-        return labels.allSatisfy { label in
-            !label.isEmpty && label.allSatisfy { $0.isLetter || $0.isNumber || $0 == "-" }
-        }
-    }
-    
-    private func isIPv4(_ host: String) -> Bool {
-        let parts = host.split(separator: ".", omittingEmptySubsequences: false)
-        guard parts.count == 4 else {
-            return false
-        }
-        
-        for part in parts {
-            guard let value = Int(part), String(value) == part, (0...255).contains(value) else {
-                return false
-            }
-        }
-        
-        return true
+
+    private func invalidLinesMessage(from lineNumbers: [Int]) -> String {
+        let display = lineNumbers.prefix(3).map(String.init).joined(separator: ", ")
+        let suffix = lineNumbers.count > 3 ? "..." : ""
+        return "Invalid link: line \(display)\(suffix)"
     }
 
     private func uniqueDestinationURL(in folderURL: URL, defaultFileName: String) -> URL {
@@ -224,22 +151,12 @@ final class MultipleState: WebState {
 
         return candidate
     }
-    
+
     private func suggestedPDFFileName(for item: WebItem, index: Int) -> String {
-        let invalid = CharacterSet(charactersIn: "/\\?%*|\"<>:")
-        let title = (item.webView.title ?? "")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .components(separatedBy: invalid)
-            .joined()
-        
-        let baseName: String
-        if !title.isEmpty {
-            baseName = title
-        } else {
-            baseName = URL.filename(for: item.url).replacingOccurrences(of: ".pdf", with: "")
-        }
-        
-        let normalizedBaseName = baseName.isEmpty ? "page-\(index)" : baseName
-        return "\(normalizedBaseName).pdf"
+        URL.pdfFileName(
+            title: item.webView.title,
+            fallbackURL: item.url,
+            fallbackPrefix: "page-\(index)"
+        )
     }
 }
