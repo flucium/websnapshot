@@ -24,9 +24,9 @@ struct HomeView: View {
     ) -> some View {
         switch destination {
         case .single:
-            EmptyView()
+            SingleView()
         case .multiple:
-            EmptyView()
+            MultipleView()
         case .history:
             EmptyView()
         default:
