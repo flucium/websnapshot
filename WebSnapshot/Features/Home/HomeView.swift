@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import SwiftData
 
 
 private enum NavigationDestination: Hashable {
@@ -15,8 +16,13 @@ private enum NavigationDestination: Hashable {
 }
 
 struct HomeView: View {
-    
+    @Environment(\.modelContext) private var modelContext
+
     @State private var destination: NavigationDestination? = .single
+    
+    @State private var selectedHistoryItem: HistoryEntry? = nil
+
+    @Query private var historyEntries:[HistoryEntry]
     
     @ViewBuilder
     private func detail(
@@ -28,11 +34,34 @@ struct HomeView: View {
         case .multiple:
             MultipleView()
         case .history:
-            EmptyView()
+            HistoryView(
+                items: historyEntries,
+                onDelete: { item in
+                    deleteHistory(item)
+                }
+            )
         default:
             EmptyView()
         }
+    
+        
     }
+    
+    
+    private func deleteHistory(_ item: HistoryEntry) {
+        if selectedHistoryItem?.persistentModelID == item.persistentModelID {
+            selectedHistoryItem = nil
+        }
+
+        modelContext.delete(item)
+
+        do {
+            try modelContext.save()
+        } catch {
+            print("History delete failed: \(error.localizedDescription)")
+        }
+    }
+    
 
     
     var body: some View {
