@@ -36,15 +36,23 @@ private extension SingleView {
     }
 
     var addressBar: some View {
-        HStack {
-            TextField("https://...", text: $singleState.urlString)
-                .textFieldStyle(.roundedBorder)
-                .onSubmit(singleState.load)
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                TextField("https://...", text: $singleState.urlString)
+                    .textFieldStyle(.roundedBorder)
+                    .onSubmit(singleState.load)
 
-            Button("Load", action: singleState.load)
-            Button("Save as PDF", action: saveAsPDF)
-                .disabled(!singleState.canTapSaveButton)
-            Button("Clear", action: singleState.clear)
+                Button("Load", action: singleState.load)
+                Button("Save as PDF", action: saveAsPDF)
+                    .disabled(!singleState.canTapSaveButton)
+                Button("Clear", action: singleState.clear)
+            }
+
+            if let errorMessage = singleState.errorMessage {
+                Text(errorMessage)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
         }
         .padding()
     }
@@ -82,15 +90,14 @@ private extension SingleView {
     }
     
     func saveHistory(url: URL) {
-        do {
-            try PDFFileHistoryService.save(
-                url: url,
-                modelContext: modelContext,
-                existingItems: historyItems
-            )
+        if let appError = PDFFileHistoryService.record(
+            url: url,
+            modelContext: modelContext,
+            existingItems: historyItems
+        ) {
+            singleState.setError(appError)
+        } else {
             singleState.clearError()
-        } catch {
-            singleState.setError(error)
         }
     }
 }
