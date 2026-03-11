@@ -69,8 +69,13 @@ private extension MultipleView {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-                
-                
+
+                if let errorMessage = multipleState.errorMessage {
+                    Text(errorMessage)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
+
                 Text(multipleState.status)
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -113,15 +118,14 @@ private extension MultipleView {
     }
     
     func saveHistory(url: URL) {
-        do {
-            try PDFFileHistoryService.save(
-                url: url,
-                modelContext: modelContext,
-                existingItems: historyItems
-            )
+        if let appError = PDFFileHistoryService.record(
+            url: url,
+            modelContext: modelContext,
+            existingItems: historyItems
+        ) {
+            multipleState.setError(appError)
+        } else {
             multipleState.clearError()
-        } catch {
-            multipleState.setError(error)
         }
     }
 
