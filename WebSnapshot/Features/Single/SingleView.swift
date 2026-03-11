@@ -6,10 +6,13 @@
 //
 
 import SwiftUI
+import SwiftData
 import UniformTypeIdentifiers
 
 struct SingleView: View {
+    @Environment(\.modelContext) private var modelContext
     @StateObject private var singleState = SingleViewState()
+    @Query private var historyItems: [HistoryEntry]
 
     var body: some View {
         content
@@ -65,7 +68,8 @@ private extension SingleView {
 
     func handleExportResult(_ result: Result<URL, Error>) {
         switch result {
-        case .success:
+        case .success(let savedURL):
+            saveHistory(url: savedURL)
             singleState.status = "PDF exported"
         case .failure(let error):
             singleState
@@ -74,6 +78,19 @@ private extension SingleView {
                         message: "Export failed: \(error.localizedDescription)"
                     )
                 )
+        }
+    }
+    
+    func saveHistory(url: URL) {
+        do {
+            try PDFFileHistoryService.save(
+                url: url,
+                modelContext: modelContext,
+                existingItems: historyItems
+            )
+            singleState.clearError()
+        } catch {
+            singleState.setError(error)
         }
     }
 }
