@@ -12,16 +12,31 @@ import SwiftData
 @Model
 final class HistoryEntry {
     var url: URL
+    var bookmarkData: Data?
 
-    init(url: URL) {
+    init(url: URL, bookmarkData: Data? = nil) {
         self.url = url
+        self.bookmarkData = bookmarkData
     }
 }
 
 extension HistoryEntry {
     
     var fileURL: URL {
-        url
+#if os(macOS)
+        if let bookmarkData {
+            var isStale = false
+            if let resolvedURL = try? URL(
+                resolvingBookmarkData: bookmarkData,
+                options: [.withSecurityScope],
+                relativeTo: nil,
+                bookmarkDataIsStale: &isStale
+            ) {
+                return resolvedURL
+            }
+        }
+#endif
+        return url
     }
 
     var fileName: String {
