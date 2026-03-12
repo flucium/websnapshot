@@ -8,6 +8,9 @@
 import SwiftUI
 import SwiftData
 import UniformTypeIdentifiers
+#if os(macOS)
+import AppKit
+#endif
 
 struct MultipleView: View {
     @Environment(\.modelContext) private var modelContext
@@ -24,12 +27,14 @@ struct MultipleView: View {
                 .padding()
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
+#if os(iOS)
         .fileImporter(
             isPresented: $multipleState.isSelectingSaveFolder,
             allowedContentTypes: [.folder],
             allowsMultipleSelection: false,
             onCompletion: handleFolderSelection
         )
+#endif
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear(perform: configureState)
     }
@@ -61,7 +66,7 @@ private extension MultipleView {
 
                 HStack {
                     Button("Load", action: multipleState.load)
-                    Button("Save all PDFs", action: multipleState.preparePDFExport)
+                    Button("Save all PDFs", action: handleSaveAllPDFsTap)
                         .disabled(!multipleState.canTapSaveButton)
                     Button("Clear", action: multipleState.clear)
 
@@ -70,11 +75,11 @@ private extension MultipleView {
                         .foregroundStyle(.secondary)
                 }
 
-                if let errorMessage = multipleState.errorMessage {
-                    Text(errorMessage)
-                        .font(.caption)
-                        .foregroundStyle(.red)
-                }
+//                if let errorMessage = multipleState.errorMessage {
+//                    Text(errorMessage)
+//                        .font(.caption)
+//                        .foregroundStyle(.red)
+//                }
 
                 Text(multipleState.status)
                     .font(.caption)
@@ -143,6 +148,38 @@ private extension MultipleView {
             multipleState.setError(.display(message: "Folder selection failed: \(error.localizedDescription)"))
         }
     }
+
+#if os(macOS)
+    func handleSaveAllPDFsTap() {
+        guard multipleState.canStartPDFExport() else { return }
+        multipleState.status = "Choose a destination folder..."
+        presentFolderSelectionPanelOnMac()
+    }
+#else
+    func handleSaveAllPDFsTap() {
+        multipleState.preparePDFExport()
+    }
+#endif
+
+#if os(macOS)
+    func presentFolderSelectionPanelOnMac() {
+        let openPanel = NSOpenPanel()
+        openPanel.canChooseFiles = false
+        openPanel.canChooseDirectories = true
+        openPanel.allowsMultipleSelection = false
+        openPanel.canCreateDirectories = false
+        openPanel.prompt = "Export"
+
+        let response = openPanel.runModal()
+        guard response == .OK, let folderURL = openPanel.url else {
+            return
+        }
+
+        Task {
+            await multipleState.saveAllPDFs(to: folderURL)
+        }
+    }
+#endif
 }
 
 #Preview {
