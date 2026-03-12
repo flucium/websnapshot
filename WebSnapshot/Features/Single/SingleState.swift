@@ -29,7 +29,11 @@ final class SingleViewState: WebState {
         do {
             let data = try await makePDF(webView: wkWebView)
             pdfFileDocument = PDFFileDocument(data: data)
+#if os(iOS)
             isExporting = true
+#else
+            isExporting = false
+#endif
             status = "PDF is ready"
         } catch {
             setError(.display(message: "Failed to generate PDF: \(error.localizedDescription)"))
