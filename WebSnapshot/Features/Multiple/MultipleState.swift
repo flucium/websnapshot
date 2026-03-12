@@ -12,7 +12,12 @@ import WebKit
 @MainActor
 final class MultipleState: WebState {
     @Published private(set) var items: [WebItem] = []
+    
     @Published var isSelectingSaveFolder = false
+   
+    private var parsedInput: (urls: [URL], invalidLineNumbers: [Int]) {
+        URL.parseWebURLs(from: urlString)
+    }
 
     var onFileSaved: ((URL) -> Void)?
 
@@ -21,7 +26,7 @@ final class MultipleState: WebState {
     }
 
     var canTapSaveButton: Bool {
-        hasInputURL && parsedInput.invalidLineNumbers.isEmpty
+        !items.isEmpty
     }
 
     override func load() {
@@ -42,23 +47,22 @@ final class MultipleState: WebState {
     }
 
     func preparePDFExport() {
-        guard let urls = validatedInputURLs() else {
+        guard canStartPDFExport() else {
             return
         }
 
+        status = "Choose a destination folder..."
+        isSelectingSaveFolder = true
+    }
+
+    func canStartPDFExport() -> Bool {
         guard !items.isEmpty else {
             setError(.display(message: "No loaded pages to save. Press Load first."))
-            return
-        }
-
-        guard items.count == urls.count else {
-            setError(.display(message: "Links changed. Press Load again before saving."))
-            return
+            return false
         }
 
         clearError()
-        status = "Choose a destination folder..."
-        isSelectingSaveFolder = true
+        return true
     }
 
     func setOnFileSaved(_ handler: @escaping (URL) -> Void) {
@@ -75,6 +79,9 @@ final class MultipleState: WebState {
             setError(.display(message: "Cannot access selected folder"))
             return
         }
+        defer {
+            folderURL.stopAccessingSecurityScopedResource()
+        }
 
         clearError()
         status = "Saving \(items.count) PDFs..."
@@ -86,7 +93,12 @@ final class MultipleState: WebState {
                 }
 
                 let data = try await makePDF(webView: item.webView)
-                let defaultFileName = suggestedPDFFileName(for: item, index: index + 1)
+                let pageTitle = await resolvedPageTitle(for: item.webView)
+                let defaultFileName = suggestedPDFFileName(
+                    for: item,
+                    index: index + 1,
+                    title: pageTitle
+                )
                 let destinationURL = uniqueDestinationURL(
                     in: folderURL,
                     defaultFileName: defaultFileName
@@ -105,9 +117,6 @@ final class MultipleState: WebState {
         }
     }
 
-    private var parsedInput: (urls: [URL], invalidLineNumbers: [Int]) {
-        URL.parseWebURLs(from: urlString)
-    }
 
     private func validatedInputURLs() -> [URL]? {
         guard hasInputURL else {
@@ -152,11 +161,24 @@ final class MultipleState: WebState {
         return candidate
     }
 
-    private func suggestedPDFFileName(for item: WebItem, index: Int) -> String {
+    private func suggestedPDFFileName(for item: WebItem, index: Int, title: String?) -> String {
         URL.pdfFileName(
-            title: item.webView.title,
+            title: title,
             fallbackURL: item.url,
             fallbackPrefix: "page-\(index)"
         )
+    }
+
+    private func resolvedPageTitle(for webView: WKWebView) async -> String? {
+        if let currentTitle = webView.title?.trimmingCharacters(in: .whitespacesAndNewlines), !currentTitle.isEmpty {
+            return currentTitle
+        }
+
+        if let jsTitle = try? await webView.evaluateJavaScript("document.title") as? String {
+            let trimmed = jsTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? nil : trimmed
+        }
+
+        return nil
     }
 }
