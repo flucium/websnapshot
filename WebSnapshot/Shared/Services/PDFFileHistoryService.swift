@@ -26,7 +26,12 @@ enum PDFFileHistoryService {
         }
 
         
-        modelContext.insert(HistoryEntry(url: url))
+        modelContext.insert(
+            HistoryEntry(
+                url: url,
+                bookmarkData: securityScopedBookmarkData(for: url)
+            )
+        )
         
         try modelContext.save()
     }
@@ -46,5 +51,17 @@ enum PDFFileHistoryService {
         } catch {
             return AppError(error: error)
         }
+    }
+
+    private static func securityScopedBookmarkData(for url: URL) -> Data? {
+#if os(macOS)
+        return try? url.bookmarkData(
+            options: [.withSecurityScope],
+            includingResourceValuesForKeys: nil,
+            relativeTo: nil
+        )
+#else
+        return nil
+#endif
     }
 }
