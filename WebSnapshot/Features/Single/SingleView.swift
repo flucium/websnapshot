@@ -8,6 +8,9 @@
 import SwiftUI
 import SwiftData
 import UniformTypeIdentifiers
+#if os(macOS)
+import AppKit
+#endif
 
 struct SingleView: View {
     @Environment(\.modelContext) private var modelContext
@@ -16,6 +19,7 @@ struct SingleView: View {
 
     var body: some View {
         content
+#if os(iOS)
             .fileExporter(
                 isPresented: $singleState.isExporting,
                 document: singleState.pdfFileDocument,
@@ -23,6 +27,7 @@ struct SingleView: View {
                 defaultFilename: singleState.suggestedFileName(),
                 onCompletion: handleExportResult
             )
+#endif
     }
 }
 
@@ -48,11 +53,11 @@ private extension SingleView {
                 Button("Clear", action: singleState.clear)
             }
 
-            if let errorMessage = singleState.errorMessage {
-                Text(errorMessage)
-                    .font(.caption)
-                    .foregroundStyle(.red)
-            }
+//            if let errorMessage = singleState.errorMessage {
+//                Text(errorMessage)
+//                    .font(.caption)
+//                    .foregroundStyle(.red)
+//            }
         }
         .padding()
     }
@@ -71,8 +76,35 @@ private extension SingleView {
     func saveAsPDF() {
         Task {
             await singleState.saveAsPDF()
+#if os(macOS)
+            presentExportPanelOnMac()
+#endif
         }
     }
+
+#if os(macOS)
+    func presentExportPanelOnMac() {
+        guard let data = singleState.pdfFileDocument?.data else { return }
+
+        let savePanel = NSSavePanel()
+        savePanel.allowedContentTypes = [.pdf]
+        savePanel.canCreateDirectories = true
+        savePanel.prompt = "Export"
+        savePanel.nameFieldStringValue = "\(singleState.suggestedFileName()).pdf"
+
+        let response = savePanel.runModal()
+        guard response == .OK, let destinationURL = savePanel.url else {
+            return
+        }
+
+        do {
+            try data.write(to: destinationURL, options: .atomic)
+            handleExportResult(.success(destinationURL))
+        } catch {
+            handleExportResult(.failure(error))
+        }
+    }
+#endif
 
     func handleExportResult(_ result: Result<URL, Error>) {
         switch result {
