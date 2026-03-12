@@ -8,7 +8,18 @@
 import Foundation
 
 extension URL {
+    var isSupportedWebURL: Bool {
+        guard let scheme = scheme?.lowercased(), scheme == "http" || scheme == "https" else {
+            return false
+        }
 
+        guard let host = host?.lowercased(), !host.isEmpty else {
+            return false
+        }
+
+        return Self.isValidWebHost(host)
+    }
+    
     static func normalized(from string: String) -> URL? {
         normalizedWebURL(from: string)
     }
@@ -50,17 +61,7 @@ extension URL {
         return (urls, invalidLineNumbers)
     }
 
-    var isSupportedWebURL: Bool {
-        guard let scheme = scheme?.lowercased(), scheme == "http" || scheme == "https" else {
-            return false
-        }
-
-        guard let host = host?.lowercased(), !host.isEmpty else {
-            return false
-        }
-
-        return Self.isValidWebHost(host)
-    }
+   
 }
 
 private extension URL {
