@@ -15,6 +15,7 @@ class WebState: ObservableObject {
     @Published var appError: AppError? = nil
     @Published var pdfFileDocument: PDFFileDocument?
     @Published var isExporting: Bool = false
+    
     private var isClearingWebView = false
 
     let navigationDelegate = NavigationDelegate()
