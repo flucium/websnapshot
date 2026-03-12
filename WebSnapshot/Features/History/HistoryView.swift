@@ -14,7 +14,19 @@ struct HistoryView: View {
     @State private var selectedItem: HistoryEntry? = nil
     @State private var searchText: String = ""
 
+    private var filteredItems: [HistoryEntry] {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else {
+            return items
+        }
+
+        return items.filter {
+            $0.fileName.localizedCaseInsensitiveContains(query)
+        }
+    }
+    
     let items: [HistoryEntry]
+    
     let onDelete: (HistoryEntry) -> Void
     
     var body: some View {
@@ -54,16 +66,7 @@ struct HistoryView: View {
         }
     }
 
-    private var filteredItems: [HistoryEntry] {
-        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else {
-            return items
-        }
 
-        return items.filter {
-            $0.fileName.localizedCaseInsensitiveContains(query)
-        }
-    }
 
     private func historyPDFDetailView(for item: HistoryEntry) -> some View {
         VStack(spacing: 8) {
@@ -108,6 +111,18 @@ struct HistoryPDFView: NSViewRepresentable {
     }
 
     func updateNSView(_ nsView: PDFView, context: Context) {
-        nsView.document = PDFDocument(url: url)
+        let didAccess = url.startAccessingSecurityScopedResource()
+        defer {
+            if didAccess {
+                url.stopAccessingSecurityScopedResource()
+            }
+        }
+
+        guard let data = try? Data(contentsOf: url) else {
+            nsView.document = nil
+            return
+        }
+
+        nsView.document = PDFDocument(data: data)
     }
 }
