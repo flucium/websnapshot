@@ -196,12 +196,12 @@ private struct HistoryPDFPlatformView: UIViewRepresentable {
 
 private struct HistoryWebView: View {
     let url: URL
-    @State private var webView = WebViewFactory.make()
+    @State private var webView = WKWebView()
 
     var body: some View {
         WebViewContainer(webView: webView)
             .task(id: url) {
-                WebPageLoader.load(url, into: webView)
+                webView.load(URLRequest(url: url))
             }
     }
 }
