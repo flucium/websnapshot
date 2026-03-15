@@ -12,8 +12,10 @@ import SwiftData
 @main
 struct WebSnapshotApp: App {
     
+    #if os(macOS)
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
-
+    #endif
+    
     var body: some Scene {
         WindowGroup {
             HomeView()
@@ -31,6 +33,7 @@ struct WebSnapshotApp: App {
     }
 }
 
+#if os(macOS)
 func updateAppIcon() {
     let appearance = NSApplication.shared.effectiveAppearance
     let isDark = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
@@ -56,3 +59,4 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 }
+#endif
