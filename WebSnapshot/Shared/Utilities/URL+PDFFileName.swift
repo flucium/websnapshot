@@ -14,7 +14,7 @@ extension URL {
         fallbackPrefix: String = "page"
     ) -> String {
         let cleanedTitle = sanitizeFileName(title ?? "")
-        if !cleanedTitle.isEmpty {
+        if !cleanedTitle.isEmpty, !looksLikeMojibake(cleanedTitle) {
             return cleanedTitle
         }
 
@@ -23,6 +23,45 @@ extension URL {
         }
 
         return fallbackPrefix
+    }
+
+    static func displayPDFFileName(
+        fileURL: URL,
+        sourceURL: URL?
+    ) -> String {
+        let rawName = fileURL.lastPathComponent
+        let decodedName = rawName.removingPercentEncoding ?? rawName
+
+        if !looksLikeMojibake(decodedName) {
+            return decodedName
+        }
+
+        guard let sourceURL else {
+            return decodedName
+        }
+
+        return pdfFileName(
+            title: nil,
+            fallbackURL: sourceURL
+        )
+    }
+
+    private static func looksLikeMojibake(_ text: String) -> Bool {
+        guard !text.isEmpty else {
+            return false
+        }
+
+        if text.contains("\u{FFFD}") {
+            return true
+        }
+
+        let suspiciousFragments = [
+            "ã\u{0081}", "ã\u{0082}", "ã\u{0083}",
+            "ãƒ", "ã‚", "ã€", "å\u{0080}", "æ\u{0080}",
+            "â€", "â€”", "â€œ", "â€\u{009d}"
+        ]
+
+        return suspiciousFragments.contains { text.contains($0) }
     }
 
     static func pdfFileName(
