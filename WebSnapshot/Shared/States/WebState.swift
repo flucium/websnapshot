@@ -19,7 +19,7 @@ class WebState: ObservableObject {
     private var isClearingWebView = false
 
     let navigationDelegate = NavigationDelegate()
-    let wkWebView = WKWebView(frame: .zero)
+    let wkWebView = WebViewFactory.make()
 
     var hasInputURL: Bool {
         !urlString.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
