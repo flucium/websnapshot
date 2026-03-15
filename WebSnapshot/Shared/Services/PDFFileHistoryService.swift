@@ -13,6 +13,7 @@ import Foundation
 enum PDFFileHistoryService {
     static func save(
         url: URL,
+        sourceURL: URL? = nil,
         modelContext: ModelContext,
         existingItems: [HistoryEntry]
     ) throws {
@@ -29,6 +30,7 @@ enum PDFFileHistoryService {
         modelContext.insert(
             HistoryEntry(
                 url: url,
+                sourceURL: sourceURL,
                 bookmarkData: securityScopedBookmarkData(for: url)
             )
         )
@@ -38,12 +40,14 @@ enum PDFFileHistoryService {
 
     static func record(
         url: URL,
+        sourceURL: URL? = nil,
         modelContext: ModelContext,
         existingItems: [HistoryEntry]
     ) -> AppError? {
         do {
             try save(
                 url: url,
+                sourceURL: sourceURL,
                 modelContext: modelContext,
                 existingItems: existingItems
             )
