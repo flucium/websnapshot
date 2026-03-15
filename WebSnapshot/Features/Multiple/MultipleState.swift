@@ -19,7 +19,7 @@ final class MultipleState: WebState {
         URL.parseWebURLs(from: urlString)
     }
 
-    var onFileSaved: ((URL) -> Void)?
+    var onFileSaved: ((URL, URL) -> Void)?
 
     var validLinkCount: Int {
         items.count
@@ -65,7 +65,7 @@ final class MultipleState: WebState {
         return true
     }
 
-    func setOnFileSaved(_ handler: @escaping (URL) -> Void) {
+    func setOnFileSaved(_ handler: @escaping (URL, URL) -> Void) {
         onFileSaved = handler
     }
 
@@ -105,7 +105,7 @@ final class MultipleState: WebState {
                 )
 
                 try data.write(to: destinationURL, options: .atomic)
-                onFileSaved?(destinationURL)
+                onFileSaved?(destinationURL, item.url)
 
                 let savedCount = index + 1
                 status = savedCount == items.count
