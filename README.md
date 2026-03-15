@@ -27,11 +27,17 @@ You can double click a file name to open the PDF inside WebSnapshot.
 You can also remove an item from the history by left clicking the file name.
 When this happens, the corresponding saved file will also be deleted.
 
-## Supported Platforms
-- macOS (Apple silicon, aarch64)
+<hr>
+ 
+## Target platform
+**macOS**
+- Apple Silicon (aarch64)
+- iPadOS (Debug : iPad Pro 13 inch M5)
 
-## Under Consideration
-Support for iPadOS.
+## Newly added platform
+Support for iPadOS (Debug: iPad Pro 13 inch M5) has also been added. the operation is unstable, but the minimum required functionality has been implemented.
 
-## Other
-- [ToDo](/TODO.md)
+## Bug
+- There is a bug where text becomes garbled on certain websites. working on fixing the issue.
+- Dark mode is unstable. working on improvements.
+
