@@ -16,7 +16,7 @@ final class WebItem: Identifiable {
 
     init(url: URL) {
         self.url = url
-        self.webView = WKWebView()
+        self.webView = WebViewFactory.make()
         self.webView.load(URLRequest(url: url))
     }
 }
