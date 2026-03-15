@@ -117,14 +117,15 @@ private extension MultipleView {
     }
 
     func configureState() {
-        multipleState.setOnFileSaved { url in
-            saveHistory(url: url)
+        multipleState.setOnFileSaved { pdfURL, sourceURL in
+            saveHistory(pdfURL: pdfURL, sourceURL: sourceURL)
         }
     }
     
-    func saveHistory(url: URL) {
+    func saveHistory(pdfURL url: URL, sourceURL: URL?) {
         if let appError = PDFFileHistoryService.record(
             url: url,
+            sourceURL: sourceURL,
             modelContext: modelContext,
             existingItems: historyItems
         ) {
