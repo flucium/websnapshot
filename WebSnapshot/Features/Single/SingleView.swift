@@ -8,6 +8,7 @@
 import SwiftUI
 import SwiftData
 import UniformTypeIdentifiers
+import WebKit
 #if os(macOS)
 import AppKit
 #endif
@@ -124,6 +125,7 @@ private extension SingleView {
     func saveHistory(url: URL) {
         if let appError = PDFFileHistoryService.record(
             url: url,
+            sourceURL: singleState.wkWebView.url,
             modelContext: modelContext,
             existingItems: historyItems
         ) {
