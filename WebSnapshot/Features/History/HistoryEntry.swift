@@ -12,10 +12,12 @@ import SwiftData
 @Model
 final class HistoryEntry {
     var url: URL
+    var sourceURL: URL?
     var bookmarkData: Data?
 
-    init(url: URL, bookmarkData: Data? = nil) {
+    init(url: URL, sourceURL: URL? = nil, bookmarkData: Data? = nil) {
         self.url = url
+        self.sourceURL = sourceURL
         self.bookmarkData = bookmarkData
     }
 }
@@ -50,6 +52,6 @@ extension HistoryEntry {
     }
 
     var fileName: String {
-        fileURL.lastPathComponent
+        URL.displayPDFFileName(fileURL: fileURL, sourceURL: sourceURL)
     }
 }
