@@ -21,8 +21,11 @@ final class HistoryEntry {
 }
 
 extension HistoryEntry {
-    
     var fileURL: URL {
+        resolvedBookmarkedURL ?? url
+    }
+
+    private var resolvedBookmarkedURL: URL? {
 #if os(macOS)
         if let bookmarkData {
             var isStale = false
@@ -32,11 +35,18 @@ extension HistoryEntry {
                 relativeTo: nil,
                 bookmarkDataIsStale: &isStale
             ) {
+                if isStale {
+                    self.bookmarkData = try? resolvedURL.bookmarkData(
+                        options: [.withSecurityScope],
+                        includingResourceValuesForKeys: nil,
+                        relativeTo: nil
+                    )
+                }
                 return resolvedURL
             }
         }
 #endif
-        return url
+        return nil
     }
 
     var fileName: String {
