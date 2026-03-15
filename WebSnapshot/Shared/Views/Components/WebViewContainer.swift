@@ -8,6 +8,8 @@
 import SwiftUI
 import WebKit
 
+#if os(macOS)
+
 struct WebViewContainer: NSViewRepresentable {
     let webView: WKWebView
 
@@ -16,9 +18,21 @@ struct WebViewContainer: NSViewRepresentable {
     }
 
     func updateNSView(_ nsView: WKWebView, context: Context) {
-        
+
     }
 }
+#else
 
+struct WebViewContainer: UIViewRepresentable {
+    let webView: WKWebView
 
+    func makeUIView(context: Context) -> WKWebView {
+        webView
+    }
+
+    func updateUIView(_ uiView: WKWebView, context: Context) {
+
+    }
+}
+#endif
 
