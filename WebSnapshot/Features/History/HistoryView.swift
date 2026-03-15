@@ -8,11 +8,15 @@
 
 import SwiftUI
 import PDFKit
+import WebKit
+import SwiftData
 
 struct HistoryView: View {
+    
 
     @State private var selectedItem: HistoryEntry? = nil
     @State private var searchText: String = ""
+    
 
     private var filteredItems: [HistoryEntry] {
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -45,22 +49,38 @@ struct HistoryView: View {
                 .padding()
             List {
                 ForEach(filteredItems, id: \.persistentModelID) { item in
-                    Text(item.fileName)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .contentShape(Rectangle())
-                        .onTapGesture(count: 2) {
+                    Button {
+                        selectedItem = item
+                        
+                    } label: {
+                        Text(item.fileName)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .buttonStyle(.plain)
+                    .contentShape(Rectangle())
+                    .onTapGesture(count: 2) {
+                        selectedItem = item
+                        
+                    }
+                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                        Button("Delete", role: .destructive) {
+                            delete(item)
+                        }
+                    }
+                    .contextMenu {
+                        Button("Open PDF") {
                             selectedItem = item
                         }
-                        .contextMenu {
-                            Button("Delete") {
-                                onDelete(item)
-                                do {
-                                    try deletePDFFile(url: item.fileURL)
-                                } catch {
-                                    print(error)
-                                }
-                            }
+//                        if item.sourceURL != nil {
+//                            Button("Open Web") {
+//                                selectedItem = item
+//                                previewMode = .web
+//                            }
+//                        }
+                        Button("Delete", role: .destructive) {
+                            delete(item)
                         }
+                    }
                 }
             }
         }
@@ -83,23 +103,48 @@ struct HistoryView: View {
             .padding(.horizontal)
             .padding(.top, 8)
 
-            if isPDFFile(url: item.fileURL) {
-                HistoryPDFView(url: item.fileURL)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                let error = AppError.notFound
-                ContentUnavailableView(
-                    "Load failed: \(error.errorDescription ?? "unknown")",
-                    systemImage: "exclamationmark.triangle",
-                    description: Text(item.fileURL.path)
-                )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            Group {
+                if isPDFFile(url: item.fileURL) {
+                    HistoryPDFView(url: item.fileURL)
+                } else {
+                    let error = AppError.notFound
+                    ContentUnavailableView(
+                        "Load failed: \(error.errorDescription ?? "unknown")",
+                        systemImage: "exclamationmark.triangle",
+                        description: Text(item.fileURL.path)
+                    )
+                }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    private func delete(_ item: HistoryEntry) {
+        onDelete(item)
+        do {
+            try deletePDFFile(url: item.fileURL)
+        } catch {
+            //
+        }
+
+        if selectedItem?.persistentModelID == item.persistentModelID {
+            selectedItem = nil
+            
         }
     }
 }
 
-struct HistoryPDFView: NSViewRepresentable {
+struct HistoryPDFView: View {
+    let url: URL
+
+    var body: some View {
+        HistoryPDFPlatformView(url: url)
+    }
+}
+
+#if os(macOS)
+private struct HistoryPDFPlatformView: NSViewRepresentable {
     let url: URL
 
     func makeNSView(context: Context) -> PDFView {
@@ -124,5 +169,39 @@ struct HistoryPDFView: NSViewRepresentable {
         }
 
         nsView.document = PDFDocument(data: data)
+    }
+}
+#else
+private struct HistoryPDFPlatformView: UIViewRepresentable {
+    let url: URL
+
+    func makeUIView(context: Context) -> PDFView {
+        let view = PDFView()
+        view.autoScales = true
+        view.displayMode = .singlePageContinuous
+        view.displayDirection = .vertical
+        return view
+    }
+
+    func updateUIView(_ uiView: PDFView, context: Context) {
+        guard let data = try? Data(contentsOf: url) else {
+            uiView.document = nil
+            return
+        }
+
+        uiView.document = PDFDocument(data: data)
+    }
+}
+#endif
+
+private struct HistoryWebView: View {
+    let url: URL
+    @State private var webView = WebViewFactory.make()
+
+    var body: some View {
+        WebViewContainer(webView: webView)
+            .task(id: url) {
+                WebPageLoader.load(url, into: webView)
+            }
     }
 }
