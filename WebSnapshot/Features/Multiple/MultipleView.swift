@@ -67,7 +67,7 @@ private extension MultipleView {
                 HStack {
                     Button("Load", action: multipleState.load)
                     Button("Save all PDFs", action: handleSaveAllPDFsTap)
-                        .disabled(!multipleState.canTapSaveButton)
+                        .disabled(!multipleState.canExportPDF)
                     Button("Clear", action: multipleState.clear)
 
                     Text("Valid links: \(multipleState.validLinkCount)")
@@ -75,15 +75,7 @@ private extension MultipleView {
                         .foregroundStyle(.secondary)
                 }
 
-//                if let errorMessage = multipleState.errorMessage {
-//                    Text(errorMessage)
-//                        .font(.caption)
-//                        .foregroundStyle(.red)
-//                }
-
-                Text(multipleState.status)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                WebViewContainer(status: multipleState.status, font: .caption)
             }
             .padding(.top, 8)
         }
@@ -108,31 +100,23 @@ private extension MultipleView {
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-            WebViewContainer(webView: item.webView)
-                .frame(maxWidth: .infinity)
-                .frame(height: 500)
-                .clipShape(RoundedRectangle(cornerRadius: 8))
+            WebPreview(webView: item.webView, height: 500, cornerRadius: 8)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     func configureState() {
-        multipleState.setOnFileSaved { pdfURL, sourceURL in
-            saveHistory(pdfURL: pdfURL, sourceURL: sourceURL)
+        multipleState.setOnFileSaved { pdfURL in
+            saveHistory(pdfURL: pdfURL)
         }
     }
     
-    func saveHistory(pdfURL url: URL, sourceURL: URL?) {
-        if let appError = PDFFileHistoryService.record(
+    func saveHistory(pdfURL url: URL) {
+        multipleState.recordHistory(
             url: url,
-            sourceURL: sourceURL,
             modelContext: modelContext,
             existingItems: historyItems
-        ) {
-            multipleState.setError(appError)
-        } else {
-            multipleState.clearError()
-        }
+        )
     }
 
     func handleFolderSelection(_ result: Result<[URL], Error>) {
