@@ -12,46 +12,69 @@ import SwiftData
 @Model
 final class HistoryEntry {
     var url: URL
-    var sourceURL: URL?
     var bookmarkData: Data?
 
-    init(url: URL, sourceURL: URL? = nil, bookmarkData: Data? = nil) {
+    init(url: URL, bookmarkData: Data? = nil) {
         self.url = url
-        self.sourceURL = sourceURL
         self.bookmarkData = bookmarkData
     }
 }
 
 extension HistoryEntry {
     var fileURL: URL {
-        resolvedBookmarkedURL ?? url
-    }
-
-    private var resolvedBookmarkedURL: URL? {
-#if os(macOS)
-        if let bookmarkData {
-            var isStale = false
-            if let resolvedURL = try? URL(
-                resolvingBookmarkData: bookmarkData,
-                options: [.withSecurityScope],
-                relativeTo: nil,
-                bookmarkDataIsStale: &isStale
-            ) {
-                if isStale {
-                    self.bookmarkData = try? resolvedURL.bookmarkData(
-                        options: [.withSecurityScope],
-                        includingResourceValuesForKeys: nil,
-                        relativeTo: nil
-                    )
-                }
-                return resolvedURL
-            }
-        }
-#endif
-        return nil
+        resolvedBookmarkURL() ?? url
     }
 
     var fileName: String {
-        URL.displayPDFFileName(fileURL: fileURL, sourceURL: sourceURL)
+        URL.displayPDFFileName(fileURL: fileURL)
+    }
+
+    private func resolvedBookmarkURL() -> URL? {
+        guard let bookmarkData else {
+            return nil
+        }
+
+        var isStale = false
+        guard let resolvedURL = try? URL(
+            resolvingBookmarkData: bookmarkData,
+            options: URL.historyBookmarkResolutionOptions,
+            relativeTo: nil,
+            bookmarkDataIsStale: &isStale
+        ) else {
+            return nil
+        }
+
+        refreshBookmarkDataIfNeeded(for: resolvedURL, isStale: isStale)
+        return resolvedURL
+    }
+
+    private func refreshBookmarkDataIfNeeded(for url: URL, isStale: Bool) {
+        guard isStale else {
+            return
+        }
+
+        bookmarkData = try? url.bookmarkData(
+            options: URL.historyBookmarkCreationOptions,
+            includingResourceValuesForKeys: nil,
+            relativeTo: nil
+        )
+    }
+}
+
+private extension URL {
+    static var historyBookmarkCreationOptions: BookmarkCreationOptions {
+#if os(macOS)
+        [.withSecurityScope]
+#else
+        []
+#endif
+    }
+
+    static var historyBookmarkResolutionOptions: BookmarkResolutionOptions {
+#if os(macOS)
+        [.withSecurityScope]
+#else
+        []
+#endif
     }
 }
