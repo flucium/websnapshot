@@ -10,8 +10,8 @@ import WebKit
 
 
 @MainActor
-final class SingleViewState: WebState {
-    var canTapSaveButton: Bool {
+final class SingleState: WebState {
+    var canExportPDF: Bool {
         hasInputURL
     }
 
@@ -27,7 +27,7 @@ final class SingleViewState: WebState {
         status = "Generating PDF..."
 
         do {
-            let data = try await makePDF(webView: wkWebView)
+            let data = try await makePDF()
             pdfFileDocument = PDFFileDocument(data: data)
 #if os(iOS)
             isExporting = true
