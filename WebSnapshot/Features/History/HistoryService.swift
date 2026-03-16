@@ -10,36 +10,58 @@ import Foundation
 import PDFKit
 
 func deletePDFFile(url: URL) throws {
-    guard withSecurityScopedAccess(url: url, action: { FileManager.default.fileExists(atPath: url.path) }) else {
-        throw CocoaError(.fileNoSuchFile)
-    }
-
-    guard isPDFFile(url: url) else {
-        throw CocoaError(.fileReadCorruptFile)
-    }
-
-    do {
-        try withSecurityScopedAccess(url: url) {
-            try FileManager.default.removeItem(at: url)
-        }
-    } catch {
-        throw CocoaError(.fileWriteNoPermission)
-    }
+    try HistoryFileService.deletePDF(at: url)
 }
 
 func isPDFFile(url: URL) -> Bool {
-    guard withSecurityScopedAccess(url: url, action: { FileManager.default.fileExists(atPath: url.path) }) else {
-        return false
-    }
-
-    guard let document = withSecurityScopedAccess(url: url, action: { PDFDocument(url: url) }) else {
-        return false
-    }
-
-    return document.pageCount > 0
+    HistoryFileService.isPDF(at: url)
 }
 
-private func withSecurityScopedAccess<T>(url: URL, action: () throws -> T) rethrows -> T {
+private enum HistoryFileService {
+    static func deletePDF(at url: URL) throws {
+        guard fileExists(at: url) else {
+            throw CocoaError(.fileNoSuchFile)
+        }
+
+        guard isPDF(at: url) else {
+            throw CocoaError(.fileReadCorruptFile)
+        }
+
+        do {
+            try access(url) {
+                try FileManager.default.removeItem(at: url)
+            }
+        } catch {
+            throw CocoaError(.fileWriteNoPermission)
+        }
+    }
+
+    static func isPDF(at url: URL) -> Bool {
+        guard fileExists(at: url) else {
+            return false
+        }
+
+        guard let document = pdfDocument(at: url) else {
+            return false
+        }
+
+        return document.pageCount > 0
+    }
+
+    private static func fileExists(at url: URL) -> Bool {
+        access(url) {
+            FileManager.default.fileExists(atPath: url.path)
+        }
+    }
+
+    private static func pdfDocument(at url: URL) -> PDFDocument? {
+        access(url) {
+            PDFDocument(url: url)
+        }
+    }
+}
+
+private func access<T>(_ url: URL, action: () throws -> T) rethrows -> T {
 #if os(macOS)
     let didAccess = url.startAccessingSecurityScopedResource()
     defer {
