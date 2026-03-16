@@ -5,7 +5,10 @@
 //  Created by flucium on 2026/03/11.
 //
 
+import Foundation
 import Combine
+import CoreGraphics
+import SwiftData
 import WebKit
 
 @MainActor
@@ -19,10 +22,14 @@ class WebState: ObservableObject {
     private var isClearingWebView = false
 
     let navigationDelegate = NavigationDelegate()
-    let wkWebView = WebViewFactory.make()
+    let wkWebView = makeWebView()
+
+    var trimmedURLString: String {
+        urlString.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
 
     var hasInputURL: Bool {
-        !urlString.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        !trimmedURLString.isEmpty
     }
 
     var errorMessage: String? {
@@ -49,7 +56,7 @@ class WebState: ObservableObject {
     }
 
     func load() {
-        guard let url = URL.normalizedWebURL(from: urlString) else {
+        guard let url = URL.normalizedWebURL(from: trimmedURLString) else {
             setError(.invalidURL)
             return
         }
@@ -60,13 +67,8 @@ class WebState: ObservableObject {
     }
 
     func clear() {
-        clearError()
-        wkWebView.loadHTMLString("", baseURL: nil)
-        pdfFileDocument = nil
-        urlString = ""
-        status = ""
-        isClearingWebView = true
-        isExporting = false
+        resetCommonState()
+        clearLoadedPage()
     }
 
     func setError(_ appError: AppError) {
@@ -82,8 +84,53 @@ class WebState: ObservableObject {
         appError = nil
     }
 
-    func makePDF(webView: WKWebView) async throws -> Data {
-        try await pdfData(from: webView)
+    func makePDF(from webView: WKWebView? = nil) async throws -> Data {
+        try await pdfData(from: webView ?? wkWebView)
+    }
+
+    func resolvedPageTitle(for webView: WKWebView? = nil) async -> String? {
+        let webView = webView ?? wkWebView
+
+        if let currentTitle = webView.title?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !currentTitle.isEmpty {
+            return currentTitle
+        }
+
+        if let jsTitle = try? await webView.evaluateJavaScript("document.title") as? String {
+            let trimmedTitle = jsTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmedTitle.isEmpty ? nil : trimmedTitle
+        }
+
+        return nil
+    }
+
+    func recordHistory(
+        url: URL,
+        modelContext: ModelContext,
+        existingItems: [HistoryEntry]
+    ) {
+        if let appError = PDFFileHistoryService.record(
+            url: url,
+            modelContext: modelContext,
+            existingItems: existingItems
+        ) {
+            setError(appError)
+        } else {
+            clearError()
+        }
+    }
+
+    func resetCommonState() {
+        clearError()
+        pdfFileDocument = nil
+        urlString = ""
+        status = ""
+        isExporting = false
+    }
+
+    func clearLoadedPage() {
+        wkWebView.loadHTMLString("", baseURL: nil)
+        isClearingWebView = true
     }
 }
 
@@ -101,4 +148,9 @@ private func pdfData(from webView: WKWebView) async throws -> Data {
             }
         }
     }
+}
+
+private func makeWebView(frame: CGRect = .zero) -> WKWebView {
+    let configuration = WKWebViewConfiguration()
+    return WKWebView(frame: frame, configuration: configuration)
 }
