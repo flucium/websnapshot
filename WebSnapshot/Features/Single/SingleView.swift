@@ -8,14 +8,13 @@
 import SwiftUI
 import SwiftData
 import UniformTypeIdentifiers
-import WebKit
 #if os(macOS)
 import AppKit
 #endif
 
 struct SingleView: View {
     @Environment(\.modelContext) private var modelContext
-    @StateObject private var singleState = SingleViewState()
+    @StateObject private var singleState = SingleState()
     @Query private var historyItems: [HistoryEntry]
 
     var body: some View {
@@ -50,28 +49,19 @@ private extension SingleView {
 
                 Button("Load", action: singleState.load)
                 Button("Save as PDF", action: saveAsPDF)
-                    .disabled(!singleState.canTapSaveButton)
+                    .disabled(!singleState.canExportPDF)
                 Button("Clear", action: singleState.clear)
             }
-
-//            if let errorMessage = singleState.errorMessage {
-//                Text(errorMessage)
-//                    .font(.caption)
-//                    .foregroundStyle(.red)
-//            }
         }
         .padding()
     }
 
     var statusView: some View {
-        Text(singleState.status)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal)
+        WebViewContainer(status: singleState.status)
     }
 
     var webView: some View {
-        WebViewContainer(webView: singleState.wkWebView)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        WebPreview(webView: singleState.wkWebView)
     }
 
     func saveAsPDF() {
@@ -123,16 +113,11 @@ private extension SingleView {
     }
     
     func saveHistory(url: URL) {
-        if let appError = PDFFileHistoryService.record(
+        singleState.recordHistory(
             url: url,
-            sourceURL: singleState.wkWebView.url,
             modelContext: modelContext,
             existingItems: historyItems
-        ) {
-            singleState.setError(appError)
-        } else {
-            singleState.clearError()
-        }
+        )
     }
 }
 
