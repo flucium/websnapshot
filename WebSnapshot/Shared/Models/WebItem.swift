@@ -7,6 +7,7 @@
 
 
 import Foundation
+import CoreGraphics
 import WebKit
 
 final class WebItem: Identifiable {
@@ -16,7 +17,8 @@ final class WebItem: Identifiable {
 
     init(url: URL) {
         self.url = url
-        self.webView = WebViewFactory.make()
+        let configuration = WKWebViewConfiguration()
+        self.webView = WKWebView(frame: .zero, configuration: configuration)
         self.webView.load(URLRequest(url: url))
     }
 }
