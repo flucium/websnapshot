@@ -19,13 +19,13 @@ final class MultipleState: WebState {
         URL.parseWebURLs(from: urlString)
     }
 
-    var onFileSaved: ((URL, URL) -> Void)?
+    var onFileSaved: ((URL) -> Void)?
 
     var validLinkCount: Int {
         items.count
     }
 
-    var canTapSaveButton: Bool {
+    var canExportPDF: Bool {
         !items.isEmpty
     }
 
@@ -39,11 +39,9 @@ final class MultipleState: WebState {
     }
 
     override func clear() {
-        urlString = ""
+        resetCommonState()
         items = []
         isSelectingSaveFolder = false
-        clearError()
-        status = ""
     }
 
     func preparePDFExport() {
@@ -65,7 +63,7 @@ final class MultipleState: WebState {
         return true
     }
 
-    func setOnFileSaved(_ handler: @escaping (URL, URL) -> Void) {
+    func setOnFileSaved(_ handler: @escaping (URL) -> Void) {
         onFileSaved = handler
     }
 
@@ -92,7 +90,7 @@ final class MultipleState: WebState {
                     throw AppError.display(message: "Some pages are still loading. Try again in a moment.")
                 }
 
-                let data = try await makePDF(webView: item.webView)
+                let data = try await makePDF(from: item.webView)
                 let pageTitle = await resolvedPageTitle(for: item.webView)
                 let defaultFileName = suggestedPDFFileName(
                     for: item,
@@ -105,7 +103,7 @@ final class MultipleState: WebState {
                 )
 
                 try data.write(to: destinationURL, options: .atomic)
-                onFileSaved?(destinationURL, item.url)
+                onFileSaved?(destinationURL)
 
                 let savedCount = index + 1
                 status = savedCount == items.count
@@ -167,18 +165,5 @@ final class MultipleState: WebState {
             fallbackURL: item.url,
             fallbackPrefix: "page-\(index)"
         )
-    }
-
-    private func resolvedPageTitle(for webView: WKWebView) async -> String? {
-        if let currentTitle = webView.title?.trimmingCharacters(in: .whitespacesAndNewlines), !currentTitle.isEmpty {
-            return currentTitle
-        }
-
-        if let jsTitle = try? await webView.evaluateJavaScript("document.title") as? String {
-            let trimmed = jsTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-            return trimmed.isEmpty ? nil : trimmed
-        }
-
-        return nil
     }
 }
