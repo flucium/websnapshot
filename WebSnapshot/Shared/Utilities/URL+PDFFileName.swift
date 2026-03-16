@@ -25,25 +25,9 @@ extension URL {
         return fallbackPrefix
     }
 
-    static func displayPDFFileName(
-        fileURL: URL,
-        sourceURL: URL?
-    ) -> String {
+    static func displayPDFFileName(fileURL: URL) -> String {
         let rawName = fileURL.lastPathComponent
-        let decodedName = rawName.removingPercentEncoding ?? rawName
-
-        if !looksLikeMojibake(decodedName) {
-            return decodedName
-        }
-
-        guard let sourceURL else {
-            return decodedName
-        }
-
-        return pdfFileName(
-            title: nil,
-            fallbackURL: sourceURL
-        )
+        return rawName.removingPercentEncoding ?? rawName
     }
 
     private static func looksLikeMojibake(_ text: String) -> Bool {
