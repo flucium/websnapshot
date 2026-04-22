@@ -136,24 +136,24 @@ final class DirectoryHistoryService {
         }
     }
     
-    static func delete(_ url:URL, _ modelContext:ModelContext) throws {
-        do {
-            let matched = try fetch(modelContext).filter{
-                $0.url == url
-            }
-
-            for entry in matched {
-                modelContext.delete(entry)
-            }
-
-            if matched.isEmpty == false{
-                try modelContext.save()
-            }
-            
-        } catch {
-            throw AppError(error)
-        }
-    }
+//    static func delete(_ url:URL, _ modelContext:ModelContext) throws {
+//        do {
+//            let matched = try fetch(modelContext).filter{
+//                $0.url == url
+//            }
+//
+//            for entry in matched {
+//                modelContext.delete(entry)
+//            }
+//
+//            if matched.isEmpty == false{
+//                try modelContext.save()
+//            }
+//            
+//        } catch {
+//            throw AppError(error)
+//        }
+//    }
     
     static func set(_ url:URL, _ modelContext:ModelContext) throws -> DirectoryHistory{
        
