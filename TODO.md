@@ -1,4 +1,14 @@
 # ToDo
-- Improve the UI
-- Add search functionality for saved PDFs
-- Other improvements
+- AES GCM [ ]
+- PBKDF2 [ ]
+- File encryption [ ]
+- File decryption [ ]
+- Secure Random Generator [ ]
+- KEK [ ]
+- CEK [ ]
+- use: Keychain [ ]
+- Enable the file encryption option [ ]
+- Enable file hash verification [ ]
+- SettingView, Service, Model [ ]
+- MultipleView, Service [ ]
+
