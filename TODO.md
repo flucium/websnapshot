@@ -1,7 +1,7 @@
 # ToDo
-- HomeView Refactor [ ]
-- SingleView Refactor [ ]
-- DirectoryView Refactor [ ]
+- HomeView Refactor [x]
+- SingleView Refactor [x]
+- DirectoryView Refactor [x]
 - AES GCM [ ]
 - PBKDF2 [ ]
 - File encryption [ ]
