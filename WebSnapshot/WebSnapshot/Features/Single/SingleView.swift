@@ -18,7 +18,7 @@ struct SingleView: View {
                 
                 Button("Load", action: singleViewState.load)
                 
-                Button("Save") {
+                Button("Save", action:{
                     Task {
                         if await singleViewState.save() {
                             await MainActor.run {
@@ -27,7 +27,7 @@ struct SingleView: View {
                             }
                         }
                     }
-                }
+                })
                 Button("Clear", action: singleViewState.clear)
             }
             .disabled(singleViewState.isSaving)
