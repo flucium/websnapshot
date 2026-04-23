@@ -1,4 +1,5 @@
 # ToDo
+- HomeView Refactor [ ]
 - SingleView Refactor [ ]
 - DirectoryView Refactor [ ]
 - AES GCM [ ]
