@@ -1,4 +1,6 @@
 # ToDo
+- SingleView Refactor [ ]
+- DirectoryView Refactor [ ]
 - AES GCM [ ]
 - PBKDF2 [ ]
 - File encryption [ ]
