@@ -84,14 +84,14 @@ struct DirectoryView: View {
         if directoryGroup.canUnset {
             directoryGroupContent(directoryGroup)
                 .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                    Button("Remove History", role: .destructive) {
+                    Button("Remove History", role: .destructive,action: {
                         unset(directoryGroup)
-                    }
+                    })
                 }
                 .contextMenu {
-                    Button("Remove History", role: .destructive) {
+                    Button("Remove History", role: .destructive,action: {
                         unset(directoryGroup)
-                    }
+                    })
                 }
         } else {
             directoryGroupContent(directoryGroup)
@@ -119,18 +119,18 @@ struct DirectoryView: View {
     private func selectedFileView(_ directory: Directory) -> some View {
         VStack(spacing: 8) {
             HStack {
-                Button("Back") {
+                Button("Back",action: {
                     selectedDirectory = nil
-                }
+                })
 
                 Text(directory.resolvedURL.lastPathComponent)
                     .lineLimit(1)
 
                 Spacer()
 
-                Button("Delete", role: .destructive) {
+                Button("Delete", role: .destructive,action: {
                     delete(directory)
-                }
+                })
             }
             .padding(.horizontal)
             .padding(.top, 8)
@@ -165,18 +165,18 @@ struct DirectoryView: View {
             selectedDirectory = directory
         }
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-            Button("Delete", role: .destructive) {
+            Button("Delete", role: .destructive,action: {
                 delete(directory)
-            }
+            })
         }
         .contextMenu {
-            Button("Open PDF") {
+            Button("Open PDF", action: {
                 selectedDirectory = directory
-            }
+            })
 
-            Button("Delete", role: .destructive) {
+            Button("Delete", role: .destructive,action: {
                 delete(directory)
-            }
+            })
         }
     }
 
