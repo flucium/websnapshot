@@ -32,19 +32,18 @@ struct HomeView: View {
     var body: some View {
         NavigationSplitView {
             List(selection: $destination) {
-                NavigationLink(value: NavigationDestination.single) {
+                NavigationLink(value: NavigationDestination.single,label: {
                     Label("Single", systemImage: "magnifyingglass")
-                }
-                NavigationLink(value: NavigationDestination.multiple) {
+                })
+                NavigationLink(value: NavigationDestination.multiple,label: {
                     Label("Multiple", systemImage: "magnifyingglass")
-                }
-                NavigationLink(value: NavigationDestination.directory) {
-                        
+                })
+                NavigationLink(value: NavigationDestination.directory,label: {
                     Label("Directory", systemImage: "folder")
-                }
-                NavigationLink(value: NavigationDestination.settings){
+                })
+                NavigationLink(value: NavigationDestination.settings,label: {
                     Label("Settings", systemImage: "gear")
-                }
+                })
             }
         } detail: {
             detail(destination)
