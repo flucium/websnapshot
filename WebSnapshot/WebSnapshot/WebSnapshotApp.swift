@@ -10,6 +10,7 @@ struct WebSnapshotApp: App {
         .modelContainer(for: [
             Directory.self,
             DirectoryHistory.self,
+            GeneralSettings.self,
         ])
     }
 }
