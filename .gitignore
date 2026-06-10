@@ -68,3 +68,6 @@ fastlane/test_output
 # tmp and swp
 *.swp
 *.tmp
+
+!.github
+!.gitignore
