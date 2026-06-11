@@ -29,30 +29,6 @@
       selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
       shouldUseLaunchSchemeArgsEnv = "YES"
       shouldAutocreateTestPlan = "YES">
-      <Testables>
-         <TestableReference
-            skipped = "NO"
-            parallelizable = "YES">
-            <BuildableReference
-               BuildableIdentifier = "primary"
-               BlueprintIdentifier = "9E3A51782FB4497800602CC6"
-               BuildableName = "WebSnapshotTests.xctest"
-               BlueprintName = "WebSnapshotTests"
-               ReferencedContainer = "container:WebSnapshot.xcodeproj">
-            </BuildableReference>
-         </TestableReference>
-         <TestableReference
-            skipped = "NO"
-            parallelizable = "YES">
-            <BuildableReference
-               BuildableIdentifier = "primary"
-               BlueprintIdentifier = "9E3A51822FB4497800602CC6"
-               BuildableName = "WebSnapshotUITests.xctest"
-               BlueprintName = "WebSnapshotUITests"
-               ReferencedContainer = "container:WebSnapshot.xcodeproj">
-            </BuildableReference>
-         </TestableReference>
-      </Testables>
    </TestAction>
    <LaunchAction
       buildConfiguration = "Debug"
