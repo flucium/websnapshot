@@ -63,7 +63,7 @@ fastlane/test_output
 
 # =====
 
-*.xcscheme
+**/*.xcscheme
 
 # dot file
 .*
