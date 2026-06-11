@@ -15,6 +15,8 @@ func savePanel(_ title:String,_ url:URL?,_ pdfFileDocument:PDFFileDocument?) thr
     panel.title = "Save"
     panel.nameFieldStringValue = URL.pdfFileName(title,url)
     
+    // default: open directory
+    FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first.map{panel.directoryURL = $0}
     
     guard panel.runModal() == .OK, let destination = panel.url else {
         return nil
