@@ -35,6 +35,8 @@ struct DirectoryPDFView: NSViewRepresentable {
             return
         }
 
+        context.coordinator.loadedURL = url
+
         let isAccessing = url.startAccessingSecurityScopedResource()
         
         defer {
@@ -50,8 +52,6 @@ struct DirectoryPDFView: NSViewRepresentable {
         }
 
         nsView.document = PDFDocument(data: data)
-        
-        context.coordinator.loadedURL = url
     }
 
     static func dismantleNSView(_ nsView: PDFView, coordinator: Coordinator) {

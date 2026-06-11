@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import SwiftData
 import Translation
@@ -45,6 +46,11 @@ struct DirectoryView:View {
 
             directoryViewState.isTranslating = false
         }
+        .alert(
+            item: $directoryViewState.appError
+        ) { appError in
+            AlertModal.show("Error", appError.localizedDescription)
+        }
     }
     
     func searchTextFieldView() -> some View{
@@ -76,11 +82,29 @@ struct DirectoryView:View {
                                     directoryViewState.appError = AppError(error)
                                 }
                             })
+
+                            Button("Copy File Path") {
+                                do{
+                                    try copyFilePath(pdfFile)
+                                    directoryViewState.appError = nil
+                                }catch{
+                                    directoryViewState.appError = AppError(error)
+                                }
+                            }
                         }
                         .contextMenu {
                             Button("Open PDF", action: {
                                 directoryViewState.selectedPDFFile = pdfFile
                             })
+
+                            Button("Copy File Path") {
+                                do{
+                                    try copyFilePath(pdfFile)
+                                    directoryViewState.appError = nil
+                                }catch{
+                                    directoryViewState.appError = AppError(error)
+                                }
+                            }
                             
                             Button("Delete", role: .destructive,action: {
                                 do{
@@ -96,11 +120,6 @@ struct DirectoryView:View {
                         }
                 }
             }
-        }.alert(
-            item:$directoryViewState.appError
-        ){
-            appError in
-            AlertModal.show("Error",appError.localizedDescription)
         }
     }
     
@@ -125,11 +144,29 @@ struct DirectoryView:View {
                                 directoryViewState.appError = AppError(error)
                             }
                         })
+
+                        Button("Copy File Path") {
+                            do{
+                                try copyFilePath(pdfFile)
+                                directoryViewState.appError = nil
+                            }catch{
+                                directoryViewState.appError = AppError(error)
+                            }
+                        }
                     }
                     .contextMenu {
                         Button("Open PDF", action: {
                             directoryViewState.selectedPDFFile = pdfFile
                         })
+
+                        Button("Copy File Path") {
+                            do{
+                                try copyFilePath(pdfFile)
+                                directoryViewState.appError = nil
+                            }catch{
+                                directoryViewState.appError = AppError(error)
+                            }
+                        }
                         
                         Button("Delete", role: .destructive,action: {
                             do{
@@ -144,11 +181,6 @@ struct DirectoryView:View {
                         })
                     }
             }
-        }.alert(
-            item:$directoryViewState.appError
-        ){
-            appError in
-            AlertModal.show("Error",appError.localizedDescription)
         }
     }
     
@@ -162,11 +194,17 @@ struct DirectoryView:View {
                     
                     Menu("Translation") {
                         Button("Japanese") {
-                            startTranslation(directoryViewState.selectedPDFFile,.japanese)
+                            startTranslation(
+                                directoryViewState.selectedPDFFile,
+                                .japanese
+                            )
                         }
 
                         Button("English") {
-                            startTranslation(directoryViewState.selectedPDFFile,.english)
+                            startTranslation(
+                                directoryViewState.selectedPDFFile,
+                                .english
+                            )
                         }
                     }
                     .disabled(directoryViewState.isTranslating)
@@ -202,28 +240,41 @@ struct DirectoryView:View {
                 }
             }
         }
-        .alert(
-            item:$directoryViewState.appError
-        ){
-            appError in
-            AlertModal.show("Error",appError.localizedDescription)
-        }
-    
     }
 
     
-    private func startTranslation(_ selectedPDFFile: PDFFile?, _ targetLanguage: TranslationLanguage) {
+    private func startTranslation(
+        _ selectedPDFFile: PDFFile?,
+        _ targetLanguage: TranslationLanguage
+    ) {
         guard let selectedPDFFile else {
             return
         }
 
-        directoryViewState.isTranslating = true
-        
+        let resolvedURL = selectedPDFFile.resolvedURL
+
         directoryViewState.appError = nil
 
         Task {
+            @MainActor in
+
+            await Task.yield()
+
+            guard FileIO.exists(resolvedURL) else {
+                closeMissingPDF()
+
+                await Task.yield()
+
+                directoryViewState.appError = AppError.notFound(
+                    "PDF File not found."
+                )
+                return
+            }
+
+            directoryViewState.isTranslating = true
+
             do {
-                directoryViewState.textToTranslate = try await DirectoryViewService.textForTranslation(selectedPDFFile.resolvedURL, directoryViewState.currentPageIndex)
+                directoryViewState.textToTranslate = try await DirectoryViewService.textForTranslation(resolvedURL, directoryViewState.currentPageIndex)
 
                 if var configuration = directoryViewState.translationConfiguration {
                     configuration.source = targetLanguage.opposite.localeLanguage
@@ -240,8 +291,18 @@ struct DirectoryView:View {
                 }
             } catch {
                 directoryViewState.isTranslating = false
-                
-                directoryViewState.appError = AppError(error)
+
+                if FileIO.exists(resolvedURL) {
+                    directoryViewState.appError = AppError(error)
+                } else {
+                    closeMissingPDF()
+
+                    await Task.yield()
+
+                    directoryViewState.appError = AppError.notFound(
+                        "PDF File not found."
+                    )
+                }
             }
         }
     }
@@ -290,6 +351,32 @@ struct DirectoryView:View {
             directoryViewState.selectedPDFFile = nil
         }
     }
+
+    private func closeMissingPDF() {
+        directoryViewState.isTranslationPresented = false
+
+        directoryViewState.isTranslating = false
+
+        directoryViewState.selectedPDFFile = nil
+
+        directoryViewState.textToTranslate = String()
+
+        directoryViewState.translatedText = String()
+    }
+
+    private func copyFilePath(_ pdfFile: PDFFile) throws{
+        let resolvedURL = pdfFile.resolvedURL
+
+        if FileIO.exists(resolvedURL) == false{
+            throw AppError.notFound("PDF File not found.")
+        }
+
+        let pasteboard = NSPasteboard.general
+
+        pasteboard.clearContents()
+        pasteboard.setString(resolvedURL.path, forType: .string)
+    }
+
     
 }
 
