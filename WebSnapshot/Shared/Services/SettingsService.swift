@@ -1,6 +1,5 @@
 import Foundation
 import SwiftData
-import SwiftData
 
 
 final class AppearanceSettingsService {
