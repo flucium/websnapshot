@@ -238,7 +238,13 @@ struct DirectoryView:View {
                         directoryViewState.isTranslationPresented == false
                     )
                 }
+                
+                
+                Text(selectedPDFFile.url.absoluteString)
+                    .padding(.top, 15)
+                    .padding(.bottom, 5)
             }
+            
         }
     }
 
