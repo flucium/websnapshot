@@ -185,6 +185,7 @@ struct DirectoryView:View {
     }
     
     func pdfView() -> some View{
+        
         VStack(spacing: 8){
             if let selectedPDFFile = directoryViewState.selectedPDFFile{
                 HStack {
@@ -240,9 +241,16 @@ struct DirectoryView:View {
                 }
                 
                 
-                Text(selectedPDFFile.url.absoluteString)
-                    .padding(.top, 15)
-                    .padding(.bottom, 5)
+                if FileIO.exists(selectedPDFFile.resolvedURL) {
+                    Text(selectedPDFFile.url.absoluteString)
+                        .padding(.top, 15)
+                        .padding(.bottom, 5)
+                }else{
+                    Text("File not found: \(selectedPDFFile.resolvedURL.absoluteString)")
+                        .padding(.top, 15)
+                        .padding(.bottom, 5)
+                }
+                
             }
             
         }
@@ -271,9 +279,7 @@ struct DirectoryView:View {
 
                 await Task.yield()
 
-                directoryViewState.appError = AppError.notFound(
-                    "PDF File not found."
-                )
+                directoryViewState.appError = AppError.notFound("PDF File not found.")
                 return
             }
 
@@ -305,9 +311,7 @@ struct DirectoryView:View {
 
                     await Task.yield()
 
-                    directoryViewState.appError = AppError.notFound(
-                        "PDF File not found."
-                    )
+                    directoryViewState.appError = AppError.notFound("PDF File not found.")
                 }
             }
         }
