@@ -1,4 +1,7 @@
 # WebSnapshot
+
+!["WebSnapshot"](./WebSnapshot_250x250_white.png)
+
 WebSnapshot is a tool that converts any web page into a PDF and saves it locally.
 
 It is useful for preserving professional or technical articles. Unlike browser bookmarks or reading lists, once a page is saved it can be viewed without a network connection. The saved page is stored as a PDF, allowing you to access the content offline at any time.
