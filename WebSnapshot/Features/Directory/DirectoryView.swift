@@ -16,12 +16,8 @@ struct DirectoryView:View {
             
             if directoryViewState.selectedPDFFile == nil{
                 searchTextFieldView()
-                
-                if directoryViewState.searchText.isEmpty == false{
-                    listView()
-                }else{
-                    searchListView()
-                }
+
+                pdfListView()
             }else{
                 pdfView()
             }
@@ -52,136 +48,71 @@ struct DirectoryView:View {
         }
     }
     
-    func searchTextFieldView() -> some View{
+    private var displayedPDFFiles: [PDFFile] {
+        guard directoryViewState.searchText.isEmpty == false else {
+            return pdfFiles
+        }
+
+        return pdfFiles.filter {
+            $0.url.lastPathComponent.contains(directoryViewState.searchText)
+        }
+    }
+
+    private func searchTextFieldView() -> some View{
         HStack{
             TextField("Search", text:$directoryViewState.searchText)
                 .textFieldStyle(.roundedBorder)
         }.padding()
     }
-    
-    func listView() -> some View{
+
+    private func pdfListView() -> some View{
         List{
-            ForEach(pdfFiles){
-                pdfFile in
-                
-                if pdfFile.url.lastPathComponent.contains(directoryViewState.searchText){
-                    Text("\(pdfFile.url.lastPathComponent)")
-                        .onTapGesture(count: 2) {
-                            directoryViewState.selectedPDFFile = pdfFile
-                        }
-                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                            Button("Delete", role: .destructive,action: {
-                                do{
-                                    try DirectoryViewService.delete(modelContext, pdfFile.url, pdfFile.resolvedURL)
-                                    
-                                    directoryViewState.selectedPDFFile = nil
-                                   
-                                    directoryViewState.appError = nil
-                                }catch{
-                                    directoryViewState.appError = AppError(error)
-                                }
-                            })
+            ForEach(displayedPDFFiles) { pdfFile in
+                pdfRow(pdfFile)
+            }
+        }
+    }
 
-                            Button("Copy File Path") {
-                                do{
-                                    try copyFilePath(pdfFile)
-                                    directoryViewState.appError = nil
-                                }catch{
-                                    directoryViewState.appError = AppError(error)
-                                }
-                            }
-                        }
-                        .contextMenu {
-                            Button("Open PDF", action: {
-                                directoryViewState.selectedPDFFile = pdfFile
-                            })
+    private func pdfRow(_ pdfFile: PDFFile) -> some View {
+        Text(pdfFile.url.lastPathComponent)
+            .onTapGesture(count: 2) {
+                openPDF(pdfFile)
+            }
+            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                Button("Delete", role: .destructive) {
+                    deletePDF(pdfFile)
+                }
 
-                            Button("Copy File Path") {
-                                do{
-                                    try copyFilePath(pdfFile)
-                                    directoryViewState.appError = nil
-                                }catch{
-                                    directoryViewState.appError = AppError(error)
-                                }
-                            }
-                            
-                            Button("Delete", role: .destructive,action: {
-                                do{
-                                    try DirectoryViewService.delete(modelContext, pdfFile.url, pdfFile.resolvedURL)
-                                    
-                                    directoryViewState.selectedPDFFile = nil
-                                    
-                                    directoryViewState.appError = nil
-                                }catch{
-                                    directoryViewState.appError = AppError(error)
-                                }
-                            })
-                        }
+                Button("Copy File Path") {
+                    do {
+                        try copyFilePath(pdfFile)
+                        directoryViewState.appError = nil
+                    } catch {
+                        directoryViewState.appError = AppError(error)
+                    }
                 }
             }
-        }
-    }
-    
-    func searchListView() -> some View{
-        List{
-            ForEach(pdfFiles){
-                pdfFile in
-                
-                Text("\(pdfFile.url.lastPathComponent)")
-                    .onTapGesture(count: 2) {
-                        directoryViewState.selectedPDFFile = pdfFile
-                    }
-                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                        Button("Delete", role: .destructive,action: {
-                            do{
-                                try DirectoryViewService.delete(modelContext, pdfFile.url, pdfFile.resolvedURL)
-                                
-                                directoryViewState.selectedPDFFile = nil
-                                
-                                directoryViewState.appError = nil
-                            }catch{
-                                directoryViewState.appError = AppError(error)
-                            }
-                        })
+            .contextMenu {
+                Button("Open PDF") {
+                    openPDF(pdfFile)
+                }
 
-                        Button("Copy File Path") {
-                            do{
-                                try copyFilePath(pdfFile)
-                                directoryViewState.appError = nil
-                            }catch{
-                                directoryViewState.appError = AppError(error)
-                            }
-                        }
+                Button("Copy File Path") {
+                    do {
+                        try copyFilePath(pdfFile)
+                        directoryViewState.appError = nil
+                    } catch {
+                        directoryViewState.appError = AppError(error)
                     }
-                    .contextMenu {
-                        Button("Open PDF", action: {
-                            directoryViewState.selectedPDFFile = pdfFile
-                        })
+                }
 
-                        Button("Copy File Path") {
-                            do{
-                                try copyFilePath(pdfFile)
-                                directoryViewState.appError = nil
-                            }catch{
-                                directoryViewState.appError = AppError(error)
-                            }
-                        }
-                        
-                        Button("Delete", role: .destructive,action: {
-                            do{
-                                try DirectoryViewService.delete(modelContext, pdfFile.url, pdfFile.resolvedURL)
-                                
-                                directoryViewState.selectedPDFFile = nil
-                                
-                                directoryViewState.appError = nil
-                            }catch{
-                                directoryViewState.appError = AppError(error)
-                            }
-                        })
-                    }
+                Button("Delete", role: .destructive) {
+                    deletePDF(pdfFile)
+                }
             }
-        }
     }
+
+
     
     func pdfView() -> some View{
         
@@ -316,6 +247,26 @@ struct DirectoryView:View {
         }
     }
     
+    
+    private func openPDF(_ pdfFile: PDFFile) {
+        directoryViewState.selectedPDFFile = pdfFile
+    }
+
+    private func deletePDF(_ pdfFile: PDFFile) {
+        do {
+            try DirectoryViewService.delete(
+                modelContext,
+                pdfFile.url,
+                pdfFile.resolvedURL
+            )
+
+            directoryViewState.selectedPDFFile = nil
+            directoryViewState.appError = nil
+        } catch {
+            directoryViewState.appError = AppError(error)
+        }
+    }
+    
     private func deleteDisplayedPDF(_ pdfFile: PDFFile) {
         let url = pdfFile.url
         
@@ -384,6 +335,7 @@ struct DirectoryView:View {
 
         pasteboard.clearContents()
         pasteboard.setString(resolvedURL.path, forType: .string)
+        
     }
 
     
