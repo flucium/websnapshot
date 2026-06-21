@@ -8,7 +8,7 @@ struct SingleView: View {
     @Environment(\.modelContext) private var modelContext
     
     @StateObject private var singleViewState = SingleViewState()
-    
+
     var body: some View {
         VStack{
             
@@ -16,6 +16,16 @@ struct SingleView: View {
          
             webView()
         }
+        .fileExporter(
+            isPresented: $singleViewState.isFileExporterPresented,
+            document: singleViewState.pdfFileDocument,
+            contentType: .pdf,
+            defaultFilename: URL.pdfFileName(
+                singleViewState.webPage.title,
+                singleViewState.webPage.url
+            ),
+            onCompletion: handleFileExport
+        )
     }
     
     func searchToolView() -> some View{
@@ -49,30 +59,12 @@ struct SingleView: View {
                 Task{
                     do{
                         singleViewState.pdfFileDocument = try await WebService.export(singleViewState.webPage)
-                        
+
                         singleViewState.appError = nil
+
+                        singleViewState.isFileExporterPresented = true
                     }catch{
                         singleViewState.appError = AppError(error)
-                    }
-                    
-                    
-                    if singleViewState.pdfFileDocument == nil{
-                        return
-                    }
-                    
-                    await MainActor.run{
-                        do{
-                            let directoryURL = try savePanel(singleViewState.webPage.title,singleViewState.webPage.url,singleViewState.pdfFileDocument)
-                            
-                            if directoryURL != nil{
-                                try PDFFileService.save(modelContext,directoryURL!)
-                            }
-                            
-                            singleViewState.appError = nil
-                        }catch{
-                            singleViewState.appError = AppError(error)
-                        }
-                        
                     }
                 }
             })
@@ -85,11 +77,32 @@ struct SingleView: View {
         }
         .padding()
     }
+
+    private func handleFileExport(_ result: Result<URL, Error>) {
+        switch result {
+        case .success(let destinationURL):
+            do {
+                try PDFFileService.save(modelContext, destinationURL)
+                singleViewState.appError = nil
+            } catch {
+                singleViewState.appError = AppError(error)
+            }
+        case .failure(let error):
+            let cocoaError = error as NSError
+
+            guard cocoaError.domain != NSCocoaErrorDomain || cocoaError.code != NSUserCancelledError else {
+                return
+            }
+
+            singleViewState.appError = AppError(error)
+        }
+    }
     
     func webView() -> some View{
         ZStack{
             if singleViewState.webPage.url == nil {
-                Color(nsColor: .windowBackgroundColor)
+                Rectangle()
+                    .fill(.background)
             }else{
                 WebView(singleViewState.webPage)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
