@@ -14,34 +14,20 @@ final class PDFFile {
 
 extension PDFFile {
     var resolvedURL: URL {
-        resolveBookmarkedURL(&bookmarkData) ?? url
+        resolveBookmarkedURL(bookmarkData) ?? url
     }
 }
 
 
-func resolveBookmarkedURL(_ bookmarkData: inout Data?) -> URL? {
+func resolveBookmarkedURL(_ bookmarkData: Data?) -> URL? {
     guard let data = bookmarkData else {
         return nil
     }
 
     var isStale = false
 
-    guard let resolvedURL = try? URL(
-        resolvingBookmarkData: data,
-        options: [.withSecurityScope],
-        relativeTo: nil,
+    return URL.resolveSecurityScopedBookmarkData(
+        data,
         bookmarkDataIsStale: &isStale
-    ) else {
-        return nil
-    }
-
-    if isStale {
-        bookmarkData = try? resolvedURL.bookmarkData(
-            options: [.withSecurityScope],
-            includingResourceValuesForKeys: nil,
-            relativeTo: nil
-        )
-    }
-
-    return resolvedURL
+    )
 }

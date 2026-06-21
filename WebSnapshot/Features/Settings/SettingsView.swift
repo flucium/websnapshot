@@ -46,7 +46,7 @@ struct SettingsView: View {
                     .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
                     .overlay {
                         RoundedRectangle(cornerRadius: 10)
-                            .stroke(Color(nsColor: .separatorColor).opacity(0.5), lineWidth: 1)
+                            .stroke(Color.secondary.opacity(0.25), lineWidth: 1)
                     }
 
                     
@@ -56,7 +56,10 @@ struct SettingsView: View {
             .padding(32)
             .frame(maxWidth: .infinity, alignment: .top)
         }
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background {
+            Rectangle()
+                .fill(.background)
+        }
         .onAppear {
             settingsViewState.appearance = AppearanceSettingsService.appearance(appearanceSettings)
         }

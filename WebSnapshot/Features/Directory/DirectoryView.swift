@@ -83,6 +83,7 @@ struct DirectoryView:View {
                     deletePDF(pdfFile)
                 }
 
+#if os(macOS)
                 Button("Copy File Path") {
                     do {
                         try copyFilePath(pdfFile)
@@ -91,12 +92,14 @@ struct DirectoryView:View {
                         directoryViewState.appError = AppError(error)
                     }
                 }
+#endif
             }
             .contextMenu {
                 Button("Open PDF") {
                     openPDF(pdfFile)
                 }
 
+#if os(macOS)
                 Button("Copy File Path") {
                     do {
                         try copyFilePath(pdfFile)
@@ -105,6 +108,11 @@ struct DirectoryView:View {
                         directoryViewState.appError = AppError(error)
                     }
                 }
+#elseif os(iOS)
+                ShareLink(item: pdfFile.resolvedURL) {
+                    Label("Share PDF", systemImage: "square.and.arrow.up")
+                }
+#endif
 
                 Button("Delete", role: .destructive) {
                     deletePDF(pdfFile)
@@ -324,10 +332,11 @@ struct DirectoryView:View {
         directoryViewState.translatedText = String()
     }
 
-    private func copyFilePath(_ pdfFile: PDFFile) throws{
+#if os(macOS)
+    private func copyFilePath(_ pdfFile: PDFFile) throws {
         let resolvedURL = pdfFile.resolvedURL
 
-        if FileIO.exists(resolvedURL) == false{
+        if FileIO.exists(resolvedURL) == false {
             throw AppError.notFound("PDF File not found.")
         }
 
@@ -335,10 +344,8 @@ struct DirectoryView:View {
 
         pasteboard.clearContents()
         pasteboard.setString(resolvedURL.path, forType: .string)
-        
     }
-
-    
+#endif
 }
 
 private struct TranslationResultView: View {
@@ -364,49 +371,16 @@ private struct TranslationResultView: View {
     }
 }
 
-private struct ReadOnlyTextView: NSViewRepresentable {
+private struct ReadOnlyTextView: View {
     let text: String
 
-    func makeNSView(context: Context) -> NSScrollView {
-        let textView = NSTextView()
-        
-        textView.isEditable = false
-        
-        textView.isSelectable = true
-        
-        textView.isRichText = false
-        
-        textView.font = .preferredFont(forTextStyle: .body)
-        
-        textView.textContainerInset = NSSize(width: 12, height: 12)
-        
-        textView.autoresizingMask = [.width]
-        
-        textView.isVerticallyResizable = true
-        
-        textView.isHorizontallyResizable = false
-        
-        textView.textContainer?.widthTracksTextView = true
-
-        let scrollView = NSScrollView()
-        
-        scrollView.hasVerticalScroller = true
-        
-        scrollView.autohidesScrollers = true
-        
-        scrollView.documentView = textView
-        
-        return scrollView
-    }
-
-    func updateNSView(_ scrollView: NSScrollView, context: Context) {
-        guard
-            let textView = scrollView.documentView as? NSTextView, textView.string != text
-        else {
-            return
+    var body: some View {
+        ScrollView {
+            Text(text)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(12)
         }
-
-        textView.string = text
     }
 }
 
