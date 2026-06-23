@@ -11,7 +11,7 @@ extension URL {
         }
 
         return try? url.bookmarkData(
-            options: securityScopedBookmarkCreationOptions,
+            options: [.withSecurityScope],
             includingResourceValuesForKeys: nil,
             relativeTo: nil
         )
@@ -23,25 +23,10 @@ extension URL {
     ) -> URL? {
         try? URL(
             resolvingBookmarkData: data,
-            options: securityScopedBookmarkResolutionOptions,
+            options: [.withSecurityScope, .withoutUI],
             relativeTo: nil,
             bookmarkDataIsStale: &isStale
         )
     }
 
-    private static var securityScopedBookmarkCreationOptions: BookmarkCreationOptions {
-#if os(macOS)
-        [.withSecurityScope]
-#else
-        []
-#endif
-    }
-
-    private static var securityScopedBookmarkResolutionOptions: BookmarkResolutionOptions {
-#if os(macOS)
-        [.withSecurityScope, .withoutUI]
-#else
-        [.withoutUI]
-#endif
-    }
 }
