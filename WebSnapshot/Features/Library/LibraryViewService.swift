@@ -9,6 +9,19 @@ final class LibraryViewService{
         try FileIO.delete(resolvedURL)
     }
 
+    static func deleteMissingFiles(_ modelContext: ModelContext, _ pdfFiles: [PDFFile]) throws {
+        var needsSave = false
+
+        for pdfFile in pdfFiles where FileIO.exists(pdfFile.url) == false {
+            modelContext.delete(pdfFile)
+            needsSave = true
+        }
+
+        if needsSave {
+            try modelContext.save()
+        }
+    }
+
     nonisolated static func textForTranslation(_ url: URL,_ pageIndex: Int ) async throws -> String {
         let isAccessing = url.startAccessingSecurityScopedResource()
         

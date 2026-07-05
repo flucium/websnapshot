@@ -10,6 +10,7 @@ struct LibraryView:View {
     @Query private var pdfFiles: [PDFFile]
 
     @StateObject private var libraryViewState = LibraryViewState()
+    @StateObject private var pdfFileMonitor = LibraryPDFFileMonitor()
 
     
     var body: some View {
@@ -21,6 +22,25 @@ struct LibraryView:View {
                 pdfListView()
             }else{
                 pdfView()
+            }
+        }
+        .onDisappear {
+            pdfFileMonitor.stop()
+        }
+        .onChange(of: monitoredPDFFilePaths) { _ in
+            scheduleSynchronizeLibraryFiles()
+        }
+        .task {
+            await synchronizeLibraryFilesAfterViewUpdate()
+
+            while Task.isCancelled == false {
+                do {
+                    try await Task.sleep(nanoseconds: 1_000_000_000)
+                } catch {
+                    break
+                }
+
+                await synchronizeLibraryFilesAfterViewUpdate()
             }
         }
         .translationTask(libraryViewState.translationConfiguration) { session in
@@ -45,13 +65,26 @@ struct LibraryView:View {
             AlertModal.show("Error", appError.localizedDescription)
         }
     }
+
+    private var monitoredPDFFilePaths: [String] {
+        pdfFiles.map {
+            $0.url.standardizedFileURL.path
+        }
+        .sorted()
+    }
+
+    private var existingPDFFiles: [PDFFile] {
+        pdfFiles.filter {
+            FileIO.exists($0.url)
+        }
+    }
     
     private var displayedPDFFiles: [PDFFile] {
         guard libraryViewState.searchText.isEmpty == false else {
-            return pdfFiles
+            return existingPDFFiles
         }
 
-        return pdfFiles.filter {
+        return existingPDFFiles.filter {
             $0.url.lastPathComponent.contains(libraryViewState.searchText)
         }
     }
@@ -330,6 +363,72 @@ struct LibraryView:View {
 
         pasteboard.clearContents()
         pasteboard.setString(resolvedURL.path, forType: .string)
+    }
+
+    private func scheduleSynchronizeLibraryFiles() {
+        Task { @MainActor in
+            await synchronizeLibraryFilesAfterViewUpdate()
+        }
+    }
+
+    private func synchronizeLibraryFilesAfterViewUpdate() async {
+        do {
+            try await Task.sleep(nanoseconds: 50_000_000)
+        } catch {
+            return
+        }
+
+        synchronizeLibraryFiles()
+    }
+
+    private func synchronizeLibraryFiles() {
+        closeSelectedPDFIfMissing()
+
+        do {
+            try LibraryViewService.deleteMissingFiles(modelContext, pdfFiles)
+
+            pdfFileMonitor.sync(existingPDFFiles) { missingURL in
+                handleMissingPDF(missingURL)
+            }
+        } catch {
+            libraryViewState.appError = AppError(error)
+        }
+    }
+
+    private func handleMissingPDF(_ url: URL) {
+        guard FileIO.exists(url) == false else {
+            return
+        }
+
+        if selectedPDFPath == url.standardizedFileURL.path {
+            closeMissingPDF()
+        }
+
+        do {
+            try LibraryViewService.deleteMissingFiles(modelContext, pdfFiles)
+
+            pdfFileMonitor.sync(existingPDFFiles) { missingURL in
+                handleMissingPDF(missingURL)
+            }
+        } catch {
+            libraryViewState.appError = AppError(error)
+        }
+    }
+
+    private func closeSelectedPDFIfMissing() {
+        guard let selectedPDFFile = libraryViewState.selectedPDFFile else {
+            return
+        }
+
+        guard FileIO.exists(selectedPDFFile.url) == false else {
+            return
+        }
+
+        closeMissingPDF()
+    }
+
+    private var selectedPDFPath: String? {
+        libraryViewState.selectedPDFFile?.url.standardizedFileURL.path
     }
 }
 
