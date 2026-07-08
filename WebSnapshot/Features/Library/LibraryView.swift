@@ -27,7 +27,7 @@ struct LibraryView:View {
         .onDisappear {
             pdfFileMonitor.stop()
         }
-        .onChange(of: monitoredPDFFilePaths) { _ in
+        .onChange(of: monitoredPDFFilePaths) {
             scheduleSynchronizeLibraryFiles()
         }
         .task {
