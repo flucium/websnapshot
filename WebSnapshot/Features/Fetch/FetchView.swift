@@ -22,20 +22,24 @@ struct FetchView: View {
             TextField("https://...",text: $fetchViewState.searchText)
                 .textFieldStyle(.roundedBorder)
             .onSubmit {
-                do{
-                    fetchViewState.webPage = try FetchViewService.fetch(URL(string:fetchViewState.searchText)!)
-                    fetchViewState.appError = nil
-                }catch{
-                    fetchViewState.appError = AppError(error)
+                Task{
+                    do{
+                        fetchViewState.webPage = try await FetchViewService.fetch(URL(string:fetchViewState.searchText)!)
+                        fetchViewState.appError = nil
+                    }catch{
+                        fetchViewState.appError = AppError(error)
+                    }
                 }
             }
             
             Button("Load", action: {
-                do{
-                    fetchViewState.webPage = try FetchViewService.fetch(URL(string:fetchViewState.searchText)!)
-                    fetchViewState.appError = nil
-                }catch{
-                    fetchViewState.appError = AppError(error)
+                Task{
+                    do{
+                        fetchViewState.webPage = try await FetchViewService.fetch(URL(string:fetchViewState.searchText)!)
+                        fetchViewState.appError = nil
+                    }catch{
+                        fetchViewState.appError = AppError(error)
+                    }
                 }
             })
             .disabled(fetchViewState.searchText.isEmpty)

@@ -2,7 +2,7 @@ import Foundation
 import WebKit
 
 final class FetchViewService{
-    static func fetch(_ url:URL) throws -> WebPage{
+    static func fetch(_ url:URL) async throws -> WebPage{
         
         let url = if url.isSupportedWebURL == false{
             url.noSchemeToScheme
@@ -11,7 +11,7 @@ final class FetchViewService{
         }
         
         do{
-            let webPage = try WebService.fetch(url!)
+            let webPage = try await WebService.fetch(url!)
             
             if webPage.url == nil || webPage.url!.isSupportedWebURL == false{
                 throw AppError.invalidURL("Invalid URL.")

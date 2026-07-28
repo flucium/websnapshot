@@ -45,8 +45,14 @@ final class WebService{
         return pdfFileDocument
     }
     
-    static func fetch(_ url:URL) throws -> WebPage{
-        let webPage:WebPage = WebPage()
+    static func fetch(_ url:URL) async throws -> WebPage{
+        let websiteDataStore = WKWebsiteDataStore.nonPersistent()
+        await websiteDataStore.httpCookieStore.setCookiePolicy(.disallow)
+
+        var configuration = WebPage.Configuration()
+        configuration.websiteDataStore = websiteDataStore
+
+        let webPage:WebPage = WebPage(configuration: configuration)
         
         webPage.load(url)
         
