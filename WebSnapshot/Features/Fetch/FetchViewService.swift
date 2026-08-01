@@ -2,24 +2,23 @@ import Foundation
 import WebKit
 
 final class FetchViewService{
-    static func fetch(_ url:URL) async throws -> WebPage{
-        
-        let url = if url.isSupportedWebURL == false{
-            url.noSchemeToScheme
-        }else{
-            url
+    static func fetch(_ input: String) async throws -> WebPage {
+        guard let url = URL.supportedWebURL(input) else {
+            throw AppError.invalidURL("Enter a valid HTTP or HTTPS address.")
         }
-        
-        do{
-            let webPage = try await WebService.fetch(url!)
-            
-            if webPage.url == nil || webPage.url!.isSupportedWebURL == false{
-                throw AppError.invalidURL("Invalid URL.")
-            }
-            
-            return webPage
-        }catch{
-            throw AppError.invalidLoad("Fetch web page failed.")
+
+        do {
+            return try await WebService.fetch(url)
+        } catch let error as CancellationError {
+            throw error
+        } catch let error as AppError {
+            throw error
+        } catch {
+            throw AppError.invalidLoad(
+                "The webpage could not be loaded.",
+                error.localizedDescription,
+                error
+            )
         }
     }
 }
