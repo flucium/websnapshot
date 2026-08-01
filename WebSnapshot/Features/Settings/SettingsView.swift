@@ -65,11 +65,17 @@ struct SettingsView: View {
                 try AppearanceSettingsService.save(modelContext, changedAppearance)
                 settingsViewState.appError = nil
             } catch {
-                settingsViewState.appError = AppError(error)
+                guard let appError = AppError.presentable(error) else {
+                    return
+                }
+
+                AppLogger.record(appError, "Save appearance setting")
+                settingsViewState.errorTitle = "Appearance Could Not Be Changed"
+                settingsViewState.appError = appError
             }
         }
         .alert(item: $settingsViewState.appError) { appError in
-            AlertModal.show("Error", appError.localizedDescription)
+            AlertModal.show(settingsViewState.errorTitle, appError)
         }
     }
     

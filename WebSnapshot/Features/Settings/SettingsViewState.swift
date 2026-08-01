@@ -3,6 +3,7 @@ import Combine
 
 final class SettingsViewState:ObservableObject{
     @Published var appError:AppError?
+    @Published var errorTitle = "Setting Could Not Be Saved"
     @Published var appearance:AppearanceSettings.Appearance = .system
 //    @Published var selectedTab:Int = 0
 //    @Published var syncDirectoryIsValid:Bool = false

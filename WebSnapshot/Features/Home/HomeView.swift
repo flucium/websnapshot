@@ -19,7 +19,7 @@ struct HomeView: View {
         settings.first?.appearance ?? .system
     }
 
-    private func updateApplicationAppearance(for appearance: AppearanceSettings.Appearance) {
+    private func updateApplicationAppearance(_ appearance: AppearanceSettings.Appearance) {
         let applicationAppearance: NSAppearance? = switch appearance {
         case .light:
             NSAppearance(named: .aqua)
@@ -36,10 +36,10 @@ struct HomeView: View {
             window.contentView?.appearance = applicationAppearance
         }
 
-        updateApplicationIcon(for: appearance)
+        updateApplicationIcon(appearance)
     }
 
-    private func updateApplicationIcon(for appearance: AppearanceSettings.Appearance) {
+    private func updateApplicationIcon(_ appearance: AppearanceSettings.Appearance) {
         let usesDarkIcon = switch appearance {
         case .light:
             false
@@ -99,14 +99,14 @@ struct HomeView: View {
             detail(homeViewState.destination)
         }
         .onAppear {
-            updateApplicationAppearance(for: appearance)
+            updateApplicationAppearance(appearance)
         }
         .onChange(of: appearance) {
             _, changedAppearance in
-            updateApplicationAppearance(for: changedAppearance)
+            updateApplicationAppearance(changedAppearance)
         }
         .onChange(of: colorScheme) {
-            updateApplicationAppearance(for: appearance)
+            updateApplicationAppearance(appearance)
         }
     }
 }

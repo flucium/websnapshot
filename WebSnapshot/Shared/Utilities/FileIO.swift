@@ -1,23 +1,45 @@
 import Foundation
 
 final class FileIO{
-    static func exists(_ url:URL) -> Bool{
+    static func exists(
+        _ url:URL
+    ) -> Bool{
         let isAccessing = url.startAccessingSecurityScopedResource()
-
+        
         defer {
             if isAccessing {
-                url.stopAccessingSecurityScopedResource()
+                url
+                    .stopAccessingSecurityScopedResource()
             }
         }
-
-        return FileManager.default.fileExists(atPath: url.path)
+        
+        return FileManager.default
+            .fileExists(
+                atPath: url.path
+            )
     }
     
-    static func delete(_ url: URL) throws{
+    static func delete(
+        _ url: URL
+    ) throws{
+        let isAccessing = url.startAccessingSecurityScopedResource()
+        
+        defer {
+            if isAccessing {
+                url
+                    .stopAccessingSecurityScopedResource()
+            }
+        }
+        
         do{
-            try FileManager.default.removeItem(at: url)
-        }catch{
-            throw AppError.invalidIO("Invalid file deletion.")
+            try FileManager.default
+                .removeItem(
+                    at: url
+                )
+        } catch {
+            throw AppError(
+                error
+            )
         }
     }
 }

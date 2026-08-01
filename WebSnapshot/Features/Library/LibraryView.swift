@@ -50,11 +50,15 @@ struct LibraryView:View {
             }
 
             do {
-                libraryViewState.translatedText = try await Translation.translate(using: session,libraryViewState.textToTranslate)
+                libraryViewState.translatedText = try await Translation.translate(session,libraryViewState.textToTranslate)
 
                 libraryViewState.isTranslationPresented = true
             } catch {
-                libraryViewState.appError = AppError(error)
+                handle(
+                    error,
+                    "Translation Could Not Be Completed",
+                    "Translate PDF text"
+                )
             }
 
             libraryViewState.isTranslating = false
@@ -62,7 +66,7 @@ struct LibraryView:View {
         .alert(
             item: $libraryViewState.appError
         ) { appError in
-            AlertModal.show("Error", appError.localizedDescription)
+            AlertModal.show(libraryViewState.errorTitle, appError)
         }
     }
 
@@ -119,7 +123,12 @@ struct LibraryView:View {
                         try copyFilePath(pdfFile)
                         libraryViewState.appError = nil
                     } catch {
-                        libraryViewState.appError = AppError(error)
+                        handle(
+                            error,
+                            "File Path Could Not Be Copied",
+                            "Copy PDF path",
+                            pdfFile.resolvedURL
+                        )
                     }
                 }
             }
@@ -133,7 +142,12 @@ struct LibraryView:View {
                         try copyFilePath(pdfFile)
                         libraryViewState.appError = nil
                     } catch {
-                        libraryViewState.appError = AppError(error)
+                        handle(
+                            error,
+                            "File Path Could Not Be Copied",
+                            "Copy PDF path",
+                            pdfFile.resolvedURL
+                        )
                     }
                 }
 
@@ -185,7 +199,12 @@ struct LibraryView:View {
                 .padding(.top, 8)
                 
                 ZStack(alignment: .trailing) {
-                    DirectoryPDFView(selectedPDFFile.resolvedURL, $libraryViewState.currentPageIndex)
+                    DirectoryPDFView(
+                        selectedPDFFile.resolvedURL,
+                        $libraryViewState.currentPageIndex,
+                        $libraryViewState.appError,
+                        $libraryViewState.errorTitle
+                    )
 
                     TranslationResultView(
                         text: libraryViewState.translatedText, close: {
@@ -207,7 +226,7 @@ struct LibraryView:View {
                         .padding(.top, 15)
                         .padding(.bottom, 5)
                 }else{
-                    Text("File not found: \(selectedPDFFile.resolvedURL.absoluteString)")
+                    Text("The PDF file could not be found.")
                         .padding(.top, 15)
                         .padding(.bottom, 5)
                 }
@@ -237,7 +256,12 @@ struct LibraryView:View {
 
                 await Task.yield()
 
-                libraryViewState.appError = AppError.notFound("PDF File not found.")
+                present(
+                    AppError.notFound("The PDF file could not be found."),
+                    "PDF Could Not Be Opened",
+                    "Open PDF",
+                    resolvedURL
+                )
                 return
             }
 
@@ -263,13 +287,23 @@ struct LibraryView:View {
                 libraryViewState.isTranslating = false
 
                 if FileIO.exists(resolvedURL) {
-                    libraryViewState.appError = AppError(error)
+                    handle(
+                        error,
+                        "Text Could Not Be Prepared",
+                        "Prepare PDF text",
+                        resolvedURL
+                    )
                 } else {
                     closeMissingPDF()
 
                     await Task.yield()
 
-                    libraryViewState.appError = AppError.notFound("PDF File not found.")
+                    present(
+                        AppError.notFound("The PDF file could not be found."),
+                        "PDF Could Not Be Opened",
+                        "Open PDF",
+                        resolvedURL
+                    )
                 }
             }
         }
@@ -291,7 +325,12 @@ struct LibraryView:View {
             libraryViewState.selectedPDFFile = nil
             libraryViewState.appError = nil
         } catch {
-            libraryViewState.appError = AppError(error)
+            handle(
+                error,
+                "PDF Could Not Be Deleted",
+                "Delete PDF",
+                pdfFile.resolvedURL
+            )
         }
     }
     
@@ -321,7 +360,12 @@ struct LibraryView:View {
                 libraryViewState.translatedText = String()
                 
             } catch {
-                libraryViewState.appError = AppError(error)
+                handle(
+                    error,
+                    "PDF Could Not Be Deleted",
+                    "Delete PDF",
+                    resolvedURL
+                )
             }
         }
     }
@@ -356,13 +400,15 @@ struct LibraryView:View {
         let resolvedURL = pdfFile.resolvedURL
 
         if FileIO.exists(resolvedURL) == false {
-            throw AppError.notFound("PDF File not found.")
+            throw AppError.notFound("The PDF file could not be found.")
         }
 
         let pasteboard = NSPasteboard.general
 
         pasteboard.clearContents()
-        pasteboard.setString(resolvedURL.path, forType: .string)
+        guard pasteboard.setString(resolvedURL.path, forType: .string) else {
+            throw AppError.system("The file path could not be copied.")
+        }
     }
 
     private func scheduleSynchronizeLibraryFiles() {
@@ -391,7 +437,11 @@ struct LibraryView:View {
                 handleMissingPDF(missingURL)
             }
         } catch {
-            libraryViewState.appError = AppError(error)
+            handle(
+                error,
+                "Library Could Not Be Synchronized",
+                "Synchronize PDF library"
+            )
         }
     }
 
@@ -411,7 +461,12 @@ struct LibraryView:View {
                 handleMissingPDF(missingURL)
             }
         } catch {
-            libraryViewState.appError = AppError(error)
+            handle(
+                error,
+                "Library Could Not Be Synchronized",
+                "Synchronize PDF library",
+                url
+            )
         }
     }
 
@@ -429,6 +484,34 @@ struct LibraryView:View {
 
     private var selectedPDFPath: String? {
         libraryViewState.selectedPDFFile?.url.standardizedFileURL.path
+    }
+
+    private func handle(
+        _ error: Error,
+        _ title: String,
+        _ operation: String,
+        _ targetURL: URL? = nil
+    ) {
+        guard let appError = AppError.presentable(error) else {
+            return
+        }
+
+        present(appError, title, operation, targetURL)
+    }
+
+    private func present(
+        _ appError: AppError,
+        _ title: String,
+        _ operation: String,
+        _ targetURL: URL? = nil
+    ) {
+        guard appError.isCancellation == false else {
+            return
+        }
+
+        AppLogger.record(appError, operation, targetURL)
+        libraryViewState.errorTitle = title
+        libraryViewState.appError = appError
     }
 }
 

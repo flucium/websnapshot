@@ -17,21 +17,34 @@ enum TranslationLanguage {
     var localeLanguage: Locale.Language {
         switch self {
         case .english:
-            Locale.Language(identifier: "en")
+            Locale
+                .Language(
+                    identifier: "en"
+                )
         case .japanese:
-            Locale.Language(identifier: "ja")
+            Locale
+                .Language(
+                    identifier: "ja"
+                )
         }
     }
 }
 
-@available(visionOS, unavailable)
+@available(
+    visionOS,
+    unavailable
+)
 final class Translation {
-    static func translate(_ fromLanguage: TranslationLanguage, _ toLanguage: TranslationLanguage, _ text: String) async throws -> String {
+    static func translate(
+        _ fromLanguage: TranslationLanguage,
+        _ toLanguage: TranslationLanguage,
+        _ text: String
+    ) async throws -> String {
         
         guard text.isEmpty == false else {
             return String()
         }
-
+        
         let session = TranslationSession(
             installedSource: fromLanguage.localeLanguage,
             target: toLanguage.localeLanguage,
@@ -39,23 +52,49 @@ final class Translation {
         )
         
         do{
-            return try await translate(using: session, text)
-        }catch{
-            throw AppError.translationFailed(error.localizedDescription)
+            return try await translate(
+                session,
+                text
+            )
+        } catch let error as CancellationError {
+            throw error
+        } catch let error as AppError {
+            throw error
+        } catch {
+            throw AppError
+                .translationFailed(
+                    "The text could not be translated.",
+                    error.localizedDescription,
+                    error
+                )
         }
     }
-
-    static func translate(using session: TranslationSession, _ text: String) async throws -> String {
+    
+    static func translate(
+        _ session: TranslationSession,
+        _ text: String
+    ) async throws -> String {
         guard text.isEmpty == false else {
             return ""
         }
-
+        
         do{
-            let response = try await session.translate(text)
+            let response = try await session.translate(
+                text
+            )
             
             return response.targetText
-        }catch{
-            throw AppError.translationFailed(error.localizedDescription)
+        } catch let error as CancellationError {
+            throw error
+        } catch let error as AppError {
+            throw error
+        } catch {
+            throw AppError
+                .translationFailed(
+                "The text could not be translated.",
+                error.localizedDescription,
+                error
+            )
         }
     }
 }

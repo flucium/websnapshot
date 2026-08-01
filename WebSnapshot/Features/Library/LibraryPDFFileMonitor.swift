@@ -6,7 +6,7 @@ import Combine
 final class LibraryPDFFileMonitor: ObservableObject {
     private var monitors: [String: PDFFileMonitor] = [:]
 
-    func sync(_ pdfFiles: [PDFFile], onMissing: @escaping (URL) -> Void) {
+    func sync(_ pdfFiles: [PDFFile],_ onMissing: @escaping (URL) -> Void) {
         let paths = Set(pdfFiles.map { monitorKey( $0.url) })
 
         for key in Array(monitors.keys) where paths.contains(key) == false {
@@ -30,6 +30,12 @@ final class LibraryPDFFileMonitor: ObservableObject {
 
             if monitor.start() {
                 monitors[key] = monitor
+            } else if FileManager.default.fileExists(atPath: url.path) {
+                AppLogger.recordDiagnostic(
+                    "The file monitor could not be started.",
+                    "Monitor PDF",
+                    url
+                )
             }
         }
     }
@@ -119,7 +125,7 @@ private final class PDFFileMonitor {
     }
 
     private func handleFileEvent() {
-        guard FileManager.default.fileExists(atPath: url.path) == false else {
+        guard FileManager.default.fileExists( atPath: url.path) == false else {
             return
         }
 

@@ -5,14 +5,23 @@ struct DirectoryPDFView: NSViewRepresentable {
     let url: URL
 
     @Binding var currentPageIndex: Int
+    @Binding var appError: AppError?
+    @Binding var errorTitle: String
 
-    init(_ url: URL, _ currentPageIndex: Binding<Int>) {
+    init(
+        _ url: URL,
+        _ currentPageIndex: Binding<Int>,
+        _ appError: Binding<AppError?>,
+        _ errorTitle: Binding<String>
+    ) {
         self.url = url
         _currentPageIndex = currentPageIndex
+        _appError = appError
+        _errorTitle = errorTitle
     }
 
     func makeCoordinator() -> Coordinator {
-        Coordinator($currentPageIndex)
+        Coordinator($currentPageIndex, $appError, $errorTitle)
     }
 
     func makeNSView(context: Context) -> PDFView {
@@ -42,15 +51,52 @@ struct DirectoryPDFView: NSViewRepresentable {
             }
         }
 
-        guard let data = try? Data(contentsOf: url) else {
+        let data: Data
+
+        do {
+            data = try Data(contentsOf: url)
+        } catch {
             view.document = nil
+
+            let appError = AppError(error)
+            AppLogger.record(appError, "Open PDF", url)
+
+            DispatchQueue.main.async {
+                context.coordinator.errorTitle.wrappedValue = "PDF Could Not Be Opened"
+                context.coordinator.appError.wrappedValue = appError
+            }
             return
         }
 
-        view.document = PDFDocument(data: data)
+        let document: PDFDocument
+
+        do {
+            document = try Self.document(data)
+        } catch {
+            view.document = nil
+
+            let appError = AppError(error)
+            AppLogger.record(appError, "Open PDF", url)
+
+            DispatchQueue.main.async {
+                context.coordinator.errorTitle.wrappedValue = "PDF Could Not Be Opened"
+                context.coordinator.appError.wrappedValue = appError
+            }
+            return
+        }
+
+        view.document = document
     }
 
-    static func dismantleNSView(_ view: PDFView, coordinator: Coordinator) {
+    static func document(_ data: Data) throws -> PDFDocument {
+        guard let document = PDFDocument(data: data) else {
+            throw AppError.invalidFileType("The selected file is not a readable PDF.")
+        }
+
+        return document
+    }
+
+    static func dismantleNSView(_ view: PDFView, _ coordinator: Coordinator) {
         NotificationCenter.default.removeObserver(coordinator, name: .PDFViewPageChanged,object: view)
 
         view.document = nil
@@ -58,13 +104,21 @@ struct DirectoryPDFView: NSViewRepresentable {
 
     final class Coordinator: NSObject {
         var currentPageIndex: Binding<Int>
+        var appError: Binding<AppError?>
+        var errorTitle: Binding<String>
         
         var loadedURL: URL?
         
         var lastPageIndex: Int?
 
-        init(_ currentPageIndex: Binding<Int>) {
+        init(
+            _ currentPageIndex: Binding<Int>,
+            _ appError: Binding<AppError?>,
+            _ errorTitle: Binding<String>
+        ) {
             self.currentPageIndex = currentPageIndex
+            self.appError = appError
+            self.errorTitle = errorTitle
         }
 
         @objc func pageChanged(_ notification: Notification) {

@@ -12,11 +12,18 @@ final class PDFFileDocument: FileDocument {
     }
 
     init(configuration: ReadConfiguration) throws {
-        self.data = configuration.file.regularFileContents ?? Data()
+        self.data = try Self.validatedData(configuration.file.regularFileContents)
+    }
+
+    static func validatedData(_ data: Data?) throws -> Data {
+        guard let data, data.isEmpty == false else {
+            throw AppError.invalidFileType("The selected file does not contain PDF data.")
+        }
+
+        return data
     }
 
     func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
         FileWrapper(regularFileWithContents: data)
     }
 }
-

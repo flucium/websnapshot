@@ -1,7 +1,7 @@
 import Foundation
 
 extension URL {
-    static func securityScopedBookmarkData(_ url: URL) -> Data? {
+    static func securityScopedBookmarkData(_ url: URL) throws -> Data {
         let isAccessing = url.startAccessingSecurityScopedResource()
 
         defer {
@@ -10,7 +10,7 @@ extension URL {
             }
         }
 
-        return try? url.bookmarkData(
+        return try url.bookmarkData(
             options: [.withSecurityScope],
             includingResourceValuesForKeys: nil,
             relativeTo: nil
@@ -19,9 +19,9 @@ extension URL {
 
     static func resolveSecurityScopedBookmarkData(
         _ data: Data,
-        bookmarkDataIsStale isStale: inout Bool
-    ) -> URL? {
-        try? URL(
+        _ isStale: inout Bool
+    ) throws -> URL {
+        try URL(
             resolvingBookmarkData: data,
             options: [.withSecurityScope, .withoutUI],
             relativeTo: nil,
