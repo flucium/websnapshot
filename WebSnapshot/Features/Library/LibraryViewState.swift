@@ -6,6 +6,7 @@ final class LibraryViewState:ObservableObject{
     @Published var appError:AppError?
     @Published var errorTitle = "Library Operation Could Not Be Completed"
     @Published var searchText:String = String()
+    @Published var selectedSearchMode: SearchMode = .all
     @Published var selectedPDFFile: PDFFile?
     @Published  var currentPageIndex = 0
     @Published  var textToTranslate = String()

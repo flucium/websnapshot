@@ -17,8 +17,11 @@ struct LibraryView:View {
         VStack{
             
             if libraryViewState.selectedPDFFile == nil{
-                searchTextFieldView()
-
+                HStack{
+                    searchTextFieldView()
+                    
+                    searchTextModeView()
+                }.padding(.horizontal)
                 pdfListView()
             }else{
                 pdfView()
@@ -98,6 +101,17 @@ struct LibraryView:View {
             TextField("Search", text:$libraryViewState.searchText)
                 .textFieldStyle(.roundedBorder)
         }.padding()
+    }
+
+    private func searchTextModeView() -> some View{
+        Picker("Search mode", selection: $libraryViewState.selectedSearchMode) {
+            ForEach(SearchMode.allCases, id: \.self) { searchMode in
+                Text(searchMode.title)
+                    .tag(searchMode)
+            }
+        }
+        .pickerStyle(.radioGroup)
+        .horizontalRadioGroupLayout()
     }
 
     private func pdfListView() -> some View{
