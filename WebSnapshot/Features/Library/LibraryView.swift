@@ -71,6 +71,15 @@ struct LibraryView:View {
         ) { appError in
             AlertModal.show(libraryViewState.errorTitle, appError)
         }
+        .sheet(
+            item: $libraryViewState.tagEditorPDFFile,
+            onDismiss: libraryViewState.closeTagEditor
+        ) { pdfFile in
+            LibraryTagEditorView(
+                libraryViewState: libraryViewState,
+                pdfFile: pdfFile
+            )
+        }
     }
 
     private var monitoredPDFFilePaths: [String] {
@@ -87,12 +96,12 @@ struct LibraryView:View {
     }
     
     private var displayedPDFFiles: [PDFFile] {
-        guard libraryViewState.searchText.isEmpty == false else {
-            return existingPDFFiles
-        }
-
         return existingPDFFiles.filter {
-            $0.url.lastPathComponent.contains(libraryViewState.searchText)
+            LibraryViewService.matches(
+                $0,
+                libraryViewState.searchText,
+                libraryViewState.selectedSearchMode
+            )
         }
     }
 
@@ -123,7 +132,24 @@ struct LibraryView:View {
     }
 
     private func pdfRow(_ pdfFile: PDFFile) -> some View {
-        Text(pdfFile.url.lastPathComponent)
+        VStack(alignment: .leading, spacing: 6) {
+            Text(pdfFile.url.lastPathComponent)
+
+            if pdfFile.tags.isEmpty == false {
+                HStack(spacing: 6) {
+                    ForEach(rowTags(pdfFile)) { tag in
+                        PDFTagBadge(tag.name)
+                    }
+
+                    if pdfFile.tags.count > rowTags(pdfFile).count {
+                        Text("+\(pdfFile.tags.count - rowTags(pdfFile).count)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+            .contentShape(Rectangle())
             .onTapGesture(count: 2) {
                 openPDF(pdfFile)
             }
@@ -149,6 +175,10 @@ struct LibraryView:View {
             .contextMenu {
                 Button("Open PDF") {
                     openPDF(pdfFile)
+                }
+
+                Button("Edit Tags…") {
+                    editTags(pdfFile)
                 }
 
                 Button("Copy File Path") {
@@ -208,6 +238,10 @@ struct LibraryView:View {
                     Button("Delete", role: .destructive,action: {
                         deleteDisplayedPDF(selectedPDFFile)
                     })
+
+                    Button("Edit Tags…") {
+                        editTags(selectedPDFFile)
+                    }
                 }
                 .padding(.horizontal)
                 .padding(.top, 8)
@@ -215,9 +249,7 @@ struct LibraryView:View {
                 ZStack(alignment: .trailing) {
                     DirectoryPDFView(
                         selectedPDFFile.resolvedURL,
-                        $libraryViewState.currentPageIndex,
-                        $libraryViewState.appError,
-                        $libraryViewState.errorTitle
+                        libraryViewState
                     )
 
                     TranslationResultView(
@@ -326,6 +358,18 @@ struct LibraryView:View {
     
     private func openPDF(_ pdfFile: PDFFile) {
         libraryViewState.selectedPDFFile = pdfFile
+    }
+
+    private func editTags(_ pdfFile: PDFFile) {
+        libraryViewState.presentTagEditor(pdfFile)
+    }
+
+    private func rowTags(_ pdfFile: PDFFile) -> [PDFTag] {
+        Array(
+            pdfFile.tags
+                .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+                .prefix(5)
+        )
     }
 
     private func deletePDF(_ pdfFile: PDFFile) {

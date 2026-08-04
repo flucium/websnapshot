@@ -2,26 +2,22 @@ import SwiftUI
 import PDFKit
 
 struct DirectoryPDFView: NSViewRepresentable {
+    
+    @ObservedObject var libraryViewState: LibraryViewState
+    
     let url: URL
-
-    @Binding var currentPageIndex: Int
-    @Binding var appError: AppError?
-    @Binding var errorTitle: String
-
+    
+    
     init(
         _ url: URL,
-        _ currentPageIndex: Binding<Int>,
-        _ appError: Binding<AppError?>,
-        _ errorTitle: Binding<String>
+        _ libraryViewState: LibraryViewState
     ) {
         self.url = url
-        _currentPageIndex = currentPageIndex
-        _appError = appError
-        _errorTitle = errorTitle
+        self.libraryViewState = libraryViewState
     }
 
     func makeCoordinator() -> Coordinator {
-        Coordinator($currentPageIndex, $appError, $errorTitle)
+        Coordinator(libraryViewState)
     }
 
     func makeNSView(context: Context) -> PDFView {
@@ -62,8 +58,7 @@ struct DirectoryPDFView: NSViewRepresentable {
             AppLogger.record(appError, "Open PDF", url)
 
             DispatchQueue.main.async {
-                context.coordinator.errorTitle.wrappedValue = "PDF Could Not Be Opened"
-                context.coordinator.appError.wrappedValue = appError
+                context.coordinator.present(appError)
             }
             return
         }
@@ -79,8 +74,7 @@ struct DirectoryPDFView: NSViewRepresentable {
             AppLogger.record(appError, "Open PDF", url)
 
             DispatchQueue.main.async {
-                context.coordinator.errorTitle.wrappedValue = "PDF Could Not Be Opened"
-                context.coordinator.appError.wrappedValue = appError
+                context.coordinator.present(appError)
             }
             return
         }
@@ -103,22 +97,19 @@ struct DirectoryPDFView: NSViewRepresentable {
     }
 
     final class Coordinator: NSObject {
-        var currentPageIndex: Binding<Int>
-        var appError: Binding<AppError?>
-        var errorTitle: Binding<String>
+        weak var libraryViewState: LibraryViewState?
         
         var loadedURL: URL?
         
         var lastPageIndex: Int?
 
-        init(
-            _ currentPageIndex: Binding<Int>,
-            _ appError: Binding<AppError?>,
-            _ errorTitle: Binding<String>
-        ) {
-            self.currentPageIndex = currentPageIndex
-            self.appError = appError
-            self.errorTitle = errorTitle
+        init(_ libraryViewState: LibraryViewState) {
+            self.libraryViewState = libraryViewState
+        }
+
+        func present(_ appError: AppError) {
+            libraryViewState?.errorTitle = "PDF Could Not Be Opened"
+            libraryViewState?.appError = appError
         }
 
         @objc func pageChanged(_ notification: Notification) {
@@ -143,7 +134,7 @@ struct DirectoryPDFView: NSViewRepresentable {
                     return
                 }
 
-                currentPageIndex.wrappedValue = pageIndex
+                libraryViewState?.currentPageIndex = pageIndex
             }
         }
     }

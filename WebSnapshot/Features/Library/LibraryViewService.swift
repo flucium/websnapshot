@@ -31,7 +31,16 @@ final class LibraryViewService{
     static func deleteMissingFiles(_ modelContext: ModelContext, _ pdfFiles: [PDFFile]) throws {
         var needsSave = false
 
-        for pdfFile in pdfFiles where FileIO.exists(pdfFile.url) == false {
+        let missingPDFFiles = pdfFiles.filter {
+            FileIO.exists($0.url) == false
+        }
+
+        PDFTagService.deleteTagsOrphanedByDeleting(
+            missingPDFFiles,
+            in: modelContext
+        )
+
+        for pdfFile in missingPDFFiles {
             modelContext.delete(pdfFile)
             needsSave = true
         }
@@ -47,6 +56,32 @@ final class LibraryViewService{
                     error
                 )
             }
+        }
+    }
+
+    static func matches(
+        _ pdfFile: PDFFile,
+        _ searchText: String,
+        _ mode: SearchMode
+    ) -> Bool {
+        let searchText = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard searchText.isEmpty == false else {
+            return true
+        }
+
+        let titleMatches = pdfFile.url.lastPathComponent.localizedCaseInsensitiveContains(searchText)
+        let tagMatches = pdfFile.tags.contains {
+            $0.name.localizedCaseInsensitiveContains(searchText)
+        }
+
+        return switch mode {
+        case .all:
+            titleMatches || tagMatches
+        case .title:
+            titleMatches
+        case .tag:
+            tagMatches
         }
     }
 

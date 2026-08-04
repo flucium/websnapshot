@@ -8,10 +8,28 @@ final class LibraryViewState:ObservableObject{
     @Published var searchText:String = String()
     @Published var selectedSearchMode: SearchMode = .all
     @Published var selectedPDFFile: PDFFile?
+    @Published var tagEditorPDFFile: PDFFile?
+    @Published var tagEditorTagNames: [String] = []
+    @Published var tagEditorNewTagName = String()
+    @Published var tagEditorAppError: AppError?
     @Published  var currentPageIndex = 0
     @Published  var textToTranslate = String()
     @Published  var translatedText = String()
     @Published  var translationConfiguration: TranslationSession.Configuration?
     @Published  var isTranslating = false
     @Published  var isTranslationPresented = false
+
+    func presentTagEditor(_ pdfFile: PDFFile) {
+        tagEditorTagNames = PDFTagService.tagNames(pdfFile.tags)
+        tagEditorNewTagName = String()
+        tagEditorAppError = nil
+        tagEditorPDFFile = pdfFile
+    }
+
+    func closeTagEditor() {
+        tagEditorPDFFile = nil
+        tagEditorTagNames = []
+        tagEditorNewTagName = String()
+        tagEditorAppError = nil
+    }
 }
