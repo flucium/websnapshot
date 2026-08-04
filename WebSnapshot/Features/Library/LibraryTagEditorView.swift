@@ -11,119 +11,181 @@ struct LibraryTagEditorView: View {
     let pdfFile: PDFFile
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Edit Tags")
-                .font(.title2)
+        VStack(spacing: 0) {
+            header
 
-            Text(pdfFile.url.lastPathComponent)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
+            Divider()
 
-            HStack {
-                TextField(
-                    "New tag",
-                    text: $libraryViewState.tagEditorNewTagName
-                )
-                    .textFieldStyle(.roundedBorder)
-                    .onSubmit(addNewTag)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+                    newTagSection
+                    selectedTagsSection
 
-                Button("Add", action: addNewTag)
-                    .disabled(
-                        PDFTagService.normalizedName(
-                            libraryViewState.tagEditorNewTagName
-                        ).isEmpty
-                    )
-            }
-
-            GroupBox("Selected Tags") {
-                if libraryViewState.tagEditorTagNames.isEmpty {
-                    Text("No tags selected.")
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, minHeight: 60, alignment: .leading)
-                        .padding(8)
-                } else {
-                    ScrollView {
-                        LazyVGrid(
-                            columns: [GridItem(.adaptive(minimum: 110), alignment: .leading)],
-                            alignment: .leading,
-                            spacing: 8
-                        ) {
-                            ForEach(libraryViewState.tagEditorTagNames, id: \.self) { tagName in
-                                Button {
-                                    removeTag(tagName)
-                                } label: {
-                                    HStack(spacing: 5) {
-                                        Text(tagName)
-                                            .lineLimit(1)
-                                        Image(systemName: "xmark")
-                                            .font(.caption2)
-                                    }
-                                }
-                                .buttonStyle(.bordered)
-                                .help("Remove \(tagName)")
-                            }
-                        }
-                        .padding(8)
+                    if availableTags.isEmpty == false {
+                        availableTagsSection
                     }
-                    .frame(minHeight: 60, maxHeight: 120)
                 }
+                .padding(24)
             }
 
-            if availableTags.isEmpty == false {
-                GroupBox("Existing Tags") {
-                    ScrollView {
-                        LazyVGrid(
-                            columns: [GridItem(.adaptive(minimum: 110), alignment: .leading)],
-                            alignment: .leading,
-                            spacing: 8
-                        ) {
-                            ForEach(availableTags) { tag in
-                                Button {
-                                    toggleTag(tag.name)
-                                } label: {
-                                    Label(
-                                        tag.name,
-                                        systemImage: containsTag(tag.name)
-                                            ? "checkmark"
-                                            : "tag"
-                                    )
-                                    .lineLimit(1)
-                                }
-                                .buttonStyle(.bordered)
-                                .tint(
-                                    containsTag(tag.name)
-                                        ? .accentColor
-                                        : nil
-                                )
-                            }
-                        }
-                        .padding(8)
-                    }
-                    .frame(minHeight: 80, maxHeight: 160)
-                }
-            }
+            Divider()
 
-            Spacer(minLength: 0)
-
-            HStack {
-                Spacer()
-
-                Button("Cancel") {
-                    libraryViewState.closeTagEditor()
-                }
-
-                Button("Save") {
-                    save()
-                }
-                .keyboardShortcut(.defaultAction)
-            }
+            footer
         }
-        .padding(20)
-        .frame(width: 500)
-        .frame(minHeight: 360)
+        .frame(width: 560, height: 500)
+        .background(.background)
         .alert(item: $libraryViewState.tagEditorAppError) { appError in
             AlertModal.show("Tags Could Not Be Saved", appError)
         }
+    }
+
+    private var header: some View {
+        HStack(spacing: 14) {
+            Image(systemName: "tag.circle.fill")
+                .font(.system(size: 34))
+                .foregroundStyle(Color.accentColor)
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Edit Tags")
+                    .font(.title2.weight(.semibold))
+
+                Text(pdfFile.url.lastPathComponent)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .help(pdfFile.url.lastPathComponent)
+            }
+
+            Spacer()
+        }
+        .padding(.horizontal, 24)
+        .padding(.vertical, 20)
+    }
+
+    private var newTagSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            sectionTitle("Add a Tag", systemImage: "plus.circle")
+
+            HStack(spacing: 10) {
+                TextField(
+                    "Enter a tag name",
+                    text: $libraryViewState.tagEditorNewTagName
+                )
+                .textFieldStyle(.roundedBorder)
+                .onSubmit(addNewTag)
+
+                Button(action: addNewTag) {
+                    Label("Add", systemImage: "plus")
+                }
+                .disabled(isNewTagNameEmpty)
+            }
+
+            Text("Tag names are matched without regard to capitalization or spacing.")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+        }
+    }
+
+    private var selectedTagsSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                sectionTitle("Selected Tags", systemImage: "checkmark.circle")
+
+                Spacer()
+
+                Text("\(libraryViewState.tagEditorTagNames.count) selected")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            if libraryViewState.tagEditorTagNames.isEmpty {
+                VStack(spacing: 8) {
+                    Image(systemName: "tag.slash")
+                        .font(.title2)
+                        .foregroundStyle(.tertiary)
+
+                    Text("No tags selected")
+                        .font(.subheadline.weight(.medium))
+
+                    Text("Add a new tag or choose one below.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, minHeight: 88)
+                .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 10))
+            } else {
+                LazyVGrid(
+                    columns: [GridItem(.adaptive(minimum: 120), alignment: .leading)],
+                    alignment: .leading,
+                    spacing: 8
+                ) {
+                    ForEach(libraryViewState.tagEditorTagNames, id: \.self) { tagName in
+                        SelectedTagButton(tagName) {
+                            removeTag(tagName)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var availableTagsSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            sectionTitle("Available Tags", systemImage: "tag")
+
+            LazyVGrid(
+                columns: [GridItem(.adaptive(minimum: 140), alignment: .leading)],
+                alignment: .leading,
+                spacing: 8
+            ) {
+                ForEach(availableTags) { tag in
+                    AvailableTagButton(
+                        tag.name,
+                        isSelected: containsTag(tag.name)
+                    ) {
+                        toggleTag(tag.name)
+                    }
+                }
+            }
+        }
+    }
+
+    private var footer: some View {
+        HStack(spacing: 10) {
+            Label(
+                "\(libraryViewState.tagEditorTagNames.count) tags",
+                systemImage: "tag"
+            )
+            .font(.caption)
+            .foregroundStyle(.secondary)
+
+            Spacer()
+
+            Button("Cancel") {
+                libraryViewState.closeTagEditor()
+            }
+            .keyboardShortcut(.cancelAction)
+
+            Button("Save", action: save)
+                .buttonStyle(.borderedProminent)
+                .keyboardShortcut(.defaultAction)
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 14)
+        .background(.bar)
+    }
+
+    private var isNewTagNameEmpty: Bool {
+        PDFTagService.normalizedName(
+            libraryViewState.tagEditorNewTagName
+        ).isEmpty
+    }
+
+    private func sectionTitle(_ title: String, systemImage: String) -> some View {
+        Label(title, systemImage: systemImage)
+            .font(.headline)
     }
 
     private func addNewTag() {
@@ -184,5 +246,88 @@ struct PDFTagBadge: View {
             .padding(.horizontal, 7)
             .padding(.vertical, 3)
             .background(.quaternary, in: Capsule())
+    }
+}
+
+private struct SelectedTagButton: View {
+    let name: String
+    let remove: () -> Void
+
+    init(_ name: String, remove: @escaping () -> Void) {
+        self.name = name
+        self.remove = remove
+    }
+
+    var body: some View {
+        Button(action: remove) {
+            HStack(spacing: 6) {
+                Image(systemName: "tag.fill")
+                    .font(.caption)
+
+                Text(name)
+                    .lineLimit(1)
+
+                Spacer(minLength: 4)
+
+                Image(systemName: "xmark.circle.fill")
+                    .foregroundStyle(.secondary)
+            }
+            .font(.subheadline)
+            .foregroundStyle(.primary)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .background(Color.accentColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
+            .overlay {
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(Color.accentColor.opacity(0.35))
+            }
+        }
+        .buttonStyle(.plain)
+        .help("Remove \(name)")
+        .accessibilityLabel("Remove \(name)")
+    }
+}
+
+private struct AvailableTagButton: View {
+    let name: String
+    let isSelected: Bool
+    let toggle: () -> Void
+
+    init(_ name: String, isSelected: Bool, toggle: @escaping () -> Void) {
+        self.name = name
+        self.isSelected = isSelected
+        self.toggle = toggle
+    }
+
+    var body: some View {
+        Button(action: toggle) {
+            HStack(spacing: 7) {
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
+
+                Text(name)
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+
+                Spacer(minLength: 0)
+            }
+            .font(.subheadline)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .background(
+                isSelected ? Color.accentColor.opacity(0.1) : Color.clear,
+                in: RoundedRectangle(cornerRadius: 8)
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(
+                        isSelected
+                            ? Color.accentColor.opacity(0.35)
+                            : Color.secondary.opacity(0.2)
+                    )
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(isSelected ? "Deselect" : "Select") \(name)")
     }
 }
