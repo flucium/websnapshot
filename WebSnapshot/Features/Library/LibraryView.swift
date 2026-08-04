@@ -267,15 +267,15 @@ struct LibraryView:View {
                 }
                 
                 
-                if FileIO.exists(selectedPDFFile.resolvedURL) {
-                    Text(selectedPDFFile.url.absoluteString)
-                        .padding(.top, 15)
-                        .padding(.bottom, 5)
-                }else{
-                    Text("The PDF file could not be found.")
-                        .padding(.top, 15)
-                        .padding(.bottom, 5)
-                }
+//                if FileIO.exists(selectedPDFFile.resolvedURL) {
+//                    Text(selectedPDFFile.url.absoluteString)
+//                        .padding(.top, 15)
+//                        .padding(.bottom, 5)
+//                }else{
+//                    Text("The PDF file could not be found.")
+//                        .padding(.top, 15)
+//                        .padding(.bottom, 5)
+//                }
                 
             }
             
