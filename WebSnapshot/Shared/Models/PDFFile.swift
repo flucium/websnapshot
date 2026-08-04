@@ -5,6 +5,7 @@ import SwiftData
 final class PDFFile {
     var url: URL
     var bookmarkData: Data?
+    var tags: [PDFTag] = []
     
     init(
         _ url: URL,
