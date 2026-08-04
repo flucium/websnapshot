@@ -72,6 +72,11 @@ final class PDFFileService {
                 $0.url == url
             }
             
+            PDFTagService.deleteTagsOrphanedByDeleting(
+                matched,
+                in: modelContext
+            )
+
             for entry in matched {
                 modelContext
                     .delete(
