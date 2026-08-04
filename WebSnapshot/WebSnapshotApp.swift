@@ -9,6 +9,7 @@ struct WebSnapshotApp: App {
         }.modelContainer(for: [
             AppearanceSettings.self,
             PDFFile.self,
+            PDFTag.self,
         ])
     }
 }
