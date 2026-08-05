@@ -109,7 +109,7 @@ struct LibraryView:View {
         HStack{
             TextField("Search", text:$libraryViewState.searchText)
                 .textFieldStyle(.roundedBorder)
-        }.padding()
+        }.padding(.top,10)
     }
 
     private func searchTextModeView() -> some View{
