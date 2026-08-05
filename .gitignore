@@ -72,5 +72,10 @@ fastlane/test_output
 *.swp
 *.tmp
 
+# Rust
+**/target/
+**/Cargo.lock
+
+
 !.github
 !.gitignore
