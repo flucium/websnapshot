@@ -4,8 +4,6 @@ import SwiftUI
 struct LibraryTagEditorView: View {
     @Environment(\.modelContext) private var modelContext
 
-    @Query(sort: \PDFTag.name) private var availableTags: [PDFTag]
-
     @ObservedObject var libraryViewState: LibraryViewState
 
     let pdfFile: PDFFile
@@ -20,10 +18,6 @@ struct LibraryTagEditorView: View {
                 VStack(alignment: .leading, spacing: 24) {
                     newTagSection
                     selectedTagsSection
-
-                    if availableTags.isEmpty == false {
-                        availableTagsSection
-                    }
                 }
                 .padding(24)
             }
@@ -32,7 +26,7 @@ struct LibraryTagEditorView: View {
 
             footer
         }
-        .frame(width: 560, height: 500)
+        .frame(width: 560, height: 420)
         .background(.background)
         .alert(item: $libraryViewState.tagEditorAppError) { appError in
             AlertModal.show("Tags Could Not Be Saved", appError)
@@ -109,7 +103,7 @@ struct LibraryTagEditorView: View {
                     Text("No tags selected")
                         .font(.subheadline.weight(.medium))
 
-                    Text("Add a new tag or choose one below.")
+                    Text("Add a tag above to organize this PDF.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -125,27 +119,6 @@ struct LibraryTagEditorView: View {
                         SelectedTagButton(tagName) {
                             removeTag(tagName)
                         }
-                    }
-                }
-            }
-        }
-    }
-
-    private var availableTagsSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            sectionTitle("Available Tags", systemImage: "tag")
-
-            LazyVGrid(
-                columns: [GridItem(.adaptive(minimum: 140), alignment: .leading)],
-                alignment: .leading,
-                spacing: 8
-            ) {
-                ForEach(availableTags) { tag in
-                    AvailableTagButton(
-                        tag.name,
-                        isSelected: containsTag(tag.name)
-                    ) {
-                        toggleTag(tag.name)
                     }
                 }
             }
@@ -196,24 +169,10 @@ struct LibraryTagEditorView: View {
         libraryViewState.tagEditorNewTagName = String()
     }
 
-    private func toggleTag(_ name: String) {
-        libraryViewState.tagEditorTagNames = PDFTagService.togglingTag(
-            name,
-            in: libraryViewState.tagEditorTagNames
-        )
-    }
-
     private func removeTag(_ name: String) {
         libraryViewState.tagEditorTagNames = PDFTagService.removingTag(
             name,
             from: libraryViewState.tagEditorTagNames
-        )
-    }
-
-    private func containsTag(_ name: String) -> Bool {
-        PDFTagService.containsTag(
-            name,
-            in: libraryViewState.tagEditorTagNames
         )
     }
 
@@ -285,49 +244,5 @@ private struct SelectedTagButton: View {
         .buttonStyle(.plain)
         .help("Remove \(name)")
         .accessibilityLabel("Remove \(name)")
-    }
-}
-
-private struct AvailableTagButton: View {
-    let name: String
-    let isSelected: Bool
-    let toggle: () -> Void
-
-    init(_ name: String, isSelected: Bool, toggle: @escaping () -> Void) {
-        self.name = name
-        self.isSelected = isSelected
-        self.toggle = toggle
-    }
-
-    var body: some View {
-        Button(action: toggle) {
-            HStack(spacing: 7) {
-                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
-
-                Text(name)
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-
-                Spacer(minLength: 0)
-            }
-            .font(.subheadline)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 7)
-            .background(
-                isSelected ? Color.accentColor.opacity(0.1) : Color.clear,
-                in: RoundedRectangle(cornerRadius: 8)
-            )
-            .overlay {
-                RoundedRectangle(cornerRadius: 8)
-                    .stroke(
-                        isSelected
-                            ? Color.accentColor.opacity(0.35)
-                            : Color.secondary.opacity(0.2)
-                    )
-            }
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("\(isSelected ? "Deselect" : "Select") \(name)")
     }
 }
