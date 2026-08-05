@@ -60,7 +60,7 @@ struct LibraryTagEditorView: View {
 
     private var newTagSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            sectionTitle("Add a Tag", systemImage: "plus.circle")
+            sectionTitle("Add a Tag",  "plus.circle")
 
             HStack(spacing: 10) {
                 TextField(
@@ -85,7 +85,7 @@ struct LibraryTagEditorView: View {
     private var selectedTagsSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                sectionTitle("Selected Tags", systemImage: "checkmark.circle")
+                sectionTitle("Selected Tags",  "checkmark.circle")
 
                 Spacer()
 
@@ -156,7 +156,7 @@ struct LibraryTagEditorView: View {
         ).isEmpty
     }
 
-    private func sectionTitle(_ title: String, systemImage: String) -> some View {
+    private func sectionTitle(_ title: String, _ systemImage: String) -> some View {
         Label(title, systemImage: systemImage)
             .font(.headline)
     }
@@ -212,7 +212,7 @@ private struct SelectedTagButton: View {
     let name: String
     let remove: () -> Void
 
-    init(_ name: String, remove: @escaping () -> Void) {
+    init(_ name: String, _ remove: @escaping () -> Void) {
         self.name = name
         self.remove = remove
     }
