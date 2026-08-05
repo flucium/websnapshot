@@ -17,7 +17,7 @@ Because pages are saved as standard PDF files, they can easily be found using th
 There is also a feature that allows you to translate saved PDF files.
 
 ## Release
-- Latest : https://github.com/flucium/websnapshot/releases/tag/v0.1.3
+- Latest : https://github.com/flucium/websnapshot/releases/tag/v1.0.0β
 - Releases: https://github.com/flucium/websnapshot/releases
 
 ## Supported Platforms
