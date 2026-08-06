@@ -76,6 +76,9 @@ fastlane/test_output
 **/target/
 **/Cargo.lock
 
+# Text file
+*.txt
+**/*.txt
 
 !.github
 !.gitignore
