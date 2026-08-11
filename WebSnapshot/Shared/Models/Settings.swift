@@ -33,7 +33,7 @@ extension AppearanceSettings{
 extension StorageSettings{
     enum Storage: String, CaseIterable, Codable, Hashable, Identifiable {
         case fixed
-        case custom
+        case flexible
         case local
         case removable
         
