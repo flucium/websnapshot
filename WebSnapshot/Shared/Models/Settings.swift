@@ -21,3 +21,24 @@ extension AppearanceSettings{
         }
     }
 }
+
+@Model class StorageSettings{
+    var storage: Storage
+    
+    init(_ storage: Storage) {
+        self.storage = storage
+    }
+}
+
+extension StorageSettings{
+    enum Storage: String, CaseIterable, Codable, Hashable, Identifiable {
+        case fixed
+        case custom
+        case local
+        case removable
+        
+        var id: String {
+            rawValue
+        }
+    }
+}
