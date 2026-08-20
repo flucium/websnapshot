@@ -18,7 +18,7 @@ final class AppearanceSettingsService {
             return "Light"
         case .dark:
             return "Dark"
-        case .system:g
+        case .system:
             return "System"
         }
     }
