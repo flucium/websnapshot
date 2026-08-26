@@ -12,6 +12,7 @@ struct WebSnapshotApp: App {
         .windowResizability(.contentMinSize)
         .modelContainer(for: [
             AppearanceSettings.self,
+            StorageSettings.self,
             PDFFile.self,
             PDFTag.self,
         ])

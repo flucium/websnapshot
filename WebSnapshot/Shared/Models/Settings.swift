@@ -21,3 +21,27 @@ extension AppearanceSettings{
         }
     }
 }
+
+@Model
+final class StorageSettings {
+    var storage: Storage
+    var fixedStoragePath: String?
+    var fixedStorageBookmarkData: Data?
+
+    init(_ storage: Storage) {
+        self.storage = storage
+        self.fixedStoragePath = nil
+        self.fixedStorageBookmarkData = nil
+    }
+}
+
+extension StorageSettings {
+    enum Storage: String, CaseIterable, Codable, Hashable, Identifiable {
+        case fixed
+        case flexibility
+
+        var id: String {
+            rawValue
+        }
+    }
+}

@@ -5,6 +5,8 @@ final class SettingsViewState:ObservableObject{
     @Published var appError:AppError?
     @Published var errorTitle = "Setting Could Not Be Saved"
     @Published var appearance:AppearanceSettings.Appearance = .system
+    @Published var storage:StorageSettings.Storage = .flexibility
+    @Published var fixedStoragePath:String?
 //    @Published var selectedTab:Int = 0
 //    @Published var syncDirectoryIsValid:Bool = false
 //    @Published var syncDirectory:String = String()

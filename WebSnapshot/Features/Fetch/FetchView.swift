@@ -8,6 +8,8 @@ struct FetchView: View {
     
     @StateObject private var fetchViewState = FetchViewState()
 
+    @Query private var storageSettings: [StorageSettings]
+
     var body: some View {
         VStack{
             
@@ -77,20 +79,68 @@ struct FetchView: View {
                 let document = try await WebService.export(fetchViewState.webPage)
                 fetchViewState.pdfFileDocument = document
 
-                guard let destinationURL = try savePanel(
-                    fetchViewState.webPage.title,
-                    fetchViewState.webPage.url,
-                    document
-                ) else {
+                guard try save(document) else {
                     return
                 }
 
-                try PDFFileService.save(modelContext, destinationURL)
                 fetchViewState.appError = nil
                 fetchViewState.failedOperation = nil
             } catch {
                 handle(error, .save)
             }
+        }
+    }
+
+    private func save(_ document: PDFFileDocument) throws -> Bool {
+        switch StorageSettingsService.storage(storageSettings) {
+        case .flexibility:
+            guard let destinationURL = try savePanel(
+                fetchViewState.webPage.title,
+                fetchViewState.webPage.url,
+                document
+            ) else {
+                return false
+            }
+
+            try PDFFileService.save(
+                modelContext,
+                destinationURL
+            )
+
+            return true
+
+        case .fixed:
+            guard let directoryURL = try StorageSettingsService.fixedStorageURL(
+                storageSettings
+            ) else {
+                throw AppError.error(
+                    "Choose a storage folder in Settings before saving."
+                )
+            }
+
+            let isAccessing = directoryURL.startAccessingSecurityScopedResource()
+
+            defer {
+                if isAccessing {
+                    directoryURL.stopAccessingSecurityScopedResource()
+                }
+            }
+
+            guard let destinationURL = try saveToDirectory(
+                fetchViewState.webPage.title,
+                fetchViewState.webPage.url,
+                document,
+                directoryURL
+            ) else {
+                return false
+            }
+
+            try PDFFileService.save(
+                modelContext,
+                destinationURL
+            )
+
+            return true
         }
     }
 
