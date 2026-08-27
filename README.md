@@ -33,3 +33,14 @@ Manage saved PDF files.
   - Storage Location: Configure where PDF files are saved:
     - Fixed: Always save PDF files to a designated directory. Click [Change…] to specify the directory.
     - Flexibility: Choose the destination directory each time you save a PDF file.
+
+## Installer
+...
+
+## Supported platforms
+- macOS:
+  - CPU: Apple silicon
+  - Memory: 16GB~
+  - SSD: 256GB~
+  - OS: macOS Tahoe (test version: Version 26.6.2)
+
