@@ -25,6 +25,9 @@ struct FetchView: View {
 
             fetchViewState.searchText = url.absoluteString
         }
+        .onDisappear {
+            fetchViewState.cancelLoad()
+        }
     }
     
     func searchToolView() -> some View{
@@ -32,11 +35,11 @@ struct FetchView: View {
             TextField("https://...",text: $fetchViewState.searchText)
                 .textFieldStyle(.roundedBorder)
             .onSubmit {
-                loadWebPage()
+                FetchViewService.loadWebPage(fetchViewState)
             }
             
             Button("Load", action: {
-                loadWebPage()
+                FetchViewService.loadWebPage(fetchViewState)
             })
             .disabled(fetchViewState.searchText.isEmpty)
             
@@ -45,7 +48,7 @@ struct FetchView: View {
             })
             
             Button("Save", action: {
-                saveWebPage()
+                FetchViewService.saveWebPage(fetchViewState,modelContext,storageSettings)
             })
         }
         .alert(
@@ -54,121 +57,12 @@ struct FetchView: View {
             appError in
             AlertModal.show(
                 fetchViewState.failedOperation?.errorTitle ?? "Operation Could Not Be Completed",
-                appError,
-                retryFailedOperation
-            )
+                appError
+            ) {
+                FetchViewService.retryFailedOperation(fetchViewState, modelContext, storageSettings)
+            }
         }
         .padding()
-    }
-
-    private func loadWebPage() {
-        Task {
-            do {
-                fetchViewState.webPage = try await FetchViewService.fetch(fetchViewState.searchText)
-                fetchViewState.appError = nil
-                fetchViewState.failedOperation = nil
-            } catch {
-                handle(error, .load)
-            }
-        }
-    }
-
-    private func saveWebPage() {
-        Task {
-            do {
-                let document = try await WebService.export(fetchViewState.webPage)
-                fetchViewState.pdfFileDocument = document
-
-                guard try save(document) else {
-                    return
-                }
-
-                fetchViewState.appError = nil
-                fetchViewState.failedOperation = nil
-            } catch {
-                handle(error, .save)
-            }
-        }
-    }
-
-    private func save(_ document: PDFFileDocument) throws -> Bool {
-        switch StorageSettingsService.storage(storageSettings) {
-        case .flexibility:
-            guard let destinationURL = try savePanel(
-                fetchViewState.webPage.title,
-                fetchViewState.webPage.url,
-                document
-            ) else {
-                return false
-            }
-
-            try PDFFileService.save(
-                modelContext,
-                destinationURL
-            )
-
-            return true
-
-        case .fixed:
-            guard let directoryURL = try StorageSettingsService.fixedStorageURL(
-                storageSettings
-            ) else {
-                throw AppError.error(
-                    "Choose a storage folder in Settings before saving."
-                )
-            }
-
-            let isAccessing = directoryURL.startAccessingSecurityScopedResource()
-
-            defer {
-                if isAccessing {
-                    directoryURL.stopAccessingSecurityScopedResource()
-                }
-            }
-
-            guard let destinationURL = try saveToDirectory(
-                fetchViewState.webPage.title,
-                fetchViewState.webPage.url,
-                document,
-                directoryURL
-            ) else {
-                return false
-            }
-
-            try PDFFileService.save(
-                modelContext,
-                destinationURL
-            )
-
-            return true
-        }
-    }
-
-    private func handle(_ error: Error, _ operation: FetchViewState.Operation) {
-        guard let appError = AppError.presentable(error) else {
-            return
-        }
-
-        AppLogger.record(
-            appError,
-            operation == .load ? "Load webpage" : "Save webpage as PDF",
-            operation == .load
-                ? URL.supportedWebURL(fetchViewState.searchText)
-                : fetchViewState.webPage.url
-        )
-        fetchViewState.failedOperation = operation
-        fetchViewState.appError = appError
-    }
-
-    private func retryFailedOperation() {
-        switch fetchViewState.failedOperation {
-        case .load:
-            loadWebPage()
-        case .save:
-            saveWebPage()
-        case nil:
-            break
-        }
     }
 
     func webView() -> some View{
