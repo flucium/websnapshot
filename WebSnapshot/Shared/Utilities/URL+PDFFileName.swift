@@ -6,26 +6,15 @@ extension URL {
         _ title:String?,
         _ url: URL?
     ) -> String {
-        if title != nil{
-            let string = title!.trimmingCharacters(
-                in: CharacterSet.whitespacesAndNewlines
-            ).components(
-                separatedBy: CharacterSet(
-                    charactersIn: "/\\?%*|\"<>:"
-                )
-            ).joined()
-            
-            if string.isEmpty == false{
-                return string
-            }
-        }
-        
-        
-        let string = url?.removingScheme ?? "page"
-        
-        let fileName = string + ".pdf"
-        
-        return fileName
+        let trimmedTitle = title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let invalidCharacters = CharacterSet(charactersIn: "/\\?%*|\"<>:")
+        let cleanTitle = trimmedTitle.components(separatedBy: invalidCharacters).joined()
+        let source = cleanTitle.isEmpty ? (url?.removingScheme ?? "page") : cleanTitle
+        let name = source.components(
+            separatedBy: invalidCharacters
+        ).joined()
+        let baseName = name.lowercased().hasSuffix(".pdf") ? String(name.dropLast(4)) : name
+        return (baseName.isEmpty ? "page" : baseName) + ".pdf"
     }
     
     
