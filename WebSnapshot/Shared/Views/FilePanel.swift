@@ -108,10 +108,10 @@ private func availablePDFURL(
     _ fileName: String
 ) -> URL {
     let fileURL = URL(fileURLWithPath: fileName)
-    let baseName = fileURL.deletingPathExtension().lastPathComponent
-    let fileExtension = fileURL.pathExtension.isEmpty
-        ? "pdf"
-        : fileURL.pathExtension
+    let baseName = fileURL.pathExtension.lowercased() == "pdf"
+        ? fileURL.deletingPathExtension().lastPathComponent
+        : fileURL.lastPathComponent
+    let fileExtension = "pdf"
 
     var candidate = directoryURL
         .appendingPathComponent(baseName)
