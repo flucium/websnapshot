@@ -10,6 +10,24 @@ struct SettingsView: View {
     @Query private var appearanceSettings: [AppearanceSettings]
     @Query private var storageSettings: [StorageSettings]
 
+    private var appearanceSelection: Binding<AppearanceSettings.Appearance> {
+        Binding(
+            get: { AppearanceSettingsService.appearance(appearanceSettings) },
+            set: saveAppearance
+        )
+    }
+
+    private var storageSelection: Binding<StorageSettings.Storage> {
+        Binding(
+            get: { StorageSettingsService.storage(storageSettings) },
+            set: saveStorage
+        )
+    }
+
+    private var fixedStoragePath: String? {
+        StorageSettingsService.fixedStoragePath(storageSettings)
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
@@ -31,7 +49,7 @@ struct SettingsView: View {
                                     .foregroundStyle(.secondary)
                             }
 
-                            Picker("Appearance", selection: $settingsViewState.appearance) {
+                            Picker("Appearance", selection: appearanceSelection) {
                                 ForEach(AppearanceSettings.Appearance.allCases) { appearance in
                                     Text(AppearanceSettingsService.title(appearance))
                                         .tag(appearance)
@@ -67,7 +85,7 @@ struct SettingsView: View {
                                     .foregroundStyle(.secondary)
                             }
 
-                            Picker("Storage", selection: $settingsViewState.storage) {
+                            Picker("Storage", selection: storageSelection) {
                                 ForEach(StorageSettings.Storage.allCases) { storage in
                                     Text(StorageSettingsService.title(storage))
                                         .tag(storage)
@@ -77,23 +95,23 @@ struct SettingsView: View {
                             .pickerStyle(.segmented)
                             .frame(maxWidth: 360)
 
-                            if settingsViewState.storage == .fixed {
+                            if storageSelection.wrappedValue == .fixed {
                                 HStack(spacing: 12) {
-                                    Text(settingsViewState.fixedStoragePath ?? "No folder selected")
+                                    Text(fixedStoragePath ?? "No folder selected")
                                         .font(.callout)
                                         .foregroundStyle(
-                                            settingsViewState.fixedStoragePath == nil
+                                            fixedStoragePath == nil
                                                 ? .secondary
                                                 : .primary
                                         )
                                         .lineLimit(1)
                                         .truncationMode(.middle)
-                                        .help(settingsViewState.fixedStoragePath ?? "Choose a folder for fixed storage.")
+                                        .help(fixedStoragePath ?? "Choose a folder for fixed storage.")
 
                                     Spacer(minLength: 8)
 
                                     Button(
-                                        settingsViewState.fixedStoragePath == nil
+                                        fixedStoragePath == nil
                                             ? "Choose Folder…"
                                             : "Change…"
                                     ) {
@@ -118,46 +136,37 @@ struct SettingsView: View {
             .frame(maxWidth: .infinity, alignment: .top)
         }
         .background(Color(nsColor: .windowBackgroundColor))
-        .onAppear {
-            settingsViewState.appearance = AppearanceSettingsService.appearance(appearanceSettings)
-            settingsViewState.storage = StorageSettingsService.storage(storageSettings)
-            settingsViewState.fixedStoragePath = StorageSettingsService.fixedStoragePath(storageSettings)
-        }
-        .onChange(of: settingsViewState.appearance) { _, changedAppearance in
-            do {
-                try AppearanceSettingsService.save(modelContext, changedAppearance)
-                settingsViewState.appError = nil
-            } catch {
-                guard let appError = AppError.presentable(error) else {
-                    return
-                }
-
-                AppLogger.record(appError, "Save appearance setting")
-                settingsViewState.errorTitle = "Appearance Could Not Be Changed"
-                settingsViewState.appError = appError
-            }
-        }
-        .onChange(of: settingsViewState.storage) { _, changedStorage in
-            do {
-                try StorageSettingsService.save(modelContext, changedStorage)
-                settingsViewState.appError = nil
-            } catch {
-                guard let appError = AppError.presentable(error) else {
-                    return
-                }
-
-                AppLogger.record(appError, "Save storage setting")
-                settingsViewState.errorTitle = "Storage Could Not Be Changed"
-                settingsViewState.appError = appError
-            }
-        }
         .alert(item: $settingsViewState.appError) { appError in
             AlertModal.show(settingsViewState.errorTitle, appError)
         }
     }
 
+    private func saveAppearance(_ appearance: AppearanceSettings.Appearance) {
+        do {
+            try AppearanceSettingsService.save(modelContext, appearance)
+            settingsViewState.appError = nil
+        } catch {
+            guard let appError = AppError.presentable(error) else { return }
+            AppLogger.record(appError, "Save appearance setting")
+            settingsViewState.errorTitle = "Appearance Could Not Be Changed"
+            settingsViewState.appError = appError
+        }
+    }
+
+    private func saveStorage(_ storage: StorageSettings.Storage) {
+        do {
+            try StorageSettingsService.save(modelContext, storage)
+            settingsViewState.appError = nil
+        } catch {
+            guard let appError = AppError.presentable(error) else { return }
+            AppLogger.record(appError, "Save storage setting")
+            settingsViewState.errorTitle = "Storage Could Not Be Changed"
+            settingsViewState.appError = appError
+        }
+    }
+
     private func chooseFixedStorage() {
-        let currentURL = settingsViewState.fixedStoragePath.map {
+        let currentURL = fixedStoragePath.map {
             URL(fileURLWithPath: $0, isDirectory: true)
         }
 
@@ -170,8 +179,6 @@ struct SettingsView: View {
                 modelContext,
                 selectedURL
             )
-            settingsViewState.storage = .fixed
-            settingsViewState.fixedStoragePath = selectedURL.path
             settingsViewState.appError = nil
         } catch {
             guard let appError = AppError.presentable(error) else {
