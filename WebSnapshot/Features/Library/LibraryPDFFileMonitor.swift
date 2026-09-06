@@ -1,36 +1,47 @@
 import Foundation
 import Darwin
 import Combine
+import SwiftData
 
 @MainActor
 final class LibraryPDFFileMonitor: ObservableObject {
-    private var monitors: [String: PDFFileMonitor] = [:]
+    struct Change {
+        let fileID: PersistentIdentifier
+        let url: URL
+        let wasDeleted: Bool
+    }
 
-    func sync(_ pdfFiles: [PDFFile],_ onMissing: @escaping (URL) -> Void) {
-        let paths = Set(pdfFiles.map { monitorKey( $0.url) })
+    private var monitors: [PersistentIdentifier: PDFFileMonitor] = [:]
 
-        for key in Array(monitors.keys) where paths.contains(key) == false {
+    func sync(_ pdfFiles: [PDFFile],_ onMissing: @escaping (Change) -> Void) {
+        let fileIDs = Set(pdfFiles.map(\.persistentModelID))
+
+        for key in Array(monitors.keys) where fileIDs.contains(key) == false {
             monitors[key]?.stop()
             monitors[key] = nil
         }
 
         for pdfFile in pdfFiles {
-            let url = pdfFile.url
-            let key = monitorKey( url)
+            let key = pdfFile.persistentModelID
 
-            guard monitors[key] == nil else {
+            guard pdfFile.availability == .available, let url = try? pdfFile.resolveURL() else {
                 continue
             }
 
-            let monitor = PDFFileMonitor( url) { missingURL in
+            if let monitor = monitors[key], monitor.url == url {
+                _ = monitor.start()
+                continue
+            }
+
+            monitors[key]?.stop()
+            let monitor = PDFFileMonitor(url) { missingURL, wasDeleted in
                 Task { @MainActor in
-                    onMissing(missingURL)
+                    onMissing(Change(fileID: key, url: missingURL, wasDeleted: wasDeleted))
                 }
             }
 
-            if monitor.start() {
-                monitors[key] = monitor
-            } else if FileManager.default.fileExists(atPath: url.path) {
+            monitors[key] = monitor
+            if monitor.start() == false && FileManager.default.fileExists(atPath: url.path) {
                 AppLogger.recordDiagnostic(
                     "The file monitor could not be started.",
                     "Monitor PDF",
@@ -48,20 +59,17 @@ final class LibraryPDFFileMonitor: ObservableObject {
         monitors.removeAll()
     }
 
-    private func monitorKey(_ url: URL) -> String {
-        url.standardizedFileURL.path
-    }
 }
 
 private final class PDFFileMonitor {
-    private let url: URL
-    private let onMissing: (URL) -> Void
+    let url: URL
+    private let onMissing: (URL, Bool) -> Void
 
     private var source: DispatchSourceFileSystemObject?
     private var fileDescriptor: CInt = -1
     private var isAccessingSecurityScopedResource = false
 
-    init(_ url: URL, _ onMissing: @escaping (URL) -> Void) {
+    init(_ url: URL, _ onMissing: @escaping (URL, Bool) -> Void) {
         self.url = url
         self.onMissing = onMissing
     }
@@ -79,7 +87,7 @@ private final class PDFFileMonitor {
 
         guard FileManager.default.fileExists(atPath: url.path) else {
             stopAccessingSecurityScopedResource()
-            onMissing(url)
+            onMissing(url, false)
             return false
         }
 
@@ -89,7 +97,7 @@ private final class PDFFileMonitor {
             stopAccessingSecurityScopedResource()
 
             if FileManager.default.fileExists(atPath: url.path) == false {
-                onMissing(url)
+                onMissing(url, false)
             }
 
             return false
@@ -101,10 +109,15 @@ private final class PDFFileMonitor {
             queue: .main
         )
 
-        source.setEventHandler { [weak self] in
+        source.setEventHandler { [weak self, weak source] in
+            let wasDeleted = source?.data.contains(.delete) == true
             Task { @MainActor in
-                self?.handleFileEvent()
+                self?.handleFileEvent(wasDeleted: wasDeleted)
             }
+        }
+        let descriptor = fileDescriptor
+        source.setCancelHandler {
+            close(descriptor)
         }
 
         self.source = source
@@ -117,29 +130,18 @@ private final class PDFFileMonitor {
         source?.cancel()
         source = nil
 
-        if fileDescriptor >= 0 {
-            closeFileDescriptor()
-        }
+        fileDescriptor = -1
 
         stopAccessingSecurityScopedResource()
     }
 
-    private func handleFileEvent() {
+    private func handleFileEvent(wasDeleted: Bool) {
         guard FileManager.default.fileExists( atPath: url.path) == false else {
             return
         }
 
-        onMissing(url)
+        onMissing(url, wasDeleted)
         stop()
-    }
-
-    private func closeFileDescriptor() {
-        guard fileDescriptor >= 0 else {
-            return
-        }
-
-        close(fileDescriptor)
-        fileDescriptor = -1
     }
 
     private func stopAccessingSecurityScopedResource() {
