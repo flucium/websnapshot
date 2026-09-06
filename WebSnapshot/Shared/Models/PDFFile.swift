@@ -17,15 +17,28 @@ final class PDFFile {
 }
 
 extension PDFFile {
-    var resolvedURL: URL {
+    func resolveURL() throws -> URL {
         guard let bookmarkData else {
             return url
         }
-        
+        return try resolveBookmarkedURL(bookmarkData)
+    }
+
+    var availability: FileIO.Availability {
         do {
-            return try resolveBookmarkedURL(
-                bookmarkData
-            )
+            return FileIO.availability(try resolveURL())
+        } catch {
+            // A deleted bookmark target is different from an invalid bookmark or denied access.
+            if FileIO.isMissingFileError(error) {
+                return FileIO.availability(url)
+            }
+            return .unavailable
+        }
+    }
+
+    var resolvedURL: URL {
+        do {
+            return try resolveURL()
         } catch {
             AppLogger
                 .record(
