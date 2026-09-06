@@ -44,12 +44,12 @@ struct LibraryTagEditorView: View {
                 Text("Edit Tags")
                     .font(.title2.weight(.semibold))
 
-                Text(pdfFile.url.lastPathComponent)
+                Text(pdfFile.resolvedURL.lastPathComponent)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .truncationMode(.middle)
-                    .help(pdfFile.url.lastPathComponent)
+                    .help(pdfFile.resolvedURL.lastPathComponent)
             }
 
             Spacer()
