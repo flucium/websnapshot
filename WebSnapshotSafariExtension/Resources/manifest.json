@@ -1,0 +1,13 @@
+{
+  "manifest_version": 3,
+  "name": "WebSnapshot",
+  "description": "Save the current webpage as PDF using WebSnapshot's storage settings.",
+  "version": "1.0.0",
+  "permissions": ["activeTab", "nativeMessaging"],
+  "background": { "scripts": ["background.js"], "type": "module" },
+  "action": {
+    "default_title": "Save PDF to WebSnapshot",
+    "default_icon": "images/toolbar-icon.svg"
+  },
+  "icons": { "128": "images/icon-128.png", "256": "images/icon-256.png" }
+}
