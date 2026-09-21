@@ -62,17 +62,13 @@ final class FetchViewService {
         
                 state.pdfFileDocument = document
 
-                guard try save(
+                guard try WebCaptureService.save(
                     document,
-                    
-                    title,
-                    
+                     title,
                      url,
-                    
                      modelContext,
-                
-                    storageSettings
-                ) else {
+                     storageSettings
+                ) != nil else {
                     return
                 }
 
@@ -122,56 +118,6 @@ final class FetchViewService {
             )
         }
         
-    }
-
-    private static func save(_ document: PDFFileDocument,_ title: String,_ url: URL?,_ modelContext: ModelContext,_ storageSettings: [StorageSettings]) throws -> Bool {
-        
-        switch StorageSettingsService.storage(storageSettings) {
-        case .flexibility:
-            guard let destinationURL = try savePanel(title,url,document) else {
-                return false
-            }
-
-            try PDFFileService.save(
-                modelContext,
-                destinationURL
-            )
-
-            return true
-
-        case .fixed:
-            guard let directoryURL = try StorageSettingsService.fixedStorageURL(
-                storageSettings
-            ) else {
-                throw AppError.error(
-                    "Choose a storage folder in Settings before saving."
-                )
-            }
-
-            let isAccessing = directoryURL.startAccessingSecurityScopedResource()
-
-            defer {
-                if isAccessing {
-                    directoryURL.stopAccessingSecurityScopedResource()
-                }
-            }
-
-            guard let destinationURL = try saveToDirectory(
-                title,
-                url,
-                document,
-                directoryURL
-            ) else {
-                return false
-            }
-
-            try PDFFileService.save(
-                modelContext,
-                destinationURL
-            )
-
-            return true
-        }
     }
 
     private static func handle(_ error: Error,_ operation: FetchViewState.Operation,_ state: FetchViewState,_ targetURL: URL? = nil) {
