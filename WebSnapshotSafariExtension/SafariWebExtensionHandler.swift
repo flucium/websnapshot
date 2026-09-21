@@ -1,7 +1,13 @@
 import AppKit
+import OSLog
 import SafariServices
 
 final class SafariWebExtensionHandler: NSObject, NSExtensionRequestHandling {
+    private static let logger = Logger(
+        subsystem: "flucium.WebSnapshot.SafariExtension",
+        category: "AppHandoff"
+    )
+
     func beginRequest(with context: NSExtensionContext) {
         do {
             
@@ -12,18 +18,29 @@ final class SafariWebExtensionHandler: NSObject, NSExtensionRequestHandling {
             
             let request = try SafariCaptureRequest(message: message)
             
-            let appURL = Bundle.main.bundleURL.deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-            
-            guard appURL.pathExtension == "app", Bundle(url: appURL)?.bundleIdentifier == "flucium.WebSnapshot" else {
-                    reply(context, error: "Reinstall WebSnapshot to restore its Safari extension.")
-                    return
-                }
+            guard let appURL = NSWorkspace.shared.urlForApplication(
+                withBundleIdentifier: "flucium.WebSnapshot"
+            ) else {
+                Self.logger.error("Launch Services could not locate WebSnapshot.")
+                
+                reply(context, error: "Open WebSnapshot once, then try the Safari button again.")
+                
+                return
+            }
             
             let configuration = NSWorkspace.OpenConfiguration()
             
             configuration.activates = true
             
-            NSWorkspace.shared.open([request.openURL], withApplicationAt: appURL, configuration: configuration) { _, error in Self.complete(context, error: error == nil ? nil : "WebSnapshot could not be opened. Try opening the app first.")
+            NSWorkspace.shared.open([request.openURL], withApplicationAt: appURL, configuration: configuration) { _, error in
+                if let error {
+                
+                    let nsError = error as NSError
+                    
+                    Self.logger.error("Opening WebSnapshot failed: domain=\(nsError.domain, privacy: .public) code=\(nsError.code, privacy: .public) description=\(nsError.localizedDescription, privacy: .private)")
+                }
+                
+                Self.complete(context, error: error == nil ? nil : "WebSnapshot could not be opened. Try opening the app first.")
             }
         } catch {
             reply(context, error: error.localizedDescription)
