@@ -6,6 +6,16 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		B20000000000000000000001 /* SafariWebExtensionHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000011 /* SafariWebExtensionHandler.swift */; };
+		B20000000000000000000002 /* SafariCaptureRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000012 /* SafariCaptureRequest.swift */; };
+		B20000000000000000000003 /* SafariCaptureRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000012 /* SafariCaptureRequest.swift */; };
+		B20000000000000000000004 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000013 /* manifest.json */; };
+		B20000000000000000000005 /* background.js in Resources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000014 /* background.js */; };
+		B20000000000000000000006 /* images in Resources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000015 /* images */; };
+		B20000000000000000000007 /* WebSnapshotSafariExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = B20000000000000000000018 /* WebSnapshotSafariExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		A100000A2FB500000000000A /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -14,16 +24,58 @@
 			remoteGlobalIDString = 9E3A516B2FB4497700602CC6;
 			remoteInfo = WebSnapshot;
 		};
+		B20000000000000000000034 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 9E3A51642FB4497700602CC6 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = B20000000000000000000040;
+			remoteInfo = WebSnapshotSafariExtension;
+		};
 /* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		B20000000000000000000033 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				B20000000000000000000007 /* WebSnapshotSafariExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		9E3A516C2FB4497700602CC6 /* WebSnapshot.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = WebSnapshot.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A10000012FB5000000000001 /* WebSnapshotTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = WebSnapshotTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		B20000000000000000000011 /* SafariWebExtensionHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafariWebExtensionHandler.swift; sourceTree = "<group>"; };
+		B20000000000000000000012 /* SafariCaptureRequest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafariCaptureRequest.swift; sourceTree = "<group>"; };
+		B20000000000000000000013 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
+		B20000000000000000000014 /* background.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = background.js; sourceTree = "<group>"; };
+		B20000000000000000000015 /* images */ = {isa = PBXFileReference; lastKnownFileType = folder; path = images; sourceTree = "<group>"; };
+		B20000000000000000000016 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		B20000000000000000000017 /* WebSnapshotSafariExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = WebSnapshotSafariExtension.entitlements; sourceTree = "<group>"; };
+		B20000000000000000000018 /* WebSnapshotSafariExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; path = WebSnapshotSafariExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		B20000000000000000000023 /* Exceptions for "WebSnapshot" folder in "WebSnapshot" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 9E3A516B2FB4497700602CC6 /* WebSnapshot */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		9E3A516E2FB4497700602CC6 /* WebSnapshot */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				B20000000000000000000023 /* Exceptions for "WebSnapshot" folder in "WebSnapshot" target */,
+			);
 			path = WebSnapshot;
 			sourceTree = "<group>";
 		};
@@ -49,6 +101,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		B20000000000000000000032 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -56,6 +115,8 @@
 			isa = PBXGroup;
 			children = (
 				9E3A516E2FB4497700602CC6 /* WebSnapshot */,
+				B20000000000000000000020 /* WebSnapshotSafariExtension */,
+				B20000000000000000000022 /* SafariExtensionShared */,
 				A10000022FB5000000000002 /* WebSnapshotTests */,
 				9E3A516D2FB4497700602CC6 /* Products */,
 			);
@@ -65,9 +126,39 @@
 			isa = PBXGroup;
 			children = (
 				9E3A516C2FB4497700602CC6 /* WebSnapshot.app */,
+				B20000000000000000000018 /* WebSnapshotSafariExtension.appex */,
 				A10000012FB5000000000001 /* WebSnapshotTests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		B20000000000000000000020 /* WebSnapshotSafariExtension */ = {
+			isa = PBXGroup;
+			children = (
+				B20000000000000000000011 /* SafariWebExtensionHandler.swift */,
+				B20000000000000000000016 /* Info.plist */,
+				B20000000000000000000017 /* WebSnapshotSafariExtension.entitlements */,
+				B20000000000000000000021 /* Resources */,
+			);
+			path = WebSnapshotSafariExtension;
+			sourceTree = "<group>";
+		};
+		B20000000000000000000021 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				B20000000000000000000013 /* manifest.json */,
+				B20000000000000000000014 /* background.js */,
+				B20000000000000000000015 /* images */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		B20000000000000000000022 /* SafariExtensionShared */ = {
+			isa = PBXGroup;
+			children = (
+				B20000000000000000000012 /* SafariCaptureRequest.swift */,
+			);
+			path = SafariExtensionShared;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -80,10 +171,12 @@
 				9E3A51682FB4497700602CC6 /* Sources */,
 				9E3A51692FB4497700602CC6 /* Frameworks */,
 				9E3A516A2FB4497700602CC6 /* Resources */,
+				B20000000000000000000033 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				B20000000000000000000035 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				9E3A516E2FB4497700602CC6 /* WebSnapshot */,
@@ -118,6 +211,23 @@
 			productReference = A10000012FB5000000000001 /* WebSnapshotTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
+		B20000000000000000000040 /* WebSnapshotSafariExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B20000000000000000000043 /* Build configuration list for PBXNativeTarget "WebSnapshotSafariExtension" */;
+			buildPhases = (
+				B20000000000000000000030 /* Sources */,
+				B20000000000000000000032 /* Frameworks */,
+				B20000000000000000000031 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = WebSnapshotSafariExtension;
+			productName = WebSnapshotSafariExtension;
+			productReference = B20000000000000000000018 /* WebSnapshotSafariExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -126,7 +236,7 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 2640;
-				LastUpgradeCheck = 2650;
+				LastUpgradeCheck = 2700;
 				TargetAttributes = {
 					9E3A516B2FB4497700602CC6 = {
 						CreatedOnToolsVersion = 26.4.1;
@@ -151,6 +261,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
+				B20000000000000000000040 /* WebSnapshotSafariExtension */,
 				9E3A516B2FB4497700602CC6 /* WebSnapshot */,
 				A10000062FB5000000000006 /* WebSnapshotTests */,
 			);
@@ -172,6 +283,16 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		B20000000000000000000031 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B20000000000000000000004 /* manifest.json in Resources */,
+				B20000000000000000000005 /* background.js in Resources */,
+				B20000000000000000000006 /* images in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -179,6 +300,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				B20000000000000000000003 /* SafariCaptureRequest.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -189,6 +311,15 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		B20000000000000000000030 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B20000000000000000000001 /* SafariWebExtensionHandler.swift in Sources */,
+				B20000000000000000000002 /* SafariCaptureRequest.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -196,6 +327,11 @@
 			isa = PBXTargetDependency;
 			target = 9E3A516B2FB4497700602CC6 /* WebSnapshot */;
 			targetProxy = A100000A2FB500000000000A /* PBXContainerItemProxy */;
+		};
+		B20000000000000000000035 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = B20000000000000000000040 /* WebSnapshotSafariExtension */;
+			targetProxy = B20000000000000000000034 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -341,6 +477,7 @@
 				ENABLE_USER_SELECTED_FILES = readwrite;
 				"EXCLUDED_SOURCE_FILE_NAMES[arch=*]" = installer;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = WebSnapshot/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 26.4;
@@ -383,6 +520,7 @@
 				ENABLE_USER_SELECTED_FILES = readwrite;
 				"EXCLUDED_SOURCE_FILE_NAMES[arch=*]" = installer;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = WebSnapshot/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 26.4;
@@ -442,6 +580,60 @@
 			};
 			name = Release;
 		};
+		B20000000000000000000041 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = WebSnapshotSafariExtension/WebSnapshotSafariExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_APP_SANDBOX = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = WebSnapshotSafariExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = WebSnapshot;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.4;
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = flucium.WebSnapshot.SafariExtension;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		B20000000000000000000042 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = WebSnapshotSafariExtension/WebSnapshotSafariExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_APP_SANDBOX = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = WebSnapshotSafariExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = WebSnapshot;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.4;
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = flucium.WebSnapshot.SafariExtension;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -468,6 +660,15 @@
 			buildConfigurations = (
 				A10000072FB5000000000007 /* Debug */,
 				A10000082FB5000000000008 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		B20000000000000000000043 /* Build configuration list for PBXNativeTarget "WebSnapshotSafariExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B20000000000000000000041 /* Debug */,
+				B20000000000000000000042 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
