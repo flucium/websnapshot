@@ -22,6 +22,7 @@ struct LibraryView:View {
                     
                     searchTextModeView()
                 }.padding(.horizontal)
+                
                 pdfListView()
             }else{
                 pdfView()
@@ -29,6 +30,7 @@ struct LibraryView:View {
         }
         .onDisappear {
             pdfFileMonitor.stop()
+            
             libraryViewState.cancelTranslation()
         }
         .onChange(of: monitoredPDFFilePaths) {
@@ -50,31 +52,24 @@ struct LibraryView:View {
         .background {
             translationTaskView
         }
-        .alert(
-            item: $libraryViewState.appError
-        ) { appError in
+        .alert(item: $libraryViewState.appError) {
+            appError in
             AlertModal.show(libraryViewState.errorTitle, appError)
         }
-        .sheet(
-            item: $libraryViewState.tagEditorPDFFile,
-            onDismiss: libraryViewState.closeTagEditor
-        ) { pdfFile in
-            LibraryTagEditorView(
-                libraryViewState: libraryViewState,
-                pdfFile: pdfFile
-            )
+        .sheet(item: $libraryViewState.tagEditorPDFFile,onDismiss: libraryViewState.closeTagEditor) {
+            pdfFile in
+            LibraryTagEditorView(libraryViewState: libraryViewState,pdfFile: pdfFile)
         }
     }
 
     @ViewBuilder
     private var translationTaskView: some View {
         if let request = libraryViewState.translationRequest, request.text != nil {
-            Color.clear
-                .frame(width: 0, height: 0)
-                .translationTask(request.configuration) { session in
-                    await LibraryViewService.translate(libraryViewState, session, request)
-                }
-                .id(request.id)
+            Color.clear.frame(width: 0, height: 0).translationTask(request.configuration) {
+                session in
+                await LibraryViewService.translate(libraryViewState, session, request)
+            }
+            .id(request.id)
         }
     }
 
@@ -93,11 +88,7 @@ struct LibraryView:View {
     
     private var displayedPDFFiles: [PDFFile] {
         return existingPDFFiles.filter {
-            LibraryViewService.matches(
-                $0,
-                libraryViewState.searchText,
-                libraryViewState.selectedSearchMode
-            )
+            LibraryViewService.matches($0,libraryViewState.searchText,libraryViewState.selectedSearchMode)
         }
     }
 
@@ -105,12 +96,14 @@ struct LibraryView:View {
         HStack{
             TextField("Search", text:$libraryViewState.searchText)
                 .textFieldStyle(.roundedBorder)
-        }.padding(.top,10)
+        }
+        .padding(.top,10)
     }
 
     private func searchTextModeView() -> some View{
         Picker("Search mode", selection: $libraryViewState.selectedSearchMode) {
-            ForEach(SearchMode.allCases, id: \.self) { searchMode in
+            ForEach(SearchMode.allCases, id: \.self) {
+                searchMode in
                 Text(searchMode.title)
                     .tag(searchMode)
             }
@@ -145,40 +138,38 @@ struct LibraryView:View {
                 }
             }
         }
-            .contentShape(Rectangle())
-            .onTapGesture(count: 2) {
+        .contentShape(Rectangle())
+        .onTapGesture(count: 2) {
+            openPDF(pdfFile)
+        }
+        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+            Button("Delete", role: .destructive) {
+                LibraryViewService.deletePDF(libraryViewState, modelContext, pdfFile)
+            }
+
+            Button("Copy File Path") {
+                LibraryViewService.copyFilePath(libraryViewState, pdfFile)
+            }
+        }
+        .contextMenu {
+            Button("Open PDF") {
                 openPDF(pdfFile)
             }
-            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                Button("Delete", role: .destructive) {
-                    LibraryViewService.deletePDF(libraryViewState, modelContext, pdfFile)
-                }
-
-                Button("Copy File Path") {
-                    LibraryViewService.copyFilePath(libraryViewState, pdfFile)
-                }
+            
+            Button("Edit Tags…") {
+                editTags(pdfFile)
             }
-            .contextMenu {
-                Button("Open PDF") {
-                    openPDF(pdfFile)
-                }
-
-                Button("Edit Tags…") {
-                    editTags(pdfFile)
-                }
-
-                Button("Copy File Path") {
-                    LibraryViewService.copyFilePath(libraryViewState, pdfFile)
-                }
-
-                Button("Delete", role: .destructive) {
-                    LibraryViewService.deletePDF(libraryViewState, modelContext, pdfFile)
-                }
+            
+            Button("Copy File Path") {
+                LibraryViewService.copyFilePath(libraryViewState, pdfFile)
             }
+            
+            Button("Delete", role: .destructive) {
+                LibraryViewService.deletePDF(libraryViewState, modelContext, pdfFile)
+            }
+        }
     }
 
-
-    
     func pdfView() -> some View{
         
         VStack(spacing: 8){
@@ -190,17 +181,11 @@ struct LibraryView:View {
                     
                     Menu("Translation") {
                         Button("Japanese") {
-                            LibraryViewService.startTranslation(
-                                libraryViewState,
-                                .japanese
-                            )
+                            LibraryViewService.startTranslation(libraryViewState,.japanese)
                         }
 
                         Button("English") {
-                            LibraryViewService.startTranslation(
-                                libraryViewState,
-                                .english
-                            )
+                            LibraryViewService.startTranslation(libraryViewState,.english)
                         }
                     }
                     .disabled(libraryViewState.isTranslating)
@@ -223,10 +208,7 @@ struct LibraryView:View {
                 .padding(.top, 8)
                 
                 ZStack(alignment: .trailing) {
-                    DirectoryPDFView(
-                        selectedPDFFile.resolvedURL,
-                        libraryViewState
-                    )
+                    DirectoryPDFView(selectedPDFFile.resolvedURL,libraryViewState)
 
                     TranslationResultView(
                         text: libraryViewState.translatedText, close: {
@@ -237,9 +219,7 @@ struct LibraryView:View {
                     .background(.background)
                     .opacity(libraryViewState.isTranslationPresented ? 1 : 0)
                     .allowsHitTesting(libraryViewState.isTranslationPresented)
-                    .accessibilityHidden(
-                        libraryViewState.isTranslationPresented == false
-                    )
+                    .accessibilityHidden(libraryViewState.isTranslationPresented == false)
                 }
                 
                 
@@ -268,18 +248,13 @@ struct LibraryView:View {
     }
 
     private func rowTags(_ pdfFile: PDFFile) -> [PDFTag] {
-        Array(
-            pdfFile.tags
-                .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
-                .prefix(5)
-        )
+        Array(pdfFile.tags.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }.prefix(5))
     }
 
     private func closeDisplayedPDF() {
         libraryViewState.cancelTranslation()
 
-        Task {
-            @MainActor in
+        Task { @MainActor in
      
             await Task.yield()
             
@@ -353,10 +328,7 @@ private struct ReadOnlyTextView: NSViewRepresentable {
     }
 
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
-        guard
-            let textView = scrollView.documentView as? NSTextView,
-            textView.string != text
-        else {
+        guard let textView = scrollView.documentView as? NSTextView, textView.string != text else {
             return
         }
 
