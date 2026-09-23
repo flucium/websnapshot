@@ -42,7 +42,9 @@ final class SafariRequestService: ObservableObject {
         do {
             let request = try SafariCaptureRequest(openURL: url)
             
-            guard receivedIDs.insert(request.id).inserted else { return }
+            guard receivedIDs.insert(request.id).inserted else {
+                return
+            }
             
             receivedOrder.append(request.id)
             
