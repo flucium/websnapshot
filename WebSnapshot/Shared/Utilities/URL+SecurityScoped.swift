@@ -10,23 +10,11 @@ extension URL {
             }
         }
 
-        return try url.bookmarkData(
-            options: [.withSecurityScope],
-            includingResourceValuesForKeys: nil,
-            relativeTo: nil
-        )
+        return try url.bookmarkData(options: [.withSecurityScope],includingResourceValuesForKeys: nil,relativeTo: nil)
     }
 
-    static func resolveSecurityScopedBookmarkData(
-        _ data: Data,
-        _ isStale: inout Bool
-    ) throws -> URL {
-        try URL(
-            resolvingBookmarkData: data,
-            options: [.withSecurityScope, .withoutUI],
-            relativeTo: nil,
-            bookmarkDataIsStale: &isStale
-        )
+    static func resolveSecurityScopedBookmarkData(_ data: Data,_ isStale: inout Bool) throws -> URL {
+        try URL(resolvingBookmarkData: data,options: [.withSecurityScope, .withoutUI],relativeTo: nil,bookmarkDataIsStale: &isStale)
     }
 
 }
