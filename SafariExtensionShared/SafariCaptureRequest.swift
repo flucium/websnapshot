@@ -13,17 +13,7 @@ nonisolated struct SafariCaptureRequest: Equatable, Sendable {
     }
 
     init(id: UUID,url: URL) throws {
-        guard url.absoluteString.utf8.count <= 32_768,
-              let scheme = url.scheme?.lowercased(),
-              
-                [
-                    "http",
-                    "https"
-                ].contains(
-                    scheme
-                ),
-              
-            let host = url.host, !host.isEmpty, url.user == nil, url.password == nil else {
+        guard url.absoluteString.utf8.count <= 32_768, let scheme = url.scheme?.lowercased(), ["http","https"].contains(scheme), let host = url.host, !host.isEmpty, url.user == nil, url.password == nil else {
                 throw InvalidRequest.malformed
             }
         
@@ -33,16 +23,7 @@ nonisolated struct SafariCaptureRequest: Equatable, Sendable {
     }
     
     init(message: [String: Any]) throws {
-        guard message["type"] as? String == "save-page",
-         
-                let id = message["id"] as? String, let uuid = UUID(
-                
-                    uuidString: id
-              ),
-              
-              let address = message["url"] as? String,
-              
-            let url = URL(string: address) else {
+        guard message["type"] as? String == "save-page", let id = message["id"] as? String, let uuid = UUID(uuidString: id), let address = message["url"] as? String, let url = URL(string: address) else {
             throw InvalidRequest.malformed
         }
         
@@ -51,11 +32,7 @@ nonisolated struct SafariCaptureRequest: Equatable, Sendable {
     
     init(openURL: URL) throws {
         
-        guard let components = URLComponents(
-            url: openURL,
-            resolvingAgainstBaseURL: false
-        ),
-        
+        guard let components = URLComponents(url: openURL,resolvingAgainstBaseURL: false),
         components.scheme == "websnapshot", components.host == "capture",
         components.path.isEmpty, components.user == nil, components.password == nil,
         components.port == nil, components.fragment == nil,
@@ -87,16 +64,11 @@ nonisolated struct SafariCaptureRequest: Equatable, Sendable {
         components.host = "capture"
         
         components.queryItems = [
-            URLQueryItem(
-                name: "id",
-                value: id.uuidString
-            ),
-            URLQueryItem(
-                name: "url",
-                value: url.absoluteString
-            ),
+            URLQueryItem(name: "id",value: id.uuidString),
+            URLQueryItem(name: "url",value: url.absoluteString),
         ]
         
         return components.url!
     }
 }
+    
