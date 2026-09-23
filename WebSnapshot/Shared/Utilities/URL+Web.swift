@@ -1,12 +1,10 @@
 import Foundation
+import Darwin
 
 extension URL{
-    static func supportedWebURL(
-        _ input: String
-    ) -> URL? {
-        let trimmedInput = input.trimmingCharacters(
-            in: .whitespacesAndNewlines
-        )
+    static func supportedWebURL(_ input: String) -> URL? {
+        
+        let trimmedInput = input.trimmingCharacters(in: .whitespacesAndNewlines)
         
         guard trimmedInput.isEmpty == false else {
             return nil
@@ -14,18 +12,13 @@ extension URL{
         
         let candidate: String
         
-        if trimmedInput
-            .contains(
-                "://"
-            ) {
+        if trimmedInput.contains("://") {
             candidate = trimmedInput
         } else {
             candidate = "https://" + trimmedInput
         }
         
-        guard let url = URL(
-            string: candidate
-        ), url.isSupportedWebURL else {
+        guard let url = URL(string: candidate), url.isSupportedWebURL else {
             return nil
         }
         
@@ -44,74 +37,65 @@ extension URL{
             return false
         }
         
-        // true localhost or ipaddress(IPv4)
-        if localHost(
-            host
-        ) || isIPv4(
-            host
-        ) {
+        // Accept IP literals before applying DNS label validation.
+        if localHost(host) || isIPv4(host) || isIPv6(self.host(percentEncoded: false)?.lowercased() ?? host) {
             return true
         }
         
         // domain check
-        guard host
-            .contains(
-                "."
-            ) else {
+        guard host.contains(".") else {
+            
             return false
         }
         
-        let entries = host.split(
-            separator: ".",
-            omittingEmptySubsequences: false
-        )
+        let entries = host.split(separator: ".",omittingEmptySubsequences: false)
         
         guard entries.count >= 2 else {
             return false
         }
         
-        return entries
-            .allSatisfy {
-                entry in entry.isEmpty == false && entry.unicodeScalars
-                    .allSatisfy {
-                        CharacterSet(
-                            charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-"
-                        )
-                        .contains(
-                            $0
-                        )
-                    }
+        return entries.allSatisfy {
+            entry in entry.isEmpty == false && entry.unicodeScalars.allSatisfy {
+                CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-").contains($0)
             }
+        }
     }
     
 }
 
 extension URL {
-    @inline(
-        __always
-    )
-    private func localHost(
-        _ host: String
-    ) -> Bool {
+    @inline(__always)
+    private func localHost(_ host: String) -> Bool {
         host == "localhost"
     }
     
-    @inline(
-        __always
-    )
-    private func isIPv4(
-        _ host: String
-    ) -> Bool {
+    @inline(__always)
+    private func isIPv4(_ host: String) -> Bool {
+        
         var in_address = in_addr()
         
-        return host
-            .withCString {
-                cString in
-                inet_pton(
-                    AF_INET,
-                    cString,
-                    &in_address
-                ) == 1
+        return host.withCString {
+            cString in
+            inet_pton(AF_INET,cString,&in_address) == 1
+        }
+    }
+
+    private func isIPv6(_ host: String) -> Bool {
+        
+        let literal = host.hasPrefix("[") && host.hasSuffix("]") ? String(host.dropFirst().dropLast()) : host
+        
+        let parts = literal.split(separator: "%", omittingEmptySubsequences: false)
+        
+        guard parts.count <= 2, parts.allSatisfy({
+            !$0.isEmpty
+        }) else {
+            return false
+        }
+        
+        var value = in6_addr()
+        
+        return String(parts[0]).withCString {
+            inet_pton(AF_INET6, $0, &value) == 1
         }
     }
 }
