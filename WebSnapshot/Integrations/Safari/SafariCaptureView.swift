@@ -13,15 +13,21 @@ struct SafariCaptureView: View {
         VStack(spacing: 0) {
             HStack {
                 if requests.current != nil {
-                    ProgressView().controlSize(.small)
+                    ProgressView()
+                        .controlSize(.small)
                 }
     
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(requests.status).font(.headline)
+                    
+                    Text(requests.status)
+                        .font(.headline)
                 
                     if let url = requests.current?.url {
-                        Text(url.absoluteString).lineLimit(1).truncationMode(.middle)
-                            .font(.caption).foregroundStyle(.secondary)
+                        Text(url.absoluteString)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
                     
                     if !requests.pending.isEmpty {
@@ -53,9 +59,14 @@ struct SafariCaptureView: View {
                     
                     HStack {
                         if requests.canRetry {
-                            Button("Retry") { requests.retry(modelContext) }
+                            Button("Retry") {
+                                requests.retry(modelContext)
+                            }
                         }
-                        Button("Dismiss") { requests.dismissError(modelContext) }
+                        
+                        Button("Dismiss") {
+                            requests.dismissError(modelContext)
+                        }
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -71,8 +82,14 @@ struct SafariCaptureView: View {
             }
         }
         .frame(minWidth: 730, minHeight: 400)
-        .onAppear { requests.startProcessing(modelContext) }
-        .onChange(of: requests.pending.count) { requests.startProcessing(modelContext) }
-        .onDisappear { requests.cancel() }
+        .onAppear {
+            requests.startProcessing(modelContext)
+        }
+        .onChange(of: requests.pending.count) {
+            requests.startProcessing(modelContext)
+        }
+        .onDisappear {
+            requests.cancel()
+        }
     }
 }
