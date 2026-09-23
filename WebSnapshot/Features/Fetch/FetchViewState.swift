@@ -4,11 +4,16 @@ import WebKit
 
 @MainActor
 final class FetchViewState : WebState{
-    private var loadRequestID: UUID?
-
-    var loadTask: Task<Void, Never>?
+    @Published private(set) var isSaving = false
     
     @Published var failedOperation: Operation?
+    
+    private var loadRequestID: UUID?
+    private var saveRequestID: UUID?
+
+    var loadTask: Task<Void, Never>?
+    var saveTask: Task<Void, Never>?
+
 
     enum Operation: Equatable {
         case load
@@ -26,9 +31,13 @@ final class FetchViewState : WebState{
 
     
     func beginLoad() -> UUID {
+        
         cancelLoad()
+        
         let id = UUID()
+        
         loadRequestID = id
+        
         return id
     }
 
@@ -37,21 +46,74 @@ final class FetchViewState : WebState{
     }
 
     func finishLoad(_ id: UUID) {
-        guard isCurrentLoad(id) else { return }
+        guard isCurrentLoad(id) else {
+            return
+        }
+        
         loadTask = nil
+        
         loadRequestID = nil
     }
 
     func cancelLoad() {
+        
+        cancelSave()
+        
         loadTask?.cancel()
+        
         loadTask = nil
+        
         loadRequestID = nil
+        
         webPage.stopLoading()
     }
 
+    func beginSave() -> UUID? {
+        guard !isSaving else {
+            return nil
+        }
+        
+        let id = UUID()
+        
+        saveRequestID = id
+        
+        isSaving = true
+        
+        return id
+    }
+
+    func isCurrentSave(_ id: UUID) -> Bool {
+        saveRequestID == id
+    }
+
+    func finishSave(_ id: UUID) {
+        guard isCurrentSave(id) else {
+            return
+        }
+        
+        saveRequestID = nil
+        
+        saveTask = nil
+        
+        isSaving = false
+    }
+
+    func cancelSave() {
+        saveTask?.cancel()
+        
+        saveTask = nil
+        
+        saveRequestID = nil
+        
+        isSaving = false
+    }
+
     override func clear() {
+        
         cancelLoad()
+        
         super.clear()
+        
         failedOperation = nil
     }
 }
