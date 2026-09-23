@@ -1,54 +1,38 @@
 import WebKit
 
 final class WebService{
-    static func export(
-        _ webPage:WebPage
-    ) async throws -> PDFFileDocument{
+    static func export(_ webPage:WebPage) async throws -> PDFFileDocument{
+        
         let wait:TimeInterval = 15
         
         let sleep:UInt64 = 300_000_000
         
         guard let loadedURL = webPage.url, loadedURL.isSupportedWebURL else {
-            throw AppError
-                .invalidLoad(
-                    "Load a webpage before saving."
-                )
+            throw AppError.invalidLoad("Load a webpage before saving.")
         }
+
+        let source = try await WebExportSource(webPage)
         
         do{
-            try await waitUntilPageStopsLoading(
-                webPage,
-                wait
-            )
+            try await waitUntilPageStopsLoading(webPage,wait)
             
-            try await preparePageForPDFExport(
-                webPage
-            )
+            try await preparePageForPDFExport(webPage)
             
-            try await waitUntilPageResourcesAreReady(
-                webPage,
-                wait
-            )
+            try await waitUntilPageResourcesAreReady(webPage,wait)
             
-            try await Task
-                .sleep(
-                    nanoseconds: sleep
-                )
+            try await Task.sleep(nanoseconds: sleep)
             
         } catch let error as CancellationError {
             throw error
         } catch let error as AppError {
             throw error
         } catch {
-            throw AppError
-                .invalidLoad(
-                    "The webpage did not become ready for export.",
-                    error.localizedDescription,
-                    error
-                )
+            throw AppError.invalidLoad("The webpage did not become ready for export.",error.localizedDescription,error)
         }
         
         
+        try await source.validate(webPage)
+
         let originalMediaType = webPage.mediaType
         
         webPage.mediaType = .screen
@@ -60,107 +44,91 @@ final class WebService{
         let data:Data
         
         do {
-            data = try await webPage
-                .exported(
-                    as: .pdf(
-                        region: .contents,
-                        allowTransparentBackground: false
-                    )
-                )
+            data = try await webPage.exported( as: .pdf( region: .contents,allowTransparentBackground: false ) )
         } catch let error as CancellationError {
             throw error
         } catch let error as AppError {
             throw error
         } catch {
-            throw AppError
-                .invalidIO(
-                    "The webpage could not be exported as a PDF.",
-                    error.localizedDescription,
-                    error
-                )
+            throw AppError.invalidIO("The webpage could not be exported as a PDF.",error.localizedDescription,error)
         }
         
-        let pdfFileDocument:PDFFileDocument = PDFFileDocument(
-            data
-        )
+        try await source.validate(webPage)
+
+        let pdfFileDocument:PDFFileDocument = PDFFileDocument(data)
         
         return pdfFileDocument
     }
     
-    static func fetch(
-        _ url:URL,
-        _ onStart: (WebPage) -> Void = { _ in }
-    ) async throws -> WebPage{
+    static func fetch(_ url:URL,_ onStart: (WebPage) -> Void = { _ in }) async throws -> WebPage{
+        
         let websiteDataStore = WKWebsiteDataStore.nonPersistent()
-        await websiteDataStore.httpCookieStore
-            .setCookiePolicy(
-                .disallow
-            )
+        
+        await websiteDataStore.httpCookieStore.setCookiePolicy(.disallow)
         
         var configuration = WebPage.Configuration()
+        
         configuration.websiteDataStore = websiteDataStore
         
-        let webPage:WebPage = WebPage(
-            configuration: configuration
-        )
+        let webPage:WebPage = WebPage(configuration: configuration)
         
         try Task.checkCancellation()
+        
         let navigation = webPage.load(url)
+        
         onStart(webPage)
 
         do {
             try await waitForNavigation(navigation)
+        
             return webPage
         } catch {
+            
             webPage.stopLoading()
+            
             throw error
         }
     }
 
-    static func waitForNavigation<Events: AsyncSequence>(_ events: Events) async throws
-    where Events.Element == WebPage.NavigationEvent {
+    static func waitForNavigation<Events: AsyncSequence>(_ events: Events) async throws where Events.Element == WebPage.NavigationEvent {
         do {
             for try await event in events {
+                
                 try Task.checkCancellation()
+                
                 if event == .finished {
                     return
                 }
+                
             }
+            
             try Task.checkCancellation()
+            
             throw AppError.invalidLoad("The webpage stopped loading before it finished.")
+            
         } catch WebPage.NavigationError.failedProvisionalNavigation(let error) {
+            
             throw AppError(error)
         }
     }
     
-    static private func waitUntilPageStopsLoading(
-        _ webPage:WebPage,
-        _ timeout: TimeInterval
-    ) async throws {
-        let deadline = Date().addingTimeInterval(
-            timeout
-        )
+    static private func waitUntilPageStopsLoading(_ webPage:WebPage,_ timeout: TimeInterval) async throws {
+        
+        let deadline = Date().addingTimeInterval(timeout)
         
         while webPage.isLoading {
             
             guard Date() < deadline else {
-                throw AppError
-                    .timeout(
-                        "Timed out waiting for the page to finish loading."
-                    )
+                throw AppError.timeout("Timed out waiting for the page to finish loading.")
             }
             
-            try await Task
-                .sleep(
-                    nanoseconds: 150_000_000
-                )
+            try await Task.sleep(nanoseconds: 150_000_000)
         }
     }
     
     
-    static private func preparePageForPDFExport(
-        _ webPage:WebPage
-    ) async throws {
+    static private func preparePageForPDFExport(_ webPage:WebPage) async throws {
+        
         _ = try await webPage
             .callJavaScript(
             """
@@ -189,18 +157,14 @@ final class WebService{
             )
         
         for _ in 0..<60 {
-            let hasMoreContent = try await scrollTowardBottomForPDF(
-                webPage
-            )
+            let hasMoreContent = try await scrollTowardBottomForPDF(webPage)
             
-            try await Task
-                .sleep(
-                    nanoseconds: 150_000_000
-                )
+            try await Task.sleep(nanoseconds: 150_000_000)
             
             if hasMoreContent == false{
                 break
             }
+            
         }
         
         _ = try await webPage
@@ -212,9 +176,7 @@ final class WebService{
             )
     }
     
-    static private func scrollTowardBottomForPDF(
-        _ webPage:WebPage
-    ) async throws -> Bool {
+    static private func scrollTowardBottomForPDF(_ webPage:WebPage) async throws -> Bool {
         let result = try await webPage.callJavaScript(
             """
             const viewportHeight = Math.max(window.innerHeight || 0, 1);
@@ -244,39 +206,25 @@ final class WebService{
     }
     
     
-    static private func waitUntilPageResourcesAreReady(
-        _ webPage:WebPage,
-        _ timeout: TimeInterval
-    ) async throws {
+    static private func waitUntilPageResourcesAreReady(_ webPage:WebPage,_ timeout: TimeInterval) async throws {
         
-        let deadline = Date().addingTimeInterval(
-            timeout
-        )
+        let deadline = Date().addingTimeInterval(timeout)
         
         while true {
-            if try await arePageResourcesReadyForPDF(
-                webPage
-            ) {
+            if try await arePageResourcesReadyForPDF(webPage) {
                 return
             }
             
             guard Date() < deadline else {
-                throw AppError
-                    .timeout(
-                        "Timed out waiting for page resources to finish loading."
-                    )
+                throw AppError.timeout("Timed out waiting for page resources to finish loading.")
             }
             
-            try await Task
-                .sleep(
-                    nanoseconds: 200_000_000
-                )
+            try await Task.sleep(nanoseconds: 200_000_000)
         }
     }
     
-    static private func arePageResourcesReadyForPDF(
-        _ webPage:WebPage
-    ) async throws -> Bool {
+    static private func arePageResourcesReadyForPDF(_ webPage:WebPage) async throws -> Bool {
+        
         let result = try await webPage.callJavaScript(
             """
             const images = Array.from(document.images || []);
