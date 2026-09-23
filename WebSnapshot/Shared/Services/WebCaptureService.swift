@@ -22,12 +22,23 @@ enum WebCaptureService {
     }
 
     @discardableResult
-    static func save( _ document: PDFFileDocument, _ title: String, _ url: URL?, _ modelContext: ModelContext, _ storageSettings: [StorageSettings], _ chooseDestination: @MainActor (String, URL?, PDFFileDocument?) throws -> URL? = savePanel ) throws -> URL? {
+    static func save( _ document: PDFFileDocument, _ title: String, _ url: URL?, _ modelContext: ModelContext, _ storageSettings:[StorageSettings], _ chooseDestination: (@MainActor (String, URL?, PDFFileDocument?) throws -> URL?)? = nil ) throws -> URL? {
         
         switch StorageSettingsService.storage(storageSettings) {
         case .flexibility:
         
-            guard let destination = try chooseDestination(title, url, document) else {
+            let selectedURL: URL?
+        
+            if let chooseDestination {
+                try PDFFileService.refreshLocations(modelContext)
+            
+                selectedURL = try chooseDestination(title, url, document)
+            } else {
+                selectedURL = try savePanel(title, url, document) {
+                    try PDFFileService.refreshLocations(modelContext)
+                }
+            }
+            guard let destination = selectedURL else {
                 return nil
             }
             
@@ -46,6 +57,8 @@ enum WebCaptureService {
             defer {
                 if isAccessing { directory.stopAccessingSecurityScopedResource() }
             }
+            
+            try PDFFileService.refreshLocations(modelContext)
             
             guard let destination = try saveToDirectory(title, url, document, directory) else {
                 return nil
