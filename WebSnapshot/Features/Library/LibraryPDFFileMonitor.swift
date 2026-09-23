@@ -42,11 +42,7 @@ final class LibraryPDFFileMonitor: ObservableObject {
 
             monitors[key] = monitor
             if monitor.start() == false && FileManager.default.fileExists(atPath: url.path) {
-                AppLogger.recordDiagnostic(
-                    "The file monitor could not be started.",
-                    "Monitor PDF",
-                    url
-                )
+                AppLogger.recordDiagnostic("The file monitor could not be started.","Monitor PDF",url)
             }
         }
     }
@@ -62,13 +58,17 @@ final class LibraryPDFFileMonitor: ObservableObject {
 }
 
 private final class PDFFileMonitor {
-    let url: URL
     private let onMissing: (URL, Bool) -> Void
 
+    let url: URL
+
     private var source: DispatchSourceFileSystemObject?
+
     private var fileDescriptor: CInt = -1
+
     private var isAccessingSecurityScopedResource = false
 
+    
     init(_ url: URL, _ onMissing: @escaping (URL, Bool) -> Void) {
         self.url = url
         self.onMissing = onMissing
@@ -112,10 +112,12 @@ private final class PDFFileMonitor {
         source.setEventHandler { [weak self, weak source] in
             let wasDeleted = source?.data.contains(.delete) == true
             Task { @MainActor in
-                self?.handleFileEvent(wasDeleted: wasDeleted)
+                self?.handleFileEvent(wasDeleted)
             }
         }
+        
         let descriptor = fileDescriptor
+        
         source.setCancelHandler {
             close(descriptor)
         }
@@ -135,7 +137,7 @@ private final class PDFFileMonitor {
         stopAccessingSecurityScopedResource()
     }
 
-    private func handleFileEvent(wasDeleted: Bool) {
+    private func handleFileEvent(_ wasDeleted: Bool) {
         guard FileManager.default.fileExists( atPath: url.path) == false else {
             return
         }
