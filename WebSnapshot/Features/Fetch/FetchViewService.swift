@@ -17,7 +17,9 @@ final class FetchViewService {
 
         state.loadTask = Task {
             do {
-                _ = try await fetch(input) { page in
+                _ = try await fetch(input) {
+                    page in
+                    
                     guard state.isCurrentLoad(requestID) else {
                         return
                     }
@@ -50,32 +52,43 @@ final class FetchViewService {
     }
 
     static func saveWebPage(_ state: FetchViewState,_ modelContext: ModelContext,_ storageSettings: [StorageSettings]) {
-        let page = state.webPage
+        guard let requestID = state.beginSave() else {
+            return
+        }
         
-        let title = page.title
+        let page = state.webPage
         
         let url = page.url
 
-        Task {
+        state.saveTask = Task {
+            defer {
+                state.finishSave(requestID)
+            }
+            
             do {
                 let document = try await WebService.export(page)
+
+                try Task.checkCancellation()
+                
+                guard state.isCurrentSave(requestID), state.webPage === page else {
+                    return
+                }
         
                 state.pdfFileDocument = document
 
-                guard try WebCaptureService.save(
-                    document,
-                     title,
-                     url,
-                     modelContext,
-                     storageSettings
-                ) != nil else {
+                guard try WebCaptureService.save(document,page.title,page.url,modelContext,storageSettings) != nil else {
                     return
                 }
 
                 state.appError = nil
                 
                 state.failedOperation = nil
+                
             } catch {
+                guard state.isCurrentSave(requestID) else {
+                    return
+                }
+                
                 handle(error, .save,  state, url)
             }
         }
@@ -86,8 +99,10 @@ final class FetchViewService {
             
         case .load:
             loadWebPage(state)
+            
         case .save:
             saveWebPage(state, modelContext, storageSettings)
+            
         case nil:
             break
         }
@@ -111,11 +126,7 @@ final class FetchViewService {
             
         } catch {
         
-            throw AppError.invalidLoad(
-                "The webpage could not be loaded.",
-                error.localizedDescription,
-                error
-            )
+            throw AppError.invalidLoad("The webpage could not be loaded.", error.localizedDescription, error)
         }
         
     }
@@ -125,13 +136,7 @@ final class FetchViewService {
             return
         }
 
-        AppLogger.record(
-            appError,
-            operation == .load ? "Load webpage" : "Save webpage as PDF",
-            targetURL ?? (operation == .load
-                ? URL.supportedWebURL(state.searchText)
-                : state.webPage.url)
-        )
+        AppLogger.record(appError, operation == .load ? "Load webpage" : "Save webpage as PDF", targetURL ?? (operation == .load ? URL.supportedWebURL(state.searchText) : state.webPage.url) )
         
         state.failedOperation = operation
         
