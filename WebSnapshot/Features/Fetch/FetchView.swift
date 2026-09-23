@@ -34,9 +34,9 @@ struct FetchView: View {
         HStack {
             TextField("https://...",text: $fetchViewState.searchText)
                 .textFieldStyle(.roundedBorder)
-            .onSubmit {
-                FetchViewService.loadWebPage(fetchViewState)
-            }
+                .onSubmit {
+                    FetchViewService.loadWebPage(fetchViewState)
+                }
             
             Button("Load", action: {
                 FetchViewService.loadWebPage(fetchViewState)
@@ -50,15 +50,15 @@ struct FetchView: View {
             Button("Save", action: {
                 FetchViewService.saveWebPage(fetchViewState,modelContext,storageSettings)
             })
+            .disabled(fetchViewState.isSaving || fetchViewState.webPage.isLoading)
+
+            if fetchViewState.isSaving {
+                ProgressView().controlSize(.small)
+            }
         }
-        .alert(
-            item:$fetchViewState.appError
-        ){
+        .alert(item:$fetchViewState.appError){
             appError in
-            AlertModal.show(
-                fetchViewState.failedOperation?.errorTitle ?? "Operation Could Not Be Completed",
-                appError
-            ) {
+            AlertModal.show(fetchViewState.failedOperation?.errorTitle ?? "Operation Could Not Be Completed",appError) {
                 FetchViewService.retryFailedOperation(fetchViewState, modelContext, storageSettings)
             }
         }
@@ -71,6 +71,8 @@ struct FetchView: View {
                 Color(nsColor: .windowBackgroundColor)
             }else{
                 WebView(fetchViewState.webPage)
+                    .disabled(fetchViewState.isSaving)
+                    .allowsHitTesting(!fetchViewState.isSaving)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
