@@ -7,11 +7,7 @@ struct DirectoryPDFView: NSViewRepresentable {
     
     let url: URL
     
-    
-    init(
-        _ url: URL,
-        _ libraryViewState: LibraryViewState
-    ) {
+    init(_ url: URL,_ libraryViewState: LibraryViewState) {
         self.url = url
         self.libraryViewState = libraryViewState
     }
@@ -27,7 +23,7 @@ struct DirectoryPDFView: NSViewRepresentable {
         view.displayMode = .singlePageContinuous
         view.displayDirection = .vertical
 
-        NotificationCenter.default.addObserver(context.coordinator,selector: #selector(Coordinator.pageChanged(_:)),name: .PDFViewPageChanged,object: view)
+        NotificationCenter.default.addObserver(context.coordinator,selector: #selector(Coordinator.pageChanged(_:)), name: .PDFViewPageChanged,object: view)
 
         return view
     }
@@ -55,11 +51,13 @@ struct DirectoryPDFView: NSViewRepresentable {
             view.document = nil
 
             let appError = AppError(error)
+            
             AppLogger.record(appError, "Open PDF", url)
 
             DispatchQueue.main.async {
                 context.coordinator.present(appError)
             }
+            
             return
         }
 
@@ -71,11 +69,13 @@ struct DirectoryPDFView: NSViewRepresentable {
             view.document = nil
 
             let appError = AppError(error)
+            
             AppLogger.record(appError, "Open PDF", url)
 
             DispatchQueue.main.async {
                 context.coordinator.present(appError)
             }
+            
             return
         }
 
