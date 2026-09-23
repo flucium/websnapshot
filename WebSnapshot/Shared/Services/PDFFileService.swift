@@ -2,119 +2,123 @@ import Foundation
 import SwiftData
 
 final class PDFFileService {
-    static func save(
-        _ modelContext: ModelContext,
-        _ url:URL
-    ) throws {
+    static func save(_ modelContext: ModelContext,_ url:URL) throws {
         
         let bookmarkData: Data
         
         do {
-            bookmarkData = try URL
-                .securityScopedBookmarkData(
-                    url
-                )
+            bookmarkData = try URL.securityScopedBookmarkData(url)
         } catch {
-            throw AppError(
-                error
-            )
+            throw AppError(error)
         }
         
         do{
-            if let pdfFile = try fetch(
-                modelContext
-            ).first(
-                where: { $0.url == url
-                }){
+            let entries = try fetch(modelContext)
+            
+            try updateLocations(entries)
+            
+            if let pdfFile = entries.first(where: {
+                $0.url.standardizedFileURL == url.standardizedFileURL
+            }) {
                 
                 pdfFile.bookmarkData = bookmarkData
                 
-                try modelContext
-                    .save()
+                try modelContext.save()
                 
             }else{
-                modelContext
-                    .insert(
-                        PDFFile(
-                            url,
-                            bookmarkData
-                        )
-                    )
+                modelContext.insert(PDFFile(url,bookmarkData))
                 
-                try modelContext
-                    .save()
+                try modelContext.save()
             }
             
         } catch let error as AppError {
-            modelContext
-                .rollback()
+            modelContext.rollback()
+            
             throw error
         } catch {
-            modelContext
-                .rollback()
-            throw AppError
-                .system(
-                    "The PDF could not be added to the library.",
-                    error.localizedDescription,
-                    error
-                )
+            modelContext.rollback()
+            
+            throw AppError.system("The PDF could not be added to the library.",error.localizedDescription,error)
         }
     }
-    
-    static func delete(
-        _ modelContext: ModelContext ,
-        _ url: URL
-    ) throws {
+
+    static func refreshLocations(_ modelContext: ModelContext) throws {
+        
         do {
-            let matched = try fetch(
-                modelContext
-            ).filter {
+        
+            if try updateLocations(fetch(modelContext)) {
+                try modelContext.save()
+            }
+            
+        } catch {
+            
+            modelContext.rollback()
+            
+            throw AppError.system("The library's file locations could not be updated before saving.",error.localizedDescription,error)
+        }
+    }
+
+    @discardableResult
+    private static func updateLocations(_ entries: [PDFFile]) throws -> Bool {
+        var changed = false
+        
+        for entry in entries {
+        
+            guard let resolvedURL = try? entry.resolveURL() else {
+                continue
+            }
+            
+            let currentURL = resolvedURL.standardizedFileURL
+            
+            guard entry.url != currentURL else {
+                continue
+            }
+            
+            let bookmark = try URL.securityScopedBookmarkData(resolvedURL)
+            
+            entry.url = currentURL
+            
+            entry.bookmarkData = bookmark
+            
+            changed = true
+        }
+        
+        return changed
+    }
+    
+    static func delete(_ modelContext: ModelContext ,_ url: URL) throws {
+        do{
+            let matched = try fetch(modelContext).filter {
                 $0.url == url
             }
             
-            PDFTagService.deleteTagsOrphanedByDeleting(
-                matched,
-                in: modelContext
-            )
+            PDFTagService.deleteTagsOrphanedByDeleting(matched, in: modelContext)
 
             for entry in matched {
-                modelContext
-                    .delete(
-                        entry
-                    )
+                modelContext.delete(entry)
             }
             
             if matched.isEmpty == false{
-                try modelContext
-                    .save()
+                try modelContext.save()
             }
             
         } catch let error as AppError {
-            modelContext
-                .rollback()
+            modelContext.rollback()
+            
             throw error
         } catch {
-            modelContext
-                .rollback()
-            throw AppError
-                .system(
-                    "The PDF could not be removed from the library.",
-                    error.localizedDescription,
-                    error
-                )
+            modelContext.rollback()
+            
+            throw AppError.system("The PDF could not be removed from the library.",error.localizedDescription,error)
         }
     }
     
     
-    static func refreshBookmarks(
-        _ pdfFileURLs: [URL],
-        _ modelContext: ModelContext
-    ) throws {
+    static func refreshBookmarks(_ pdfFileURLs: [URL],_ modelContext: ModelContext) throws {
         
-        let pdfFilePaths = Set(
-            pdfFileURLs.map{
-                $0.standardizedFileURL.path
-            })
+        let pdfFilePaths = Set(pdfFileURLs.map{
+            $0.standardizedFileURL.path
+        })
         
         guard pdfFilePaths.isEmpty == false else {
             return
@@ -123,34 +127,20 @@ final class PDFFileService {
         var needs = false
         
         do {
-            for pdfFile in try fetch(
-                modelContext
-            ) {
+            for pdfFile in try fetch(modelContext) {
                 let fileURL = pdfFile.resolvedURL
                 
-                guard pdfFilePaths
-                    .contains(
-                        fileURL.deletingLastPathComponent().standardizedFileURL.path
-                    ) else {
+                guard pdfFilePaths.contains(fileURL.deletingLastPathComponent().standardizedFileURL.path) else {
                     continue
                 }
                 
                 let bookmarkData: Data
                 
                 do {
-                    bookmarkData = try URL
-                        .securityScopedBookmarkData(
-                            fileURL
-                        )
+                    bookmarkData = try URL.securityScopedBookmarkData(fileURL)
                 } catch {
-                    AppLogger
-                        .record(
-                            AppError(
-                                error
-                            ),
-                             "Refresh PDF bookmark",
-                            fileURL
-                        )
+                    AppLogger.record(AppError(error), "Refresh PDF bookmark",fileURL)
+                    
                     continue
                 }
                 
@@ -160,31 +150,21 @@ final class PDFFileService {
             }
             
             if needs {
-                try modelContext
-                    .save()
+                try modelContext.save()
             }
+            
         } catch let error as AppError {
-            modelContext
-                .rollback()
+            modelContext.rollback()
+            
             throw error
         } catch {
-            modelContext
-                .rollback()
-            throw AppError
-                .system(
-                    "File access permissions could not be refreshed.",
-                    error.localizedDescription,
-                    error
-                )
+            modelContext.rollback()
+            
+            throw AppError.system("File access permissions could not be refreshed.",error.localizedDescription,error)
         }
     }
     
-    private static func fetch(
-        _ modelContext:ModelContext
-    ) throws -> [PDFFile] {
-        return try modelContext
-            .fetch(
-                FetchDescriptor<PDFFile>()
-            )
+    private static func fetch(_ modelContext:ModelContext) throws -> [PDFFile] {
+        return try modelContext.fetch(FetchDescriptor<PDFFile>())
     }
 }
