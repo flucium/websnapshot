@@ -34,6 +34,9 @@ Manage saved PDF files.
     - Fixed: Always save PDF files to a designated directory. Click [Change…] to specify the directory.
     - Flexibility: Choose the destination directory each time you save a PDF file.
 
+- **SafariExtension**<br>
+Using a Safari Extension, you can save websites as PDFs directly from Safari.
+
 ## Installer
 ...
 
