@@ -28,7 +28,8 @@ struct LibraryTagEditorView: View {
         }
         .frame(width: 560, height: 420)
         .background(.background)
-        .alert(item: $libraryViewState.tagEditorAppError) { appError in
+        .alert(item: $libraryViewState.tagEditorAppError) {
+            appError in
             AlertModal.show("Tags Could Not Be Saved", appError)
         }
     }
@@ -63,12 +64,9 @@ struct LibraryTagEditorView: View {
             sectionTitle("Add a Tag",  "plus.circle")
 
             HStack(spacing: 10) {
-                TextField(
-                    "Enter a tag name",
-                    text: $libraryViewState.tagEditorNewTagName
-                )
-                .textFieldStyle(.roundedBorder)
-                .onSubmit(addNewTag)
+                TextField("Enter a tag name", text: $libraryViewState.tagEditorNewTagName)
+                    .textFieldStyle(.roundedBorder)
+                    .onSubmit(addNewTag)
 
                 Button(action: addNewTag) {
                     Label("Add", systemImage: "plus")
@@ -109,13 +107,11 @@ struct LibraryTagEditorView: View {
                 }
                 .frame(maxWidth: .infinity, minHeight: 88)
                 .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 10))
+                
             } else {
-                LazyVGrid(
-                    columns: [GridItem(.adaptive(minimum: 120), alignment: .leading)],
-                    alignment: .leading,
-                    spacing: 8
-                ) {
-                    ForEach(libraryViewState.tagEditorTagNames, id: \.self) { tagName in
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 120), alignment: .leading)], alignment: .leading, spacing: 8) {
+                    ForEach(libraryViewState.tagEditorTagNames, id: \.self) {
+                        tagName in
                         SelectedTagButton(tagName) {
                             removeTag(tagName)
                         }
@@ -127,12 +123,9 @@ struct LibraryTagEditorView: View {
 
     private var footer: some View {
         HStack(spacing: 10) {
-            Label(
-                "\(libraryViewState.tagEditorTagNames.count) tags",
-                systemImage: "tag"
-            )
-            .font(.caption)
-            .foregroundStyle(.secondary)
+            Label("\(libraryViewState.tagEditorTagNames.count) tags",systemImage: "tag")
+                .font(.caption)
+                .foregroundStyle(.secondary)
 
             Spacer()
 
@@ -151,9 +144,7 @@ struct LibraryTagEditorView: View {
     }
 
     private var isNewTagNameEmpty: Bool {
-        PDFTagService.normalizedName(
-            libraryViewState.tagEditorNewTagName
-        ).isEmpty
+        PDFTagService.normalizedName(libraryViewState.tagEditorNewTagName).isEmpty
     }
 
     private func sectionTitle(_ title: String, _ systemImage: String) -> some View {
@@ -162,27 +153,19 @@ struct LibraryTagEditorView: View {
     }
 
     private func addNewTag() {
-        libraryViewState.tagEditorTagNames = PDFTagService.addingTag(
-            libraryViewState.tagEditorNewTagName,
-            to: libraryViewState.tagEditorTagNames
-        )
+        libraryViewState.tagEditorTagNames = PDFTagService.addingTag(libraryViewState.tagEditorNewTagName,to: libraryViewState.tagEditorTagNames)
+        
         libraryViewState.tagEditorNewTagName = String()
     }
 
     private func removeTag(_ name: String) {
-        libraryViewState.tagEditorTagNames = PDFTagService.removingTag(
-            name,
-            from: libraryViewState.tagEditorTagNames
-        )
+        libraryViewState.tagEditorTagNames = PDFTagService.removingTag(name, from: libraryViewState.tagEditorTagNames)
     }
 
     private func save() {
         do {
-            try PDFTagService.replaceTags(
-                libraryViewState.tagEditorTagNames,
-                for: pdfFile,
-                in: modelContext
-            )
+            try PDFTagService.replaceTags(libraryViewState.tagEditorTagNames,for: pdfFile,in: modelContext)
+            
             libraryViewState.closeTagEditor()
         } catch {
             libraryViewState.tagEditorAppError = AppError.presentable(error)
