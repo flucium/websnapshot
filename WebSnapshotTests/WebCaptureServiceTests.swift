@@ -14,14 +14,14 @@ final class WebCaptureServiceTests: XCTestCase {
         let settings = try container.mainContext.fetch(FetchDescriptor<StorageSettings>())
         let document = try makePDF()
 
-        let first = try XCTUnwrap(WebCaptureService.save(document, title: "Article", url: nil,
-            modelContext: container.mainContext, storageSettings: settings,
-            chooseDestination: { _, _, _ in XCTFail("Fixed storage must not open a panel"); return nil }))
-        let second = try XCTUnwrap(WebCaptureService.save(document, title: "Article", url: nil,
-            modelContext: container.mainContext, storageSettings: settings))
+        let first = try XCTUnwrap(WebCaptureService.save(document, "Article", nil,
+            container.mainContext, settings,
+            { _, _, _ in XCTFail("Fixed storage must not open a panel"); return nil }))
+        let second = try XCTUnwrap(WebCaptureService.save(document, "Article", nil,
+            container.mainContext, settings))
 
         XCTAssertNotEqual(first, second)
-        XCTAssertEqual(first.deletingLastPathComponent(), directory)
+        XCTAssertEqual(first.deletingLastPathComponent().pathComponents, directory.pathComponents)
         XCTAssertEqual(try Data(contentsOf: first), document.data)
         XCTAssertEqual(try Data(contentsOf: second), document.data)
         XCTAssertEqual(try container.mainContext.fetch(FetchDescriptor<PDFFile>()).count, 2)
@@ -34,8 +34,8 @@ final class WebCaptureServiceTests: XCTestCase {
         let destination = directory.appendingPathComponent("Chosen name.pdf")
         let document = try makePDF()
         var panelWasOpened = false
-        let result = try WebCaptureService.save(document, title: "Article", url: nil,
-            modelContext: container.mainContext, storageSettings: []) { title, _, data in
+        let result = try WebCaptureService.save(document, "Article", nil,
+            container.mainContext, []) { title, _, data in
                 panelWasOpened = true
                 XCTAssertEqual(title, "Article")
                 try XCTUnwrap(data).data.write(to: destination)
@@ -49,18 +49,18 @@ final class WebCaptureServiceTests: XCTestCase {
 
     func testCancelledPanelDoesNotRegisterPDF() throws {
         let container = try makeContainer()
-        let result = try WebCaptureService.save(makePDF(), title: "Article", url: nil,
-            modelContext: container.mainContext, storageSettings: [],
-            chooseDestination: { _, _, _ in nil })
+        let result = try WebCaptureService.save(makePDF(), "Article", nil,
+            container.mainContext, [],
+            { _, _, _ in nil })
         XCTAssertNil(result)
         XCTAssertTrue(try container.mainContext.fetch(FetchDescriptor<PDFFile>()).isEmpty)
     }
 
     func testMissingFixedFolderDoesNotFallBackToManualSave() throws {
         let container = try makeContainer()
-        XCTAssertThrowsError(try WebCaptureService.save(makePDF(), title: "Article", url: nil,
-            modelContext: container.mainContext, storageSettings: [StorageSettings(.fixed)],
-            chooseDestination: { _, _, _ in XCTFail("Must report the missing folder"); return nil }))
+        XCTAssertThrowsError(try WebCaptureService.save(makePDF(), "Article", nil,
+            container.mainContext, [StorageSettings(.fixed)],
+            { _, _, _ in XCTFail("Must report the missing folder"); return nil }))
         XCTAssertTrue(try container.mainContext.fetch(FetchDescriptor<PDFFile>()).isEmpty)
     }
 

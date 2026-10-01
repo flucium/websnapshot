@@ -107,7 +107,7 @@ final class LibraryFileSynchronizationTests: XCTestCase {
             guard change.wasDeleted else { return }
             do {
                 try LibraryViewService.deleteMissingFiles(
-                    context, [entry], confirmedDeletedFileIDs: [change.fileID]
+                    context, [entry], [change.fileID]
                 )
             } catch {
                 XCTFail("Synchronization failed: \(error)")
@@ -138,7 +138,7 @@ final class LibraryFileSynchronizationTests: XCTestCase {
         try PDFTagService.replaceTags(["Keep"], for: entry, in: context)
 
         try LibraryViewService.deleteMissingFiles(
-            context, [entry], confirmedDeletedFileIDs: [entry.persistentModelID]
+            context, [entry], [entry.persistentModelID]
         )
 
         XCTAssertEqual(try context.fetchCount(FetchDescriptor<PDFFile>()), 1)

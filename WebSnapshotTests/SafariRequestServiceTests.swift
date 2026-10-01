@@ -62,6 +62,61 @@ final class SafariRequestServiceTests: XCTestCase {
         XCTAssertNil(service.savedURL)
     }
 
+    func testWindowlessFailureCanRetryAndFinishQueuedRequests() async throws {
+        let container = try makeContainer()
+        var attempts: [URL] = []
+        var failureCount = 0
+        let service = SafariRequestService { url, _, _ in
+            attempts.append(url)
+            if failureCount == 0 {
+                failureCount += 1
+                throw AppError.invalidNetwork("Offline")
+            }
+            return URL(fileURLWithPath: "/tmp/result.pdf")
+        }
+        var reportedErrors: [String] = []
+        service.handleFailure = { error in
+            reportedErrors.append(error.userMessage)
+            return .retry
+        }
+
+        let first = try makeRequest("https://example.com/first")
+        let second = try makeRequest("https://example.com/second")
+        service.receive(first.openURL)
+        service.receive(second.openURL)
+        service.startProcessing(container.mainContext)
+
+        try await waitUntil { attempts.count == 3 && service.current == nil }
+        XCTAssertEqual(attempts, [first.url, first.url, second.url])
+        XCTAssertEqual(reportedErrors, ["Offline"])
+        XCTAssertNil(service.appError)
+        XCTAssertTrue(service.pending.isEmpty)
+    }
+
+    func testWindowlessFailureCanSkipAndContinueQueue() async throws {
+        let container = try makeContainer()
+        var attempts: [URL] = []
+        let service = SafariRequestService { url, _, _ in
+            attempts.append(url)
+            if url.path == "/first" {
+                throw AppError.invalidNetwork("Offline")
+            }
+            return URL(fileURLWithPath: "/tmp/result.pdf")
+        }
+        service.handleFailure = { _ in .skip }
+
+        let first = try makeRequest("https://example.com/first")
+        let second = try makeRequest("https://example.com/second")
+        service.receive(first.openURL)
+        service.receive(second.openURL)
+        service.startProcessing(container.mainContext)
+
+        try await waitUntil { attempts.count == 2 && service.current == nil }
+        XCTAssertEqual(attempts, [first.url, second.url])
+        XCTAssertNil(service.appError)
+        XCTAssertTrue(service.pending.isEmpty)
+    }
+
     private func makeRequest(_ address: String = "https://example.com") throws -> SafariCaptureRequest {
         try SafariCaptureRequest(id: UUID(), url: XCTUnwrap(URL(string: address)))
     }
