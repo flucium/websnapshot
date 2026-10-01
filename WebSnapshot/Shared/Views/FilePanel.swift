@@ -38,6 +38,8 @@ func savePanel(_ title: String,_ url: URL?,_ pdfFileDocument: PDFFileDocument?,b
     FileManager.default.urls(for: .documentDirectory,in: .userDomainMask).first.map {
         panel.directoryURL = $0
     }
+
+    prepareForSafariDialog()
     
     guard panel.runModal() == .OK, let destination = panel.url else {
         return nil
@@ -52,6 +54,17 @@ func savePanel(_ title: String,_ url: URL?,_ pdfFileDocument: PDFFileDocument?,b
     } catch {
         throw AppError(error)
     }
+}
+
+@MainActor
+func prepareForSafariDialog() {
+    if NSApp.isHidden {
+        for window in NSApp.windows where !(window is NSPanel) {
+            window.orderOut(nil)
+        }
+        NSApp.unhide(nil)
+    }
+    NSApp.activate(ignoringOtherApps: true)
 }
 
 @MainActor

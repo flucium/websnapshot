@@ -3,19 +3,21 @@ import OSLog
 import SafariServices
 
 final class SafariWebExtensionHandler: NSObject, NSExtensionRequestHandling {
+    
     private static let logger = Logger(subsystem: "flucium.WebSnapshot.SafariExtension",category: "AppHandoff")
 
     func beginRequest(with context: NSExtensionContext) {
         do {
             
-            guard let item = context.inputItems.first as? NSExtensionItem,
-                let message = item.userInfo?[SFExtensionMessageKey] as? [String: Any] else {
-                    throw SafariCaptureRequest.InvalidRequest.malformed
-                }
+            guard let item = context.inputItems.first as? NSExtensionItem, let message = item.userInfo?[SFExtensionMessageKey] as? [String: Any] else {
+            
+                throw SafariCaptureRequest.InvalidRequest.malformed
+            }
             
             let request = try SafariCaptureRequest(message: message)
             
             guard let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "flucium.WebSnapshot") else {
+                
                 Self.logger.error("Launch Services could not locate WebSnapshot.")
                 
                 reply(context, error: "Open WebSnapshot once, then try the Safari button again.")
@@ -25,9 +27,12 @@ final class SafariWebExtensionHandler: NSObject, NSExtensionRequestHandling {
             
             let configuration = NSWorkspace.OpenConfiguration()
             
-            configuration.activates = true
+            configuration.activates = false
+            
+            configuration.hides = NSRunningApplication.runningApplications(withBundleIdentifier: "flucium.WebSnapshot").isEmpty
             
             NSWorkspace.shared.open([request.openURL], withApplicationAt: appURL, configuration: configuration) {
+                
                 _, error in
                 
                 if let error {
@@ -52,6 +57,7 @@ final class SafariWebExtensionHandler: NSObject, NSExtensionRequestHandling {
     }
 
     private static func complete(_ context: NSExtensionContext, error: String?) {
+        
         let response = NSExtensionItem()
         
         var message: [String: Any] = ["accepted": error == nil]

@@ -1,10 +1,25 @@
+import AppKit
 import SwiftUI
 import SwiftData
 
 @main
 struct WebSnapshotApp: App {
-    @StateObject private var safariRequests = SafariRequestService(capture: WebCaptureService.capture)
-    private let sharedModelContainer: ModelContainer = {
+    @NSApplicationDelegateAdaptor(WebSnapshotAppDelegate.self) private var appDelegate
+
+    var body: some Scene {
+        WindowGroup {
+            HomeView()
+                .frame(minWidth: 730, minHeight: 400)
+        }
+        .defaultSize(width: 1000, height: 600)
+        .windowResizability(.contentMinSize)
+        .modelContainer(SafariAppServices.modelContainer)
+    }
+}
+
+@MainActor
+private enum SafariAppServices {
+    static let modelContainer: ModelContainer = {
         do {
             return try ModelContainer(for: AppearanceSettings.self, StorageSettings.self, PDFFile.self, PDFTag.self)
         } catch {
@@ -12,37 +27,46 @@ struct WebSnapshotApp: App {
         }
     }()
 
-    var body: some Scene {
-        WindowGroup {
-            HomeView()
-                .frame(minWidth: 730, minHeight: 400)
-                .modifier(SafariRequestReceiver())
-                .environmentObject(safariRequests)
-        }
-        .defaultSize(width: 1000, height: 600)
-        .windowResizability(.contentMinSize)
-        .modelContainer(sharedModelContainer)
-
-        Window("Save from Safari", id: "safari-capture") {
-            SafariCaptureView()
-                .modifier(SafariRequestReceiver())
-                .environmentObject(safariRequests)
-        }
-        .defaultSize(width: 1000, height: 600)
-        .windowResizability(.contentMinSize)
-        .modelContainer(sharedModelContainer)
-    }
+    static let safariRequests = SafariRequestService(capture: WebCaptureService.capture)
 }
 
-private struct SafariRequestReceiver: ViewModifier {
-    @Environment(\.openWindow) private var openWindow
-    
-    @EnvironmentObject private var requests: SafariRequestService
+@MainActor
+final class WebSnapshotAppDelegate: NSObject, NSApplicationDelegate {
 
-    func body(content: Content) -> some View {
-        content.onOpenURL { url in
-            requests.receive(url)
-            openWindow(id: "safari-capture")
+    func application(_ application: NSApplication, open urls: [URL]) {
+        
+        let requests = SafariAppServices.safariRequests
+        
+        requests.handleFailure = {
+            
+            error in
+        
+            prepareForSafariDialog()
+            
+            let alert = NSAlert()
+            
+            alert.messageText = "Webpage Could Not Be Saved"
+            
+            alert.informativeText = error.userMessage
+            
+            alert.alertStyle = .warning
+            
+            alert.addButton(withTitle: "Retry")
+            
+            alert.addButton(withTitle: "Skip")
+            
+            return alert.runModal() == .alertFirstButtonReturn ? .retry : .skip
         }
+        
+
+        for url in urls {
+            guard (try? SafariCaptureRequest(openURL: url)) != nil else {
+                continue
+            }
+            
+            requests.receive(url)
+        }
+        
+        requests.startProcessing(SafariAppServices.modelContainer.mainContext)
     }
 }

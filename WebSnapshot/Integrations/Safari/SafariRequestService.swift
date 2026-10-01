@@ -5,7 +5,11 @@ import WebKit
 
 @MainActor
 final class SafariRequestService: ObservableObject {
-    
+    enum FailureAction {
+        case retry
+        case skip
+    }
+
     typealias Capture = @MainActor (URL, ModelContext, (WebPage) -> Void) async throws -> URL?
     
     @Published private(set) var pending: [SafariCaptureRequest] = []
@@ -30,6 +34,7 @@ final class SafariRequestService: ObservableObject {
     
     private let capture: Capture
 
+    var handleFailure: ((AppError) -> FailureAction)?
     var canRetry: Bool {
         failedRequest != nil && current == nil
     }
@@ -103,6 +108,19 @@ final class SafariRequestService: ObservableObject {
                         status = "PDF could not be saved."
                         
                         AppLogger.record(error, "Save webpage from Safari", request.url)
+
+                        if let handleFailure {
+                            
+                            let action = handleFailure(error)
+                            
+                            if action == .retry {
+                                pending.insert(request, at: 0)
+                            }
+                            
+                            appError = nil
+                            
+                            failedRequest = nil
+                        }
                         
                     } else {
                         status = "Save cancelled."
