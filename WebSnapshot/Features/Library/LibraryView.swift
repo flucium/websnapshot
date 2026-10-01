@@ -5,26 +5,41 @@ import AppKit
 
 struct LibraryView:View {
 
+    private enum TagSelection: Hashable {
+        case all
+        case untagged
+        case tag(String)
+    }
+
     @Environment(\.modelContext) private var modelContext
 
     @Query private var pdfFiles: [PDFFile]
+    @Query private var pdfTags: [PDFTag]
 
     @StateObject private var libraryViewState = LibraryViewState()
     @StateObject private var pdfFileMonitor = LibraryPDFFileMonitor()
+    @State private var selectedTag: TagSelection = .all
 
     
     var body: some View {
-        VStack{
-            
-            if libraryViewState.selectedPDFFile == nil{
-                HStack{
-                    searchTextFieldView()
-                    
-                    searchTextModeView()
-                }.padding(.horizontal)
-                
-                pdfListView()
-            }else{
+        Group {
+            if libraryViewState.selectedPDFFile == nil {
+                HSplitView {
+                    tagSidebar()
+
+                    VStack {
+                        HStack {
+                            searchTextFieldView()
+
+                            searchTextModeView()
+                        }
+                        .padding(.horizontal)
+
+                        pdfListView()
+                    }
+                    .frame(minWidth: 300, maxWidth: .infinity, maxHeight: .infinity)
+                }
+            } else {
                 pdfView()
             }
         }
@@ -35,6 +50,11 @@ struct LibraryView:View {
         }
         .onChange(of: monitoredPDFFilePaths) {
             scheduleSynchronizeLibraryFiles()
+        }
+        .onChange(of: availableTagNames) { _, names in
+            if case .tag(let selectedName) = selectedTag, names.contains(selectedName) == false {
+                selectedTag = .all
+            }
         }
         .task {
             await synchronizeLibraryFilesAfterViewUpdate()
@@ -85,11 +105,54 @@ struct LibraryView:View {
             $0.availability != .missing
         }
     }
+
+    private var availableTags: [PDFTag] {
+        let existingFileIDs = Set(existingPDFFiles.map(\.persistentModelID))
+
+        return pdfTags.filter { tag in
+            tag.pdfFiles.contains { existingFileIDs.contains($0.persistentModelID) }
+        }
+        .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+    }
+
+    private var availableTagNames: [String] {
+        availableTags.map(\.normalizedName)
+    }
     
     private var displayedPDFFiles: [PDFFile] {
         return existingPDFFiles.filter {
-            LibraryViewService.matches($0,libraryViewState.searchText,libraryViewState.selectedSearchMode)
+            pdfFile in
+
+            let matchesSelectedTag = switch selectedTag {
+            case .all:
+                true
+            case .untagged:
+                pdfFile.tags.isEmpty
+            case .tag(let name):
+                pdfFile.tags.contains { $0.normalizedName == name }
+            }
+
+            return matchesSelectedTag && LibraryViewService.matches(pdfFile,libraryViewState.searchText,libraryViewState.selectedSearchMode)
         }
+    }
+
+    private func tagSidebar() -> some View {
+        List(selection: $selectedTag) {
+            Section("Tags") {
+                Label("All PDFs", systemImage: "square.stack")
+                    .tag(TagSelection.all)
+
+                Label("Untagged", systemImage: "tag.slash")
+                    .tag(TagSelection.untagged)
+
+                ForEach(availableTags) { tag in
+                    Label(tag.name, systemImage: "tag")
+                        .tag(TagSelection.tag(tag.normalizedName))
+                }
+            }
+        }
+        .listStyle(.sidebar)
+        .frame(minWidth: 165, idealWidth: 205, maxWidth: 260)
     }
 
     private func searchTextFieldView() -> some View{
