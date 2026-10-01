@@ -47,3 +47,7 @@ Using a Safari Extension, you can save websites as PDFs directly from Safari.
   - SSD: 256GB~
   - OS: macOS Tahoe (test version: Version 26.6.2)
 
+## Under development
+- macOS Desktop app version 1.0.1
+- Safari Extension version 1.0.1
+- Installer version ...
