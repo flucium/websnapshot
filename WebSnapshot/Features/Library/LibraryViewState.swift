@@ -3,6 +3,12 @@ import Combine
 import Translation
 import SwiftData
 
+enum TagSelection: Hashable {
+    case all
+    case untagged
+    case tag(String)
+}
+
 @MainActor
 final class LibraryViewState:ObservableObject{
     
@@ -15,6 +21,8 @@ final class LibraryViewState:ObservableObject{
     @Published var searchText:String = String()
     
     @Published var selectedSearchMode: SearchMode = .all
+
+    @Published var selectedTag: TagSelection = .all
     
     @Published var tagEditorPDFFile: PDFFile?
     

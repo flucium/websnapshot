@@ -5,12 +5,6 @@ import AppKit
 
 struct LibraryView:View {
 
-    private enum TagSelection: Hashable {
-        case all
-        case untagged
-        case tag(String)
-    }
-
     @Environment(\.modelContext) private var modelContext
 
     @Query private var pdfFiles: [PDFFile]
@@ -18,7 +12,6 @@ struct LibraryView:View {
 
     @StateObject private var libraryViewState = LibraryViewState()
     @StateObject private var pdfFileMonitor = LibraryPDFFileMonitor()
-    @State private var selectedTag: TagSelection = .all
 
     
     var body: some View {
@@ -52,8 +45,8 @@ struct LibraryView:View {
             scheduleSynchronizeLibraryFiles()
         }
         .onChange(of: availableTagNames) { _, names in
-            if case .tag(let selectedName) = selectedTag, names.contains(selectedName) == false {
-                selectedTag = .all
+            if case .tag(let selectedName) = libraryViewState.selectedTag, names.contains(selectedName) == false {
+                libraryViewState.selectedTag = .all
             }
         }
         .task {
@@ -123,7 +116,7 @@ struct LibraryView:View {
         return existingPDFFiles.filter {
             pdfFile in
 
-            let matchesSelectedTag = switch selectedTag {
+            let matchesSelectedTag = switch libraryViewState.selectedTag {
             case .all:
                 true
             case .untagged:
@@ -137,7 +130,7 @@ struct LibraryView:View {
     }
 
     private func tagSidebar() -> some View {
-        List(selection: $selectedTag) {
+        List(selection: $libraryViewState.selectedTag) {
             Section("Tags") {
                 Label("All PDFs", systemImage: "square.stack")
                     .tag(TagSelection.all)
