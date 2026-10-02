@@ -3,14 +3,14 @@ import Combine
 import Translation
 import SwiftData
 
-enum TagSelection: Hashable {
-    case all
-    case untagged
-    case tag(String)
-}
-
 @MainActor
 final class LibraryViewState:ObservableObject{
+
+    enum TagSelection: Hashable {
+        case all
+        case untagged
+        case tag(String)
+    }
     
     var translationPreparationTask: Task<Void, Never>?
     

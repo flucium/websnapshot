@@ -133,14 +133,14 @@ struct LibraryView:View {
         List(selection: $libraryViewState.selectedTag) {
             Section("Tags") {
                 Label("All PDFs", systemImage: "square.stack")
-                    .tag(TagSelection.all)
+                    .tag(LibraryViewState.TagSelection.all)
 
                 Label("Untagged", systemImage: "tag.slash")
-                    .tag(TagSelection.untagged)
+                    .tag(LibraryViewState.TagSelection.untagged)
 
                 ForEach(availableTags) { tag in
                     Label(tag.name, systemImage: "tag")
-                        .tag(TagSelection.tag(tag.normalizedName))
+                        .tag(LibraryViewState.TagSelection.tag(tag.normalizedName))
                 }
             }
         }
