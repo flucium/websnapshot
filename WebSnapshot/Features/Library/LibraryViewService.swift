@@ -7,6 +7,142 @@ import Translation
 
 @MainActor
 final class LibraryViewService {
+    static func importPDF(_ state: LibraryViewState, _ modelContext: ModelContext) {
+        
+        guard let sourceURL = importPDFPanel() else {
+            return
+        }
+
+        do {
+
+            let settings = try modelContext.fetch(FetchDescriptor<StorageSettings>())
+
+            let destinationDirectory: URL?
+
+            switch StorageSettingsService.storage(settings) {
+            case .fixed:
+                destinationDirectory = try StorageSettingsService.fixedStorageURL(settings)
+                
+                if destinationDirectory == nil {
+                    throw AppError.error("Choose a storage folder in Settings before importing.")
+                }
+                
+            case .flexibility:
+                let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
+                
+                destinationDirectory = directoryPanel(documents, "Choose Import Folder",  "Import")
+            }
+
+            guard let destinationDirectory else {
+                return
+            }
+
+            let destination = try importPDF(sourceURL, destinationDirectory, modelContext)
+            
+            let registeredPDF = try? modelContext.fetch(FetchDescriptor<PDFFile>()).first {
+                $0.url.standardizedFileURL == destination.standardizedFileURL
+            }
+
+            state.searchText = ""
+            
+            state.selectedTag = .all
+            
+            state.selectedPDFRowID = registeredPDF?.persistentModelID
+            
+            state.appError = nil
+            
+        } catch {
+            handle(error, "PDF Could Not Be Imported", "Import PDF", state, sourceURL)
+        }
+    }
+
+    static func importPDF(_ sourceURL: URL, _  directoryURL: URL, _ modelContext: ModelContext) throws -> URL {
+        
+        let isAccessingSource = sourceURL.startAccessingSecurityScopedResource()
+        
+        let isAccessingDirectory = directoryURL.startAccessingSecurityScopedResource()
+
+        defer {
+            if isAccessingSource {
+                sourceURL.stopAccessingSecurityScopedResource()
+            }
+        
+            if isAccessingDirectory {
+                directoryURL.stopAccessingSecurityScopedResource()
+            }
+        }
+
+        guard sourceURL.pathExtension.lowercased() == "pdf", let document = PDFDocument(url: sourceURL), document.pageCount > 0 || document.isLocked else {
+            throw AppError.invalidFileType("Choose a valid PDF file to import.")
+        }
+
+        let destination = availablePDFURL(directoryURL, sourceURL.lastPathComponent)
+
+        do {
+            try FileManager.default.copyItem(at: sourceURL, to: destination)
+
+            do {
+                try PDFFileService.save(modelContext, destination)
+            } catch {
+                do {
+                    try FileManager.default.removeItem(at: destination)
+                } catch let cleanupError {
+                    AppLogger.record(AppError(cleanupError), "Remove PDF after failed import", destination)
+                }
+                throw error
+            }
+
+            return destination
+        } catch {
+            throw AppError(error)
+        }
+    }
+
+    static func exportPDF(_ state: LibraryViewState, _ pdfFile: PDFFile) {
+        
+        let sourceURL = pdfFile.resolvedURL
+
+        guard let destinationURL = exportPDFPanel(sourceURL.lastPathComponent) else {
+            return
+        }
+
+        do {
+            try exportPDF(sourceURL,  destinationURL)
+            state.appError = nil
+        } catch {
+            handle(error, "PDF Could Not Be Exported", "Export PDF", state, sourceURL)
+        }
+    }
+
+    static func exportPDF(_ sourceURL: URL, _ destinationURL: URL) throws {
+        
+        guard sourceURL.resolvingSymlinksInPath().standardizedFileURL != destinationURL.resolvingSymlinksInPath().standardizedFileURL else {
+            throw AppError.error("Choose a different location for the exported PDF.")
+        }
+
+        let isAccessingSource = sourceURL.startAccessingSecurityScopedResource()
+        
+        let isAccessingDestination = destinationURL.startAccessingSecurityScopedResource()
+
+        defer {
+            if isAccessingSource {
+                sourceURL.stopAccessingSecurityScopedResource()
+            }
+            
+            if isAccessingDestination {
+                destinationURL.stopAccessingSecurityScopedResource()
+            }
+        }
+
+        do {
+            let data = try Data(contentsOf: sourceURL, options: .mappedIfSafe)
+            
+            try data.write(to: destinationURL, options: .atomic)
+        } catch {
+            throw AppError(error)
+        }
+    }
+
     static func startTranslation(_ state: LibraryViewState, _ targetLanguage: TranslationLanguage) {
         guard let selectedPDFFile = state.selectedPDFFile else {
             return
@@ -83,10 +219,13 @@ final class LibraryViewService {
         let resolvedURL = pdfFile.resolvedURL
 
         state.cancelTranslation()
+        
         state.selectedPDFFile = nil
+        
         state.appError = nil
 
         Task { @MainActor in
+            
             await Task.yield()
 
             do {
@@ -98,6 +237,7 @@ final class LibraryViewService {
     }
 
     static func copyFilePath(_ state: LibraryViewState, _ pdfFile: PDFFile) {
+        
         let resolvedURL = pdfFile.resolvedURL
 
         do {
@@ -315,6 +455,7 @@ final class LibraryViewService {
     }
 
     private static func handle( _ error: Error, _ title: String, _ operation: String, _ state: LibraryViewState, _ targetURL: URL? = nil ) {
+        
         guard let appError = AppError.presentable(error), appError.isCancellation == false else {
             return
         }

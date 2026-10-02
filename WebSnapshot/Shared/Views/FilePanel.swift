@@ -3,7 +3,7 @@ import AppKit
 import UniformTypeIdentifiers
 
 @MainActor
-func directoryPanel(_ directoryURL: URL?) -> URL? {
+func directoryPanel(_ directoryURL: URL?, _ title: String = "Choose Storage Folder", _ prompt: String = "Choose") -> URL? {
     
     let panel = NSOpenPanel()
 
@@ -11,8 +11,8 @@ func directoryPanel(_ directoryURL: URL?) -> URL? {
     panel.canChooseFiles = false
     panel.allowsMultipleSelection = false
     panel.canCreateDirectories = true
-    panel.title = "Choose Storage Folder"
-    panel.prompt = "Choose"
+    panel.title = title
+    panel.prompt = prompt
     panel.directoryURL = directoryURL
 
     guard panel.runModal() == .OK else {
@@ -20,6 +20,37 @@ func directoryPanel(_ directoryURL: URL?) -> URL? {
     }
 
     return panel.url
+}
+
+@MainActor
+func importPDFPanel() -> URL? {
+    let panel = NSOpenPanel()
+
+    panel.allowedContentTypes = [.pdf]
+    panel.canChooseFiles = true
+    panel.canChooseDirectories = false
+    panel.allowsMultipleSelection = false
+    panel.title = "Import PDF"
+    panel.prompt = "Import"
+
+    return panel.runModal() == .OK ? panel.url : nil
+}
+
+@MainActor
+func exportPDFPanel(_ fileName: String) -> URL? {
+    let panel = NSSavePanel()
+
+    panel.allowedContentTypes = [.pdf]
+    panel.canCreateDirectories = true
+    panel.title = "Export PDF"
+    panel.prompt = "Export"
+    panel.nameFieldStringValue = fileName
+
+    if let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
+        panel.directoryURL = documents
+    }
+
+    return panel.runModal() == .OK ? panel.url : nil
 }
 
 @MainActor
@@ -87,7 +118,7 @@ func saveToDirectory(_ title: String,_ url: URL?,_ pdfFileDocument: PDFFileDocum
     }
 }
 
-private func availablePDFURL(_ directoryURL: URL,_ fileName: String) -> URL {
+func availablePDFURL(_ directoryURL: URL,_ fileName: String) -> URL {
     
     var candidate = directoryURL.appendingPathComponent(fileName)
     

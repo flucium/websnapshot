@@ -23,6 +23,8 @@ final class LibraryViewState:ObservableObject{
     @Published var selectedSearchMode: SearchMode = .all
 
     @Published var selectedTag: TagSelection = .all
+
+    @Published var selectedPDFRowID: PersistentIdentifier?
     
     @Published var tagEditorPDFFile: PDFFile?
     

@@ -28,6 +28,22 @@ struct LibraryView:View {
                         }
                         .padding(.horizontal)
 
+                        HStack {
+                            Button("Import PDF…") {
+                                LibraryViewService.importPDF(libraryViewState, modelContext)
+                            }
+
+                            Button("Export PDF…") {
+                                if let selectedPDFRow {
+                                    LibraryViewService.exportPDF(libraryViewState, selectedPDFRow)
+                                }
+                            }
+                            .disabled(selectedPDFRow == nil)
+
+                            Spacer()
+                        }
+                        .padding(.horizontal)
+
                         pdfListView()
                     }
                     .frame(minWidth: 300, maxWidth: .infinity, maxHeight: .infinity)
@@ -47,6 +63,11 @@ struct LibraryView:View {
         .onChange(of: availableTagNames) { _, names in
             if case .tag(let selectedName) = libraryViewState.selectedTag, names.contains(selectedName) == false {
                 libraryViewState.selectedTag = .all
+            }
+        }
+        .onChange(of: displayedPDFFileIDs) { _, ids in
+            if let selectedID = libraryViewState.selectedPDFRowID, ids.contains(selectedID) == false {
+                libraryViewState.selectedPDFRowID = nil
             }
         }
         .task {
@@ -129,6 +150,18 @@ struct LibraryView:View {
         }
     }
 
+    private var displayedPDFFileIDs: [PersistentIdentifier] {
+        displayedPDFFiles.map(\.persistentModelID)
+    }
+
+    private var selectedPDFRow: PDFFile? {
+        guard let selectedID = libraryViewState.selectedPDFRowID else {
+            return nil
+        }
+
+        return displayedPDFFiles.first { $0.persistentModelID == selectedID }
+    }
+
     private func tagSidebar() -> some View {
         List(selection: $libraryViewState.selectedTag) {
             Section("Tags") {
@@ -144,8 +177,10 @@ struct LibraryView:View {
                 }
             }
         }
-        .listStyle(.sidebar)
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
         .frame(minWidth: 165, idealWidth: 205, maxWidth: 260)
+        .background(Color(nsColor: .windowBackgroundColor))
     }
 
     private func searchTextFieldView() -> some View{
@@ -169,9 +204,10 @@ struct LibraryView:View {
     }
 
     private func pdfListView() -> some View{
-        List{
+        List(selection: $libraryViewState.selectedPDFRowID) {
             ForEach(displayedPDFFiles) { pdfFile in
                 pdfRow(pdfFile)
+                    .tag(pdfFile.persistentModelID)
             }
         }
     }
@@ -195,9 +231,9 @@ struct LibraryView:View {
             }
         }
         .contentShape(Rectangle())
-        .onTapGesture(count: 2) {
+        .simultaneousGesture(TapGesture(count: 2).onEnded {
             openPDF(pdfFile)
-        }
+        })
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
             Button("Delete", role: .destructive) {
                 LibraryViewService.deletePDF(libraryViewState, modelContext, pdfFile)
@@ -214,6 +250,10 @@ struct LibraryView:View {
             
             Button("Edit Tags…") {
                 editTags(pdfFile)
+            }
+
+            Button("Export PDF…") {
+                LibraryViewService.exportPDF(libraryViewState, pdfFile)
             }
             
             Button("Copy File Path") {
@@ -250,6 +290,10 @@ struct LibraryView:View {
                         .lineLimit(1)
                     
                     Spacer()
+
+                    Button("Export PDF…") {
+                        LibraryViewService.exportPDF(libraryViewState, selectedPDFFile)
+                    }
                     
                     
                     Button("Delete", role: .destructive,action: {
@@ -296,6 +340,7 @@ struct LibraryView:View {
 
     
     private func openPDF(_ pdfFile: PDFFile) {
+        libraryViewState.selectedPDFRowID = pdfFile.persistentModelID
         libraryViewState.selectedPDFFile = pdfFile
     }
 
