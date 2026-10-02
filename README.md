@@ -27,7 +27,8 @@ Manage saved PDF files.
   - View: View saved PDF files and translate their displayed content.
   - Delete: Delete saved PDF files.
   - Tags: Add, remove, and edit tags associated with saved PDF files.
- 
+  - Import: PDF file.
+  - Export: PDF file. 
 - **Settings**<br>
   - Appearance: Choose from three appearance options: Light, Dark, or System.
   - Storage Location: Configure where PDF files are saved:
