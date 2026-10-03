@@ -5,6 +5,47 @@ import XCTest
 
 @MainActor
 final class PDFFileSaveTests: XCTestCase {
+    func testNewRegistrationRecordsDateWithoutResettingItOnSave() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let url = directory.appendingPathComponent("New.pdf")
+        try Data("pdf".utf8).write(to: url)
+        let container = try makeContainer()
+        let context = container.mainContext
+
+        let beforeSave = Date()
+        try PDFFileService.save(context, url)
+        let afterSave = Date()
+
+        let pdfFile = try XCTUnwrap(context.fetch(FetchDescriptor<PDFFile>()).first)
+        let addedAt = try XCTUnwrap(pdfFile.addedAt)
+        XCTAssertGreaterThanOrEqual(addedAt, beforeSave)
+        XCTAssertLessThanOrEqual(addedAt, afterSave)
+
+        try PDFFileService.save(context, url)
+        XCTAssertEqual(pdfFile.addedAt, addedAt)
+    }
+
+    func testExistingRegistrationWithoutDateStaysUnknown() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let url = directory.appendingPathComponent("Existing.pdf")
+        try Data("pdf".utf8).write(to: url)
+        let container = try makeContainer()
+        let context = container.mainContext
+        let pdfFile = PDFFile(url)
+        context.insert(pdfFile)
+        try context.save()
+
+        try PDFFileService.save(context, url)
+
+        XCTAssertNil(pdfFile.addedAt)
+    }
+
     func testReusingOriginalPathPreservesRenamedPDFAndItsTags() throws {
         try assertReusedPathPreservesRenamedPDF(fixedStorage: true)
     }

@@ -35,7 +35,9 @@ final class LibraryViewServiceTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: source), pdfData)
         XCTAssertEqual(try Data(contentsOf: first), pdfData)
         XCTAssertEqual(try Data(contentsOf: second), pdfData)
-        XCTAssertEqual(try context.fetchCount(FetchDescriptor<PDFFile>()), 2)
+        let importedPDFs = try context.fetch(FetchDescriptor<PDFFile>())
+        XCTAssertEqual(importedPDFs.count, 2)
+        XCTAssertTrue(importedPDFs.allSatisfy { $0.addedAt != nil })
     }
 
     @MainActor
