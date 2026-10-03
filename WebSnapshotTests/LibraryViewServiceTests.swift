@@ -26,8 +26,8 @@ final class LibraryViewServiceTests: XCTestCase {
         )
         let context = container.mainContext
 
-        let first = try LibraryViewService.importPDF(source, into: importDirectory, in: context)
-        let second = try LibraryViewService.importPDF(source, into: importDirectory, in: context)
+        let first = try LibraryViewService.importPDF(source, importDirectory, context)
+        let second = try LibraryViewService.importPDF(source, importDirectory, context)
 
         XCTAssertNotEqual(first, second)
         XCTAssertEqual(first.lastPathComponent, "Report.pdf")
@@ -54,7 +54,7 @@ final class LibraryViewServiceTests: XCTestCase {
             configurations: ModelConfiguration(isStoredInMemoryOnly: true)
         )
 
-        XCTAssertThrowsError(try LibraryViewService.importPDF(source, into: directory, in: container.mainContext))
+        XCTAssertThrowsError(try LibraryViewService.importPDF(source, directory, container.mainContext))
         XCTAssertFalse(FileManager.default.fileExists(atPath: directory.appendingPathComponent("Invalid 2.pdf").path))
         XCTAssertEqual(try container.mainContext.fetchCount(FetchDescriptor<PDFFile>()), 0)
     }
@@ -71,11 +71,11 @@ final class LibraryViewServiceTests: XCTestCase {
         try pdfData.write(to: source)
         try Data("old copy".utf8).write(to: destination)
 
-        try LibraryViewService.exportPDF(source, to: destination)
+        try LibraryViewService.exportPDF(source, destination)
 
         XCTAssertEqual(try Data(contentsOf: source), pdfData)
         XCTAssertEqual(try Data(contentsOf: destination), pdfData)
-        XCTAssertThrowsError(try LibraryViewService.exportPDF(source, to: source))
+        XCTAssertThrowsError(try LibraryViewService.exportPDF(source, source))
         XCTAssertEqual(try Data(contentsOf: source), pdfData)
     }
 
