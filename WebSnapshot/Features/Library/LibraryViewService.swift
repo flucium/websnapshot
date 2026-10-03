@@ -361,9 +361,13 @@ final class LibraryViewService {
             $0.name.localizedCaseInsensitiveContains(searchText)
         }
 
+        var g   : Bool {
+            pdfFile.searchableText?.localizedCaseInsensitiveContains(searchText) ?? false
+        }
+
         return switch mode {
         case .all:
-            titleMatches || tagMatches
+            titleMatches || tagMatches || contentMatches
         case .title:
             titleMatches
         case .tag:
@@ -412,41 +416,7 @@ final class LibraryViewService {
     }
 
     nonisolated static func render(_ page: PDFPage, _ dpi: CGFloat) throws -> CGImage {
-        
-        let pageBounds = page.bounds(for: .cropBox)
-        
-        let rotation = (page.rotation % 360 + 360) % 360
-        
-        let swapsDimensions = rotation == 90 || rotation == 270
-        
-        let scale = dpi / 72
-        
-        let width = Int(ceil((swapsDimensions ? pageBounds.height : pageBounds.width) * scale))
-        
-        let height = Int(ceil((swapsDimensions ? pageBounds.width : pageBounds.height) * scale))
-
-        guard width > 0, height > 0, let colorSpace = CGColorSpace(name: CGColorSpace.sRGB), let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0, space: colorSpace, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue )
-        else {
-            throw AppError.textRecognitionFailed("An image could not be created from this PDF page.")
-        }
-
-        context.setFillColor(CGColor(gray: 1, alpha: 1))
-        
-        context.fill(CGRect(x: 0, y: 0, width: width, height: height))
-        
-        context.saveGState()
-        
-        context.scaleBy(x: scale, y: scale)
-        
-        page.draw(with: .cropBox, to: context)
-        
-        context.restoreGState()
-
-        guard let image = context.makeImage() else {
-            throw AppError.textRecognitionFailed("This PDF page could not be prepared for text recognition.")
-        }
-
-        return image
+        try PDFContentService.render(page, dpi)
     }
 
     private static func closeMissingPDF(_ state: LibraryViewState) {
