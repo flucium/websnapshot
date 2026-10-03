@@ -361,7 +361,7 @@ final class LibraryViewService {
             $0.name.localizedCaseInsensitiveContains(searchText)
         }
 
-        var g   : Bool {
+        var contentMatches: Bool {
             pdfFile.searchableText?.localizedCaseInsensitiveContains(searchText) ?? false
         }
 
