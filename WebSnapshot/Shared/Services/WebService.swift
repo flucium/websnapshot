@@ -37,7 +37,7 @@ final class WebService{
         
         webPage.mediaType = .screen
         
-        do{
+        defer {
             webPage.mediaType = originalMediaType
         }
         
