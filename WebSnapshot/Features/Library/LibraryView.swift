@@ -12,6 +12,7 @@ struct LibraryView:View {
 
     @StateObject private var libraryViewState = LibraryViewState()
     @StateObject private var pdfFileMonitor = LibraryPDFFileMonitor()
+    @StateObject private var contentIndexer = LibraryContentIndexer()
 
     
     var body: some View {
@@ -27,6 +28,24 @@ struct LibraryView:View {
                             searchTextModeView()
                         }
                         .padding(.horizontal)
+
+                        if contentIndexer.pendingCount > 0 {
+                            HStack {
+                                ProgressView().controlSize(.small)
+                                Text("Preparing content search… (\(contentIndexer.pendingCount) PDFs remaining)")
+                                    .font(.caption)
+                                Spacer()
+                            }
+                            .padding(.horizontal)
+                        } else if contentIndexer.failedCount > 0 {
+                            HStack {
+                                Text("Content search is unavailable for some PDFs.")
+                                    .font(.caption)
+                                Button("Retry", action: contentIndexer.retry)
+                                Spacer()
+                            }
+                            .padding(.horizontal)
+                        }
 
                         HStack {
                             Button("Import PDF…") {
@@ -90,6 +109,16 @@ struct LibraryView:View {
         }
         .background {
             translationTaskView
+        }
+        .task(priority: .utility) {
+            while Task.isCancelled == false {
+                await contentIndexer.index(pdfFiles, modelContext)
+                do {
+                    try await Task.sleep(nanoseconds: 1_000_000_000)
+                } catch {
+                    break
+                }
+            }
         }
         .alert(item: $libraryViewState.appError) {
             appError in
