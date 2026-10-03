@@ -60,6 +60,79 @@ final class SettingsViewService {
         }
     }
 
+    static func refreshContentCache(_ state: SettingsViewState, _ modelContext: ModelContext, _ indexer: LibraryContentIndexer) {
+        guard state.isRefreshingCache == false else {
+            return
+        }
+        
+        state.isRefreshingCache = true
+        
+        state.cacheRefreshResult = nil
+        
+        clearError(state)
+
+        state.cacheRefreshTask = Task(priority: .utility) { @MainActor in
+            defer {
+                state.isRefreshingCache = false
+                state.cacheRefreshTask = nil
+            }
+
+            do {
+                try Task.checkCancellation()
+                
+                let removedCount = try invalidateContentCache(modelContext)
+                
+                let pdfFiles = try modelContext.fetch(FetchDescriptor<PDFFile>())
+                
+                indexer.retry()
+                
+                await indexer.index(pdfFiles, modelContext)
+                
+                try Task.checkCancellation()
+
+                let afterIndexing = try modelContext.fetch(FetchDescriptor<PDFFile>())
+                
+                try LibraryViewService.deleteMissingFiles(modelContext, afterIndexing)
+                
+                let remaining = try modelContext.fetch(FetchDescriptor<PDFFile>())
+                
+                let refreshedCount = remaining.filter {
+                    $0.searchableText != nil
+                }.count
+                
+                state.cacheRefreshResult = SettingsViewState.CacheRefreshResult(refreshedCount: refreshedCount, removedCount: removedCount + afterIndexing.count - remaining.count, unavailableCount: remaining.count - refreshedCount)
+                
+            } catch {
+                handle(error, "Search Cache Could Not Be Refreshed", "Refresh content search cache", state)
+            }
+        }
+    }
+
+    @discardableResult
+    static func invalidateContentCache(_ modelContext: ModelContext) throws -> Int {
+        do {
+            let pdfFiles = try modelContext.fetch(FetchDescriptor<PDFFile>())
+            
+            try LibraryViewService.deleteMissingFiles(modelContext, pdfFiles)
+            
+            let remaining = try modelContext.fetch(FetchDescriptor<PDFFile>())
+            
+            for pdfFile in remaining {
+                pdfFile.searchableText = nil
+                pdfFile.contentFingerprint = nil
+            }
+            
+            if modelContext.hasChanges {
+                try modelContext.save()
+            }
+            
+            return pdfFiles.count - remaining.count
+        } catch {
+            modelContext.rollback()
+            throw error
+        }
+    }
+
     private static func clearError(_ state: SettingsViewState) {
         if state.appError != nil {
             state.appError = nil

@@ -6,9 +6,10 @@ struct SettingsView: View {
     @Environment(\.modelContext) private var modelContext
 
     @StateObject private var settingsViewState: SettingsViewState = SettingsViewState()
+    @StateObject private var contentIndexer = LibraryContentIndexer() //There is room for improvement.
 
-    @State private var selectedAppearance: AppearanceSettings.Appearance = .system
-    @State private var selectedStorage: StorageSettings.Storage = .flexibility
+    @State private var selectedAppearance: AppearanceSettings.Appearance = .system //There is room for improvement.
+    @State private var selectedStorage: StorageSettings.Storage = .flexibility //There is room for improvement.
 
     @Query private var appearanceSettings: [AppearanceSettings]
     @Query private var storageSettings: [StorageSettings]
@@ -136,6 +137,58 @@ struct SettingsView: View {
                             .stroke(Color(nsColor: .separatorColor).opacity(0.5), lineWidth: 1)
                     }
                     
+                    HStack(alignment: .top, spacing: 16) {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundStyle(.tint)
+                            .frame(width: 34, height: 34)
+                            .background(Color.accentColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
+
+                        VStack(alignment: .leading, spacing: 14) {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text("Search Cache")
+                                    .font(.headline)
+                                Text("Rebuild searchable text and remove library entries for PDFs that have been deleted.")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            Button("Refresh Cache") {
+                                SettingsViewService.refreshContentCache(settingsViewState, modelContext, contentIndexer)
+                            }
+                            .disabled(settingsViewState.isRefreshingCache)
+
+                            if settingsViewState.isRefreshingCache {
+                                HStack {
+                                    ProgressView().controlSize(.small)
+                                    if contentIndexer.pendingCount > 0 {
+                                        Text("Refreshing… (\(contentIndexer.pendingCount) PDFs remaining)")
+                                    } else {
+                                        Text("Refreshing…")
+                                    }
+                                }
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
+                            } else if let result = settingsViewState.cacheRefreshResult {
+                                Text("Refreshed \(result.refreshedCount) PDFs. Removed \(result.removedCount) deleted PDFs.")
+                                    .font(.callout)
+                                    .foregroundStyle(.secondary)
+                                if result.unavailableCount > 0 {
+                                    Text("Could not refresh: \(result.unavailableCount) PDFs.")
+                                        .font(.callout)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .padding(18)
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 10)
+                            .stroke(Color(nsColor: .separatorColor).opacity(0.5), lineWidth: 1)
+                    }
+
                 }
                 .frame(maxWidth: 720)
                 
@@ -144,6 +197,9 @@ struct SettingsView: View {
             .frame(maxWidth: .infinity, alignment: .top)
         }
         .background(Color(nsColor: .windowBackgroundColor))
+        .onDisappear {
+            settingsViewState.cacheRefreshTask?.cancel()
+        }
         .onChange(of: savedAppearance, initial: true) {
             _, appearance in
             if selectedAppearance != appearance {
@@ -200,4 +256,3 @@ struct SettingsView: View {
 #Preview {
     SettingsView()
 }
-
