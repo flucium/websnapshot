@@ -45,6 +45,11 @@ struct LibraryView:View {
                         .padding(.horizontal)
 
                         pdfListView()
+
+                        if let selectedPDFRow {
+                            Divider()
+                            pdfMetadataView(selectedPDFRow)
+                        }
                     }
                     .frame(minWidth: 300, maxWidth: .infinity, maxHeight: .infinity)
                 }
@@ -210,6 +215,58 @@ struct LibraryView:View {
                     .tag(pdfFile.persistentModelID)
             }
         }
+        .onExitCommand {
+            libraryViewState.selectedPDFRowID = nil
+        }
+    }
+
+    private func pdfMetadataView(_ pdfFile: PDFFile) -> some View {
+        let path = pdfFile.resolvedURL.path
+
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("Details")
+                    .font(.headline)
+
+                Spacer()
+
+                Button {
+                    libraryViewState.selectedPDFRowID = nil
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                }
+                .buttonStyle(.plain)
+                .help("Clear selection")
+                .accessibilityLabel("Clear selection")
+            }
+
+            if let addedAt = pdfFile.addedAt {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Date Added")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    Text(addedAt, format: .dateTime.year().month().day())
+                        .font(.subheadline)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text("File Path")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Text(path)
+                    .font(.subheadline)
+                    .textSelection(.enabled)
+                    .lineLimit(3)
+                    .truncationMode(.middle)
+                    .help(path)
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(nsColor: .windowBackgroundColor))
     }
 
     private func pdfRow(_ pdfFile: PDFFile) -> some View {
