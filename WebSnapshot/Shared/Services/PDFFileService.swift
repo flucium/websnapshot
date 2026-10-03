@@ -26,7 +26,7 @@ final class PDFFileService {
                 try modelContext.save()
                 
             }else{
-                modelContext.insert(PDFFile(url,bookmarkData))
+                modelContext.insert(PDFFile(url,bookmarkData, Date()))
                 
                 try modelContext.save()
             }

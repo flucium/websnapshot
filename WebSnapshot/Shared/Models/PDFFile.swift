@@ -5,11 +5,13 @@ import SwiftData
 final class PDFFile {
     var url: URL
     var bookmarkData: Data?
+    var addedAt: Date? = nil
     var tags: [PDFTag] = []
     
-    init(_ url: URL,_ bookmarkData:Data? = nil) {
+    init(_ url: URL,_ bookmarkData:Data? = nil, _ addedAt: Date? = nil) {
         self.url = url
         self.bookmarkData = bookmarkData
+        self.addedAt = addedAt
     }
 }
 
