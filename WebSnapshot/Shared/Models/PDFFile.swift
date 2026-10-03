@@ -4,19 +4,30 @@ import SwiftData
 @Model
 final class PDFFile {
     var url: URL
+    
     var bookmarkData: Data?
+    
     var addedAt: Date? = nil
+    
     var tags: [PDFTag] = []
     
+    var searchableText: String? = nil
+    
+    var contentFingerprint: String? = nil
+    
     init(_ url: URL,_ bookmarkData:Data? = nil, _ addedAt: Date? = nil) {
+    
         self.url = url
+        
         self.bookmarkData = bookmarkData
+        
         self.addedAt = addedAt
     }
 }
 
 extension PDFFile {
     func resolveURL() throws -> URL {
+        
         guard let bookmarkData else {
             return url
         }
