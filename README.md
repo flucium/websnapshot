@@ -23,7 +23,7 @@ Fetch and save websites.
 - **Library**<br>
 Manage saved PDF files.
   - List: View a list of saved PDF files.
-  - Search: Search saved PDF files by title, tag, or a combination of title and tags.
+  - Search: Search saved PDF files by title, tag, or a combination of title and tags and PDF files content.
   - View: View saved PDF files and translate their displayed content.
   - Delete: Delete saved PDF files.
   - Tags: Add, remove, and edit tags associated with saved PDF files.
@@ -34,6 +34,7 @@ Manage saved PDF files.
   - Storage Location: Configure where PDF files are saved:
     - Fixed: Always save PDF files to a designated directory. Click [Change…] to specify the directory.
     - Flexibility: Choose the destination directory each time you save a PDF file.
+  - PDF file content refresh-cache.
 
 - **SafariExtension**<br>
 Using a Safari Extension, you can save websites as PDFs directly from Safari.
