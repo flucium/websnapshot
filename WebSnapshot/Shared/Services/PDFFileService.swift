@@ -23,6 +23,10 @@ final class PDFFileService {
                 
                 pdfFile.bookmarkData = bookmarkData
                 
+                pdfFile.searchableText = nil
+                
+                pdfFile.contentFingerprint = nil
+                
                 try modelContext.save()
                 
             }else{
