@@ -1,4 +1,5 @@
 import Foundation
+import PDFKit
 import WebKit
 import XCTest
 @testable import WebSnapshot
@@ -50,6 +51,31 @@ final class WebExportSourceTests: XCTestCase {
         } catch {
             XCTAssertEqual((error as? AppError)?.kind, .invalidLoad)
         }
+    }
+
+    func testExportUsesScreenStylesAndRestoresOriginalMediaType() async throws {
+        let page = WebPage()
+        page.mediaType = .print
+        try await WebService.waitForNavigation(page.load(
+            html: """
+                <html><head><style>
+                @media screen { #print-content { display: none; } }
+                @media print { #screen-content { display: none; } }
+                </style></head><body>
+                <div id="screen-content">ScreenContent</div>
+                <div id="print-content">PrintContent</div>
+                </body></html>
+                """,
+            baseURL: try XCTUnwrap(URL(string: "https://example.com/article"))
+        ))
+
+        let exported = try await WebService.export(page)
+        let document = try XCTUnwrap(PDFDocument(data: exported.data))
+        let text = try XCTUnwrap(document.string)
+
+        XCTAssertTrue(text.contains("ScreenContent"))
+        XCTAssertFalse(text.contains("PrintContent"))
+        XCTAssertEqual(page.mediaType, .print)
     }
 
     private func load(_ page: WebPage, _ address: String) async throws {
