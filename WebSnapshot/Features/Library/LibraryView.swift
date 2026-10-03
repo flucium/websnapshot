@@ -351,15 +351,16 @@ struct LibraryView:View {
                     Button("Export PDF…") {
                         LibraryViewService.exportPDF(libraryViewState, selectedPDFFile)
                     }
-                    
+
+                    Button("Edit Tags") {
+                        editTags(selectedPDFFile)
+                    }
                     
                     Button("Delete", role: .destructive,action: {
                         LibraryViewService.deleteDisplayedPDF(libraryViewState, modelContext, selectedPDFFile)
                     })
 
-                    Button("Edit Tags…") {
-                        editTags(selectedPDFFile)
-                    }
+
                 }
                 .padding(.horizontal)
                 .padding(.top, 8)
