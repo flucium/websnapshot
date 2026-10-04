@@ -6,10 +6,7 @@ struct SettingsView: View {
     @Environment(\.modelContext) private var modelContext
 
     @StateObject private var settingsViewState: SettingsViewState = SettingsViewState()
-    @StateObject private var contentIndexer = LibraryContentIndexer() //There is room for improvement.
-
-    @State private var selectedAppearance: AppearanceSettings.Appearance = .system //There is room for improvement.
-    @State private var selectedStorage: StorageSettings.Storage = .flexibility //There is room for improvement.
+    @StateObject private var contentIndexer = LibraryContentIndexer()
 
     @Query private var appearanceSettings: [AppearanceSettings]
     @Query private var storageSettings: [StorageSettings]
@@ -50,7 +47,7 @@ struct SettingsView: View {
                                 
                             }
 
-                            Picker("Appearance", selection: $selectedAppearance) {
+                            Picker("Appearance", selection: $settingsViewState.selectedAppearance) {
                                 
                                 ForEach(AppearanceSettings.Appearance.allCases) {
                                     appearance in
@@ -94,7 +91,7 @@ struct SettingsView: View {
                             
                             }
 
-                            Picker("Storage", selection: $selectedStorage) {
+                            Picker("Storage", selection: $settingsViewState.selectedStorage) {
                                 ForEach(StorageSettings.Storage.allCases) { storage in
                             
                                     Text(StorageSettingsService.title(storage))
@@ -106,7 +103,7 @@ struct SettingsView: View {
                             .pickerStyle(.segmented)
                             .frame(maxWidth: 360)
 
-                            if selectedStorage == .fixed {
+                            if settingsViewState.selectedStorage == .fixed {
                                 HStack(spacing: 12) {
                                     
                                     Text(fixedStoragePath ?? "No folder selected")
@@ -200,19 +197,19 @@ struct SettingsView: View {
         .onDisappear {
             settingsViewState.cacheRefreshTask?.cancel()
         }
-        .onChange(of: savedAppearance, initial: true) {
-            _, appearance in
-            if selectedAppearance != appearance {
-                selectedAppearance = appearance
+        .task(id: savedAppearance) {
+            let appearance = savedAppearance
+            if settingsViewState.selectedAppearance != appearance {
+                settingsViewState.selectedAppearance = appearance
             }
         }
-        .onChange(of: savedStorage, initial: true) {
-            _, storage in
-            if selectedStorage != storage {
-                selectedStorage = storage
+        .task(id: savedStorage) {
+            let storage = savedStorage
+            if settingsViewState.selectedStorage != storage {
+                settingsViewState.selectedStorage = storage
             }
         }
-        .onChange(of: selectedAppearance) {
+        .onChange(of: settingsViewState.selectedAppearance) {
             _, appearance in
             
             let previousAppearance = savedAppearance
@@ -225,11 +222,11 @@ struct SettingsView: View {
                 let didSave = SettingsViewService.saveAppearance(settingsViewState, modelContext, appearance)
                 
                 if !didSave {
-                    selectedAppearance = previousAppearance
+                    settingsViewState.selectedAppearance = previousAppearance
                 }
             }
         }
-        .onChange(of: selectedStorage) {
+        .onChange(of: settingsViewState.selectedStorage) {
             _, storage in
             
             let previousStorage = savedStorage
@@ -242,7 +239,7 @@ struct SettingsView: View {
                 let didSave = SettingsViewService.saveStorage(settingsViewState, modelContext, storage)
             
                 if !didSave {
-                    selectedStorage = previousStorage
+                    settingsViewState.selectedStorage = previousStorage
                 }
             }
         }
