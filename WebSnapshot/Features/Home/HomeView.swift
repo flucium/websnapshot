@@ -4,8 +4,6 @@ import AppKit
 
 
 struct HomeView: View {
-    @Environment(\.colorScheme) private var colorScheme
-
     @StateObject private var homeViewState = HomeViewState()
     
     @Query private var appearanceSettings: [AppearanceSettings]
@@ -35,35 +33,6 @@ struct HomeView: View {
             window.appearance = applicationAppearance
             window.contentView?.appearance = applicationAppearance
         }
-
-        updateApplicationIcon(appearance)
-    }
-
-    private func updateApplicationIcon(_ appearance: AppearanceSettings.Appearance) {
-        let usesDarkIcon = switch appearance {
-        case .light:
-            false
-        case .dark:
-            true
-        case .system:
-            colorScheme == .dark
-        }
-
-        let sourceImage: NSImage = usesDarkIcon ? .appIconDark : .appIconLight
-        
-        let iconSize = NSSize(width: 128, height: 128)
-
-        let applicationIcon = NSImage(size: iconSize, flipped: false) { _ in
-            let iconRect = NSRect(origin: .zero, size: iconSize).insetBy(dx: 12, dy: 12)
-
-            NSBezierPath(roundedRect: iconRect,xRadius: 23,yRadius: 23).addClip()
-
-            sourceImage.draw(in: iconRect)
-
-            return true
-        }
-
-        NSApp.applicationIconImage = applicationIcon
     }
     
     @ViewBuilder
@@ -104,9 +73,6 @@ struct HomeView: View {
         .onChange(of: appearance) {
             _, changedAppearance in
             updateApplicationAppearance(changedAppearance)
-        }
-        .onChange(of: colorScheme) {
-            updateApplicationAppearance(appearance)
         }
     }
 }

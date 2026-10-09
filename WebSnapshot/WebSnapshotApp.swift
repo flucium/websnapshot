@@ -32,6 +32,42 @@ private enum SafariAppServices {
 
 @MainActor
 final class WebSnapshotAppDelegate: NSObject, NSApplicationDelegate {
+    private var effectiveAppearanceObservation: NSKeyValueObservation?
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        
+        effectiveAppearanceObservation = NSApp.observe(\.effectiveAppearance, options: [.initial, .new]) { [weak self] _, _ in
+            
+            Task { @MainActor [weak self] in
+                self?.updateApplicationIcon()
+            }
+            
+        }
+        
+    }
+
+    private func updateApplicationIcon() {
+        let usesDarkIcon = NSApp.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        
+        let sourceImage: NSImage = usesDarkIcon ? .appIconDark : .appIconLight
+        
+        let iconSize = NSSize(width: 128, height: 128)
+
+        let applicationIcon = NSImage(size: iconSize, flipped: false) { _ in
+            
+            let iconRect = NSRect(origin: .zero, size: iconSize).insetBy(dx: 12, dy: 12)
+
+            NSBezierPath(roundedRect: iconRect, xRadius: 23, yRadius: 23).addClip()
+            
+            sourceImage.draw(in: iconRect)
+
+            return true
+            
+        }
+        
+
+        NSApp.applicationIconImage = applicationIcon
+    }
 
     func application(_ application: NSApplication, open urls: [URL]) {
         
