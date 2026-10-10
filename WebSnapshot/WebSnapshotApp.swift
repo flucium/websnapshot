@@ -32,11 +32,11 @@ private enum SafariAppServices {
 
 @MainActor
 final class WebSnapshotAppDelegate: NSObject, NSApplicationDelegate {
-    private var effectiveAppearanceObservation: NSKeyValueObservation?
+    private var appearanceObservation: NSKeyValueObservation?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         
-        effectiveAppearanceObservation = NSApp.observe(\.effectiveAppearance, options: [.initial, .new]) { [weak self] _, _ in
+        appearanceObservation = NSApp.observe(\.appearance, options: [.initial, .new]) { [weak self] _, _ in
             
             Task { @MainActor [weak self] in
                 self?.updateApplicationIcon()
@@ -47,7 +47,12 @@ final class WebSnapshotAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func updateApplicationIcon() {
-        let usesDarkIcon = NSApp.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        guard let applicationAppearance = NSApp.appearance else {
+            NSApp.applicationIconImage = nil
+            return
+        }
+
+        let usesDarkIcon = applicationAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
         
         let sourceImage: NSImage = usesDarkIcon ? .appIconDark : .appIconLight
         
