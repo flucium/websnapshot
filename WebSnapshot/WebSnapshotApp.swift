@@ -19,40 +19,72 @@ struct WebSnapshotApp: App {
 
 @MainActor
 private enum SafariAppServices {
+    
     static let modelContainer: ModelContainer = {
         do {
-            return try ModelContainer(for: AppearanceSettings.self, StorageSettings.self, PDFFile.self, PDFTag.self)
+            return try ModelContainer(for: AppearanceSettings.self, StorageSettings.self, PDFFile.self, PDFTag.self, configurations: ModelConfiguration(cloudKitDatabase: .none))
         } catch {
             fatalError("Could not open the WebSnapshot library: \(error)")
         }
     }()
 
-    static let safariRequests = SafariRequestService(capture: WebCaptureService.capture)
+    static let safariRequests = SafariRequestService(WebCaptureService.capture)
+    
 }
 
 @MainActor
 final class WebSnapshotAppDelegate: NSObject, NSApplicationDelegate {
+    
     private var appearanceObservation: NSKeyValueObservation?
+    
+    private var syncTask: Task<Void, Never>?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        
-        appearanceObservation = NSApp.observe(\.appearance, options: [.initial, .new]) { [weak self] _, _ in
+       
+        syncTask = Task {
+            @MainActor in
             
-            Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                
+                await LibrarySyncService.shared.refresh(SafariAppServices.modelContainer.mainContext)
+                
+                do {
+                    try await Task.sleep(for: .seconds(2))
+                }catch {
+                    break
+                }
+            
+            }
+            
+            
+        }
+        
+        appearanceObservation = NSApp.observe(\.appearance, options: [.initial, .new]) {
+            [weak self] _, _ in
+            
+            Task {
+                @MainActor [weak self] in
+                
                 self?.updateApplicationIcon()
+                
             }
             
         }
         
     }
 
+    func applicationWillTerminate(_ notification: Notification) {
+        syncTask?.cancel()
+    }
+
     private func updateApplicationIcon() {
+        
         guard let applicationAppearance = NSApp.appearance else {
             NSApp.applicationIconImage = nil
             return
         }
 
-        let usesDarkIcon = applicationAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        let usesDarkIcon = applicationAppearance.bestMatch( from: [.aqua, .darkAqua]) == .darkAqua
         
         let sourceImage: NSImage = usesDarkIcon ? .appIconDark : .appIconLight
         
@@ -101,6 +133,7 @@ final class WebSnapshotAppDelegate: NSObject, NSApplicationDelegate {
         
 
         for url in urls {
+            
             guard (try? SafariCaptureRequest(openURL: url)) != nil else {
                 continue
             }
