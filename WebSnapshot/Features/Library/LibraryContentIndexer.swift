@@ -19,7 +19,7 @@ final class LibraryContentIndexer: ObservableObject {
     }
 
     
-    init(extract: @escaping @Sendable (URL) async throws -> String = {
+    init(_ extract: @escaping @Sendable (URL) async throws -> String = {
         try await PDFContentService().text($0)
     }) {
         self.extract = extract
@@ -31,13 +31,14 @@ final class LibraryContentIndexer: ObservableObject {
 
     func index(_ pdfFiles: [PDFFile], _ modelContext: ModelContext) async {
         
-        guard isRunning == false else {
+        guard isRunning == false, !LibrarySyncService.shared.isSwitching else {
             return
         }
         
         isRunning = true
         
         defer {
+            
             if pendingCount != 0 {
                 pendingCount = 0
             }
@@ -61,11 +62,16 @@ final class LibraryContentIndexer: ObservableObject {
 
         for pdfFile in pdfFiles {
             
-            if Task.isCancelled {
+            if Task.isCancelled || LibrarySyncService.shared.isSwitching {
                 return
             }
             
+            if pdfFile.syncRelativePath != nil, pdfFile.availability != .available {
+                continue
+            }
+            
             do {
+                
                 let url = try pdfFile.resolveURL()
                 
                 guard FileIO.availability(url) == .available else {
@@ -75,17 +81,20 @@ final class LibraryContentIndexer: ObservableObject {
                 let fingerprint = try PDFContentService.fingerprint(url)
                 
                 if pdfFile.searchableText != nil, pdfFile.contentFingerprint == fingerprint {
+                    
                     failedSources[pdfFile.persistentModelID] = nil
                     
                     continue
                 }
 
                 if pdfFile.searchableText != nil || pdfFile.contentFingerprint != nil {
+                    
                     pdfFile.searchableText = nil
                     
                     pdfFile.contentFingerprint = nil
                     
                     invalidated = true
+                    
                 }
                 
                 let source = "\(url.standardizedFileURL.path):\(fingerprint)"
@@ -94,7 +103,7 @@ final class LibraryContentIndexer: ObservableObject {
                     continue
                 }
                 
-                requests.append((pdfFile.persistentModelID, url, fingerprint, source))
+                requests.append( ( pdfFile.persistentModelID, url, fingerprint, source) )
                 
             } catch {
                 
@@ -106,16 +115,25 @@ final class LibraryContentIndexer: ObservableObject {
                     
                     failedSources[pdfFile.persistentModelID] = source
                 }
+                
             }
+            
         }
 
         if invalidated {
+            
             do {
+            
                 try modelContext.save()
+                
             } catch {
+                
                 AppLogger.record(AppError(error), "Clear outdated PDF content search")
+                
                 return
+                
             }
+            
         }
 
         guard requests.isEmpty == false else {
@@ -125,21 +143,31 @@ final class LibraryContentIndexer: ObservableObject {
         pendingCount = requests.count
         
         for request in requests {
+            
             defer {
                 pendingCount -= 1
             }
             
             do {
+                
                 try Task.checkCancellation()
                 
                 let text = try await extract(request.url)
                 
+                if LibrarySyncService.shared.isSwitching {
+                    return
+                }
+                
                 try Task.checkCancellation()
 
                 guard let pdfFile = try modelContext.fetch(FetchDescriptor<PDFFile>()).first(where: {
+                    
                     $0.persistentModelID == request.id
+                    
                 }), try PDFContentService.fingerprint(pdfFile.resolveURL()) == request.fingerprint else {
+                    
                     continue
+                    
                 }
 
                 pdfFile.searchableText = text
@@ -147,7 +175,9 @@ final class LibraryContentIndexer: ObservableObject {
                 pdfFile.contentFingerprint = request.fingerprint
                 
                 do {
+                    
                     try modelContext.save()
+                    
                 } catch {
                 
                     pdfFile.searchableText = nil
@@ -155,12 +185,15 @@ final class LibraryContentIndexer: ObservableObject {
                     pdfFile.contentFingerprint = nil
                     
                     throw error
+                    
                 }
                 
                 failedSources[request.id] = nil
                 
             } catch is CancellationError {
+                
                 return
+                
             } catch {
                 
                 if Task.isCancelled {
@@ -170,7 +203,11 @@ final class LibraryContentIndexer: ObservableObject {
                 failedSources[request.id] = request.source
                 
                 AppLogger.record(AppError(error), "Prepare PDF content search", request.url)
+                
             }
+            
         }
+        
     }
+    
 }
