@@ -7,9 +7,9 @@ import Translation
 
 @MainActor
 final class LibraryViewService {
-    static func importPDF(_ state: LibraryViewState, _ modelContext: ModelContext) {
+    static func importPDFs(_ state: LibraryViewState, _ modelContext: ModelContext) {
         
-        guard let sourceURL = importPDFPanel() else {
+        guard let sourceURLs = importPDFsPanel(), sourceURLs.isEmpty == false else {
             return
         }
 
@@ -37,8 +37,36 @@ final class LibraryViewService {
                 return
             }
 
-            let destination = try importPDF(sourceURL, destinationDirectory, modelContext)
-            
+            importPDFs(state, modelContext, sourceURLs, destinationDirectory)
+        } catch {
+            handle(error, "PDFs Could Not Be Imported", "Import PDFs", state)
+        }
+    }
+
+    static func importPDFs(_ state: LibraryViewState, _ modelContext: ModelContext, _ sourceURLs: [URL], _ destinationDirectory: URL) {
+        guard sourceURLs.isEmpty == false else {
+            return
+        }
+
+        var importedURLs: [URL] = []
+        
+        var failures: [(url: URL, error: AppError)] = []
+
+        for sourceURL in sourceURLs {
+            do {
+                let destination = try importPDF(sourceURL, destinationDirectory, modelContext)
+                importedURLs.append(destination)
+            } catch {
+                guard let appError = AppError.presentable(error) else {
+                    continue
+                }
+
+                AppLogger.record(appError, "Import PDF", sourceURL)
+                failures.append((sourceURL, appError))
+            }
+        }
+
+        if let destination = importedURLs.last {
             let registeredPDF = try? modelContext.fetch(FetchDescriptor<PDFFile>()).first {
                 $0.url.standardizedFileURL == destination.standardizedFileURL
             }
@@ -48,15 +76,32 @@ final class LibraryViewService {
             state.selectedTag = .all
             
             state.selectedPDFRowID = registeredPDF?.persistentModelID
-            
-            state.appError = nil
-            
-        } catch {
-            handle(error, "PDF Could Not Be Imported", "Import PDF", state, sourceURL)
         }
+
+        state.appError = nil
+
+        guard let firstFailure = failures.first else {
+            return
+        }
+
+        if sourceURLs.count == 1 {
+            state.errorTitle = "PDF Could Not Be Imported"
+            state.appError = firstFailure.error
+            return
+        }
+
+        let messages = failures.map {
+            "\($0.url.lastPathComponent): \($0.error.userMessage)"
+        }.joined(separator: "\n")
+
+        state.errorTitle = importedURLs.isEmpty ? "PDFs Could Not Be Imported" : "Some PDFs Could Not Be Imported"
+        
+        state.appError = .error("\(importedURLs.count) of \(sourceURLs.count) PDFs were imported.\n\n\(messages)")
     }
 
     static func importPDF(_ sourceURL: URL, _  directoryURL: URL, _ modelContext: ModelContext) throws -> URL {
+        
+        try LibrarySyncService.shared.requireReady()
         
         let isAccessingSource = sourceURL.startAccessingSecurityScopedResource()
         
@@ -73,7 +118,25 @@ final class LibraryViewService {
         }
 
         guard sourceURL.pathExtension.lowercased() == "pdf", let document = PDFDocument(url: sourceURL), document.pageCount > 0 || document.isLocked else {
+            
             throw AppError.invalidFileType("Choose a valid PDF file to import.")
+            
+        }
+
+        if LibrarySyncService.isEnabled(modelContext) {
+            
+            let data = try SyncIndexStore.coordinatedRead(sourceURL) {
+                try Data(contentsOf: $0)
+            }
+            
+            return try LibrarySyncService.shared.savePDF( data, sourceURL.lastPathComponent, modelContext )
+        }
+
+        if sourceURL.deletingLastPathComponent().resolvingSymlinksInPath().standardizedFileURL == directoryURL.resolvingSymlinksInPath().standardizedFileURL {
+            
+            try PDFFileService.save(modelContext, sourceURL)
+            
+            return sourceURL
         }
 
         let destination = availablePDFURL(directoryURL, sourceURL.lastPathComponent)
@@ -82,17 +145,27 @@ final class LibraryViewService {
             try FileManager.default.copyItem(at: sourceURL, to: destination)
 
             do {
+                
                 try PDFFileService.save(modelContext, destination)
+                
             } catch {
+                
                 do {
+                
                     try FileManager.default.removeItem(at: destination)
+                    
                 } catch let cleanupError {
+                    
                     AppLogger.record(AppError(cleanupError), "Remove PDF after failed import", destination)
+                    
                 }
+            
                 throw error
+                
             }
 
             return destination
+            
         } catch {
             throw AppError(error)
         }
@@ -108,9 +181,13 @@ final class LibraryViewService {
 
         do {
             try exportPDF(sourceURL,  destinationURL)
+            
             state.appError = nil
+            
         } catch {
+            
             handle(error, "PDF Could Not Be Exported", "Export PDF", state, sourceURL)
+            
         }
     }
 
@@ -125,6 +202,7 @@ final class LibraryViewService {
         let isAccessingDestination = destinationURL.startAccessingSecurityScopedResource()
 
         defer {
+            
             if isAccessingSource {
                 sourceURL.stopAccessingSecurityScopedResource()
             }
@@ -138,12 +216,14 @@ final class LibraryViewService {
             let data = try Data(contentsOf: sourceURL, options: .mappedIfSafe)
             
             try data.write(to: destinationURL, options: .atomic)
+            
         } catch {
             throw AppError(error)
         }
     }
 
     static func startTranslation(_ state: LibraryViewState, _ targetLanguage: TranslationLanguage) {
+        
         guard let selectedPDFFile = state.selectedPDFFile else {
             return
         }
@@ -153,6 +233,7 @@ final class LibraryViewService {
         let request = state.beginTranslation(selectedPDFFile, targetLanguage)
 
         state.translationPreparationTask = Task { @MainActor in
+            
             do {
                 try Task.checkCancellation()
         
@@ -261,6 +342,17 @@ final class LibraryViewService {
 
     static func synchronizeLibraryFiles(_ state: LibraryViewState,_ modelContext: ModelContext,_ monitor: LibraryPDFFileMonitor,_ change: LibraryPDFFileMonitor.Change? = nil) {
         
+        if LibrarySyncService.shared.isSwitching || LibrarySyncService.isEnabled(modelContext) {
+        
+            monitor.stop()
+        
+            if let selected = state.selectedPDFFile, selected.isDeleted || selected.modelContext == nil {
+                closeMissingPDF(state)
+            }
+            
+            return
+        }
+        
         let confirmedDeletedFileIDs: Set<PersistentIdentifier>
 
         if let change {
@@ -304,15 +396,30 @@ final class LibraryViewService {
     }
 
     static func delete( _ modelContext: ModelContext, _ url: URL, _ resolvedURL: URL, _ removeFile: ((URL) throws -> Void)? = nil ) throws {
+        try LibrarySyncService.shared.requireReady()
+        
+        if LibrarySyncService.isEnabled(modelContext) {
+        
+            try PDFFileService.delete(modelContext, url)
+            
+            return
+            
+        }
         
         if let removeFile {
+            
             try removeFile(resolvedURL)
+            
         } else {
+            
             try FileIO.delete(resolvedURL)
+            
         }
 
         do {
+            
             try PDFFileService.delete(modelContext, url)
+            
         } catch {
             AppLogger.recordDiagnostic("The file was deleted, but its library entry could not be removed. Automatic synchronization will retry the cleanup.","Delete PDF library entry",resolvedURL)
         
@@ -322,17 +429,24 @@ final class LibraryViewService {
 
     static func deleteMissingFiles(_ modelContext: ModelContext,_ pdfFiles: [PDFFile],_ confirmedDeletedFileIDs: Set<PersistentIdentifier> = []) throws {
         
+        if LibrarySyncService.shared.isSwitching || LibrarySyncService.isEnabled(modelContext) {
+            return
+        }
+        
         var needsSave = false
 
         let missingPDFFiles = pdfFiles.filter {
             $0.availability == .missing || (confirmedDeletedFileIDs.contains($0.persistentModelID) && FileIO.exists($0.resolvedURL) == false)
         }
 
-        PDFTagService.deleteTagsOrphanedByDeleting(missingPDFFiles, in: modelContext )
+        PDFTagService.deleteTagsOrphanedByDeleting(missingPDFFiles, modelContext )
 
         for pdfFile in missingPDFFiles {
+            
             modelContext.delete(pdfFile)
+            
             needsSave = true
+            
         }
 
         if needsSave {
