@@ -6,6 +6,8 @@ import AppKit
 struct HomeView: View {
     @StateObject private var homeViewState = HomeViewState()
     
+    @ObservedObject private var syncService = LibrarySyncService.shared
+    
     @Query private var appearanceSettings: [AppearanceSettings]
 
 
@@ -70,6 +72,7 @@ struct HomeView: View {
         .onAppear {
             updateApplicationAppearance(appearance)
         }
+        .disabled(syncService.isSwitching)
         .onChange(of: appearance) {
             _, changedAppearance in
             updateApplicationAppearance(changedAppearance)
