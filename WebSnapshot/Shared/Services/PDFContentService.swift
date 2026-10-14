@@ -6,7 +6,7 @@ actor PDFContentService {
     
     private let recognize: @Sendable (CGImage) async throws -> String
 
-    init(recognize: @escaping @Sendable (CGImage) async throws -> String = {
+    init(_ recognize: @escaping @Sendable (CGImage) async throws -> String = {
         try await OCR.recognizeText($0)}
     ) {
         self.recognize = recognize
