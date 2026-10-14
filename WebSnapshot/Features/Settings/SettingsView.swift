@@ -4,12 +4,22 @@ import SwiftData
 struct SettingsView: View {
 
     @Environment(\.modelContext) private var modelContext
-
-    @StateObject private var settingsViewState: SettingsViewState = SettingsViewState()
-    @StateObject private var contentIndexer = LibraryContentIndexer()
+    
+    @ObservedObject private var syncService = LibrarySyncService.shared
 
     @Query private var appearanceSettings: [AppearanceSettings]
+    
     @Query private var storageSettings: [StorageSettings]
+
+    @StateObject private var settingsViewState: SettingsViewState = SettingsViewState()
+    
+    @StateObject private var contentIndexer = LibraryContentIndexer()
+
+    @State private var selectedAppearance: AppearanceSettings.Appearance = .system
+
+    @State private var selectedStorage: StorageSettings.Storage = .flexibility
+
+    @State private var selectedSync = false
 
     private var savedAppearance: AppearanceSettings.Appearance {
         AppearanceSettingsService.appearance(appearanceSettings)
@@ -21,6 +31,10 @@ struct SettingsView: View {
 
     private var fixedStoragePath: String? {
         StorageSettingsService.fixedStoragePath(storageSettings)
+    }
+
+    private var savedSync: Bool {
+        storageSettings.first?.syncEnabled ?? false
     }
 
     var body: some View {
@@ -47,7 +61,7 @@ struct SettingsView: View {
                                 
                             }
 
-                            Picker("Appearance", selection: $settingsViewState.selectedAppearance) {
+                            Picker("Appearance", selection: $selectedAppearance) {
                                 
                                 ForEach(AppearanceSettings.Appearance.allCases) {
                                     appearance in
@@ -62,6 +76,61 @@ struct SettingsView: View {
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         
+                    }
+                    .padding(18)
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 10)
+                            .stroke(Color(nsColor: .separatorColor).opacity(0.5), lineWidth: 1)
+                    }
+
+                    HStack(alignment: .top, spacing: 16) {
+                        Image(systemName: "icloud")
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundStyle(.tint)
+                            .frame(width: 34, height: 34)
+                            .background(Color.accentColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
+                        VStack(alignment: .leading, spacing: 14) {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text("Sync").font(.headline)
+                                Text("Keep your PDFs and tags in iCloud Drive/websnapshot.")
+                                    .font(.subheadline).foregroundStyle(.secondary)
+                                Text("Allow access to iCloud Drive once. The websnapshot folder is created automatically when Sync turns on.")
+                                    .font(.callout).foregroundStyle(.secondary)
+                            }
+                            Picker("Sync", selection: $selectedSync) {
+                                Text("Off").tag(false)
+                                Text("On").tag(true)
+                            }
+                            .labelsHidden()
+                            .pickerStyle(.segmented)
+                            .frame(maxWidth: 360)
+                            if syncService.isSwitching {
+                                HStack {
+                                    ProgressView().controlSize(.small)
+                                    Text("Copying library…")
+                                }.font(.callout).foregroundStyle(.secondary)
+                            } else if savedSync {
+                                Text("Turning Sync off copies PDFs to your previous Fixed folder, or asks for a folder if Storage was Flexibility.")
+                                    .font(.callout).foregroundStyle(.secondary)
+                            }
+                            if let error = syncService.lastError {
+                                Text(error.userMessage).font(.callout).foregroundStyle(.secondary)
+                            }
+                            if storageSettings.first?.syncDriveBookmarkData != nil || storageSettings.first?.syncFolderBookmarkData != nil {
+                                HStack {
+                                    Button("Reconnect iCloud Drive…") {
+                                        SettingsViewService.reconnectSync(settingsViewState, modelContext)
+                                    }
+                                    if savedSync {
+                                        Button("Retry Sync") {
+                                            Task { await syncService.refresh(modelContext) }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     .padding(18)
                     .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
@@ -91,7 +160,7 @@ struct SettingsView: View {
                             
                             }
 
-                            Picker("Storage", selection: $settingsViewState.selectedStorage) {
+                            Picker("Storage", selection: $selectedStorage) {
                                 ForEach(StorageSettings.Storage.allCases) { storage in
                             
                                     Text(StorageSettingsService.title(storage))
@@ -102,8 +171,9 @@ struct SettingsView: View {
                             .labelsHidden()
                             .pickerStyle(.segmented)
                             .frame(maxWidth: 360)
+                            .disabled(savedSync)
 
-                            if settingsViewState.selectedStorage == .fixed {
+                            if selectedStorage == .fixed {
                                 HStack(spacing: 12) {
                                     
                                     Text(fixedStoragePath ?? "No folder selected")
@@ -118,6 +188,7 @@ struct SettingsView: View {
                                     Button(fixedStoragePath == nil ? "Choose Folder…" : "Change…" ) {
                                         SettingsViewService.chooseFixedStorage( settingsViewState, modelContext, fixedStoragePath )
                                     }
+                                    .disabled(savedSync)
                                     
                                 }
                                 .frame(maxWidth: 480)
@@ -194,22 +265,45 @@ struct SettingsView: View {
             .frame(maxWidth: .infinity, alignment: .top)
         }
         .background(Color(nsColor: .windowBackgroundColor))
+        .disabled(syncService.isSwitching)
         .onDisappear {
             settingsViewState.cacheRefreshTask?.cancel()
         }
         .task(id: savedAppearance) {
             let appearance = savedAppearance
-            if settingsViewState.selectedAppearance != appearance {
-                settingsViewState.selectedAppearance = appearance
+            if selectedAppearance != appearance {
+                selectedAppearance = appearance
             }
         }
         .task(id: savedStorage) {
             let storage = savedStorage
-            if settingsViewState.selectedStorage != storage {
-                settingsViewState.selectedStorage = storage
+            if selectedStorage != storage {
+                selectedStorage = storage
             }
         }
-        .onChange(of: settingsViewState.selectedAppearance) {
+        .task(id: savedSync) {
+            if selectedSync != savedSync {
+                selectedSync = savedSync
+            }
+        }
+        .onChange(of: selectedSync) { _, enabled in
+            
+            guard enabled != savedSync else {
+                return
+            }
+            
+            Task { @MainActor in
+            
+                let succeeded = await SettingsViewService.changeSync(settingsViewState, modelContext, enabled)
+                
+                if !succeeded {
+                    selectedSync = savedSync
+                }
+                
+            }
+            
+        }
+        .onChange(of: selectedAppearance) {
             _, appearance in
             
             let previousAppearance = savedAppearance
@@ -222,11 +316,11 @@ struct SettingsView: View {
                 let didSave = SettingsViewService.saveAppearance(settingsViewState, modelContext, appearance)
                 
                 if !didSave {
-                    settingsViewState.selectedAppearance = previousAppearance
+                    selectedAppearance = previousAppearance
                 }
             }
         }
-        .onChange(of: settingsViewState.selectedStorage) {
+        .onChange(of: selectedStorage) {
             _, storage in
             
             let previousStorage = savedStorage
@@ -239,7 +333,7 @@ struct SettingsView: View {
                 let didSave = SettingsViewService.saveStorage(settingsViewState, modelContext, storage)
             
                 if !didSave {
-                    settingsViewState.selectedStorage = previousStorage
+                    selectedStorage = previousStorage
                 }
             }
         }
