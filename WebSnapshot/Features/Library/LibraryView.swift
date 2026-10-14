@@ -8,10 +8,13 @@ struct LibraryView:View {
     @Environment(\.modelContext) private var modelContext
 
     @Query private var pdfFiles: [PDFFile]
+    
     @Query private var pdfTags: [PDFTag]
 
     @StateObject private var libraryViewState = LibraryViewState()
+    
     @StateObject private var pdfFileMonitor = LibraryPDFFileMonitor()
+    
     @StateObject private var contentIndexer = LibraryContentIndexer()
 
     
@@ -48,8 +51,8 @@ struct LibraryView:View {
                         }
 
                         HStack {
-                            Button("Import PDF…") {
-                                LibraryViewService.importPDF(libraryViewState, modelContext)
+                            Button("Import PDFs…") {
+                                LibraryViewService.importPDFs(libraryViewState, modelContext)
                             }
 
                             Button("Export PDF…") {
@@ -302,6 +305,16 @@ struct LibraryView:View {
         VStack(alignment: .leading, spacing: 6) {
             Text(pdfFile.resolvedURL.lastPathComponent)
 
+            if libraryViewState.downloadingPDFs.contains(pdfFile.persistentModelID) {
+                
+                Text("Downloading from iCloud…").font(.caption).foregroundStyle(.secondary)
+                
+            } else if pdfFile.syncRelativePath != nil, pdfFile.availability != .available {
+                
+                Text("In iCloud — open to download").font(.caption).foregroundStyle(.secondary)
+                
+            }
+
             if pdfFile.tags.isEmpty == false {
                 HStack(spacing: 6) {
                     ForEach(rowTags(pdfFile)) { tag in
@@ -427,8 +440,50 @@ struct LibraryView:View {
 
     
     private func openPDF(_ pdfFile: PDFFile) {
+        
+        if pdfFile.syncRelativePath != nil {
+        
+            let id = pdfFile.persistentModelID
+            
+            guard libraryViewState.downloadingPDFs.insert(id).inserted else {
+                return
+            }
+            
+            Task {
+                @MainActor in
+                
+                defer {
+                    libraryViewState.downloadingPDFs.remove(id)
+                }
+                
+                do {
+                    try await LibrarySyncService.shared.download(pdfFile, modelContext)
+                
+                    guard !pdfFile.isDeleted, pdfFile.modelContext != nil, !LibrarySyncService.shared.isSwitching else {
+                        return
+                    }
+                    
+                    libraryViewState.selectedPDFRowID = id
+                    
+                    libraryViewState.selectedPDFFile = pdfFile
+                    
+                } catch {
+                    
+                    libraryViewState.errorTitle = "PDF Could Not Be Downloaded"
+                    
+                    libraryViewState.appError = AppError(error)
+                }
+                
+            }
+            
+            return
+            
+        }
+        
         libraryViewState.selectedPDFRowID = pdfFile.persistentModelID
+        
         libraryViewState.selectedPDFFile = pdfFile
+        
     }
 
     private func editTags(_ pdfFile: PDFFile) {
@@ -442,7 +497,9 @@ struct LibraryView:View {
     private func closeDisplayedPDF() {
         libraryViewState.cancelTranslation()
 
-        Task { @MainActor in
+        Task {
+            
+            @MainActor in
      
             await Task.yield()
             
@@ -451,7 +508,10 @@ struct LibraryView:View {
     }
 
     private func scheduleSynchronizeLibraryFiles() {
-        Task { @MainActor in
+        Task {
+            
+            @MainActor in
+            
             await synchronizeLibraryFilesAfterViewUpdate()
         }
     }
@@ -494,22 +554,33 @@ private struct ReadOnlyTextView: NSViewRepresentable {
     let text: String
 
     func makeNSView(context: Context) -> NSScrollView {
+      
         let textView = NSTextView()
 
         textView.isEditable = false
+        
         textView.isSelectable = true
+        
         textView.isRichText = false
+        
         textView.font = .preferredFont(forTextStyle: .body)
+        
         textView.textContainerInset = NSSize(width: 12, height: 12)
+        
         textView.autoresizingMask = [.width]
+        
         textView.isVerticallyResizable = true
+        
         textView.isHorizontallyResizable = false
+        
         textView.textContainer?.widthTracksTextView = true
 
         let scrollView = NSScrollView()
 
         scrollView.hasVerticalScroller = true
+        
         scrollView.autohidesScrollers = true
+        
         scrollView.documentView = textView
 
         return scrollView

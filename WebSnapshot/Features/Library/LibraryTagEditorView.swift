@@ -153,18 +153,18 @@ struct LibraryTagEditorView: View {
     }
 
     private func addNewTag() {
-        libraryViewState.tagEditorTagNames = PDFTagService.addingTag(libraryViewState.tagEditorNewTagName,to: libraryViewState.tagEditorTagNames)
+        libraryViewState.tagEditorTagNames = PDFTagService.addingTag(libraryViewState.tagEditorNewTagName,libraryViewState.tagEditorTagNames)
         
         libraryViewState.tagEditorNewTagName = String()
     }
 
     private func removeTag(_ name: String) {
-        libraryViewState.tagEditorTagNames = PDFTagService.removingTag(name, from: libraryViewState.tagEditorTagNames)
+        libraryViewState.tagEditorTagNames = PDFTagService.removingTag(name, libraryViewState.tagEditorTagNames)
     }
 
     private func save() {
         do {
-            try PDFTagService.replaceTags(libraryViewState.tagEditorTagNames,for: pdfFile,in: modelContext)
+            try PDFTagService.replaceTags(libraryViewState.tagEditorTagNames,pdfFile,modelContext)
             
             libraryViewState.closeTagEditor()
         } catch {

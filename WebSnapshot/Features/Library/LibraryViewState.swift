@@ -25,6 +25,8 @@ final class LibraryViewState:ObservableObject{
     @Published var selectedTag: TagSelection = .all
 
     @Published var selectedPDFRowID: PersistentIdentifier?
+
+    @Published var downloadingPDFs: Set<PersistentIdentifier> = []
     
     @Published var tagEditorPDFFile: PDFFile?
     

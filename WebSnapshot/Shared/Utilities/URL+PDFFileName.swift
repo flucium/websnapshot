@@ -2,7 +2,7 @@ import Foundation
 
 extension URL {
     
-    static func pdfFileName(_ title:String?,_ url: URL?,_ suffix: String = "") -> String {
+    nonisolated static func pdfFileName(_ title:String?,_ url: URL?,_ suffix: String = "") -> String {
         
         let trimmedTitle = title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         
@@ -39,7 +39,7 @@ extension URL {
     }
     
     
-    private var removingScheme: String {
+    nonisolated private var removingScheme: String {
         guard let scheme = self.absoluteString.range(of: "://") else {
             return self.absoluteString
         }

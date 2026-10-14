@@ -14,6 +14,16 @@ final class PDFFile {
     var searchableText: String? = nil
     
     var contentFingerprint: String? = nil
+
+    var libraryID: UUID? = nil
+
+    var syncRelativePath: String? = nil
+
+    var syncContentHash: String? = nil
+
+    var syncBaselineTags: Data? = nil
+
+    var syncBaselineContentHash: String? = nil
     
     init(_ url: URL,_ bookmarkData:Data? = nil, _ addedAt: Date? = nil) {
     
@@ -29,15 +39,43 @@ extension PDFFile {
     func resolveURL() throws -> URL {
         
         guard let bookmarkData else {
+            
             return url
+            
         }
         
         return try resolveBookmarkedURL(bookmarkData)
     }
 
     var availability: FileIO.Availability {
+        
+        if syncRelativePath != nil {
+        
+            let file = resolvedURL
+            
+            let accessing = file.startAccessingSecurityScopedResource()
+            
+            defer {
+            
+                if accessing {
+                    file.stopAccessingSecurityScopedResource()
+                }
+                
+            }
+            
+            let values = try? file.resourceValues(forKeys: [.ubiquitousItemDownloadingStatusKey])
+            
+            if values?.ubiquitousItemDownloadingStatus == .notDownloaded {
+            
+                return .unavailable
+                
+            }
+            
+            return FileIO.availability(file) == .available ? .available : .unavailable
+        }
+        
         do {
-            return FileIO.availability(try resolveURL())
+            return FileIO.availability( try resolveURL() )
         } catch {
             
             if FileIO.isMissingFileError(error) {
@@ -49,9 +87,13 @@ extension PDFFile {
     }
 
     var resolvedURL: URL {
+        
         do {
+        
             return try resolveURL()
+            
         } catch {
+            
             AppLogger.record(AppError(error), "Resolve security-scoped bookmark", url)
             
             return url

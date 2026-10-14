@@ -23,17 +23,17 @@ func directoryPanel(_ directoryURL: URL?, _ title: String = "Choose Storage Fold
 }
 
 @MainActor
-func importPDFPanel() -> URL? {
+func importPDFsPanel() -> [URL]? {
     let panel = NSOpenPanel()
 
     panel.allowedContentTypes = [.pdf]
     panel.canChooseFiles = true
     panel.canChooseDirectories = false
-    panel.allowsMultipleSelection = false
-    panel.title = "Import PDF"
+    panel.allowsMultipleSelection = true
+    panel.title = "Import PDFs"
     panel.prompt = "Import"
 
-    return panel.runModal() == .OK ? panel.url : nil
+    return panel.runModal() == .OK ? panel.urls : nil
 }
 
 @MainActor

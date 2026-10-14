@@ -24,6 +24,14 @@ enum WebCaptureService {
     @discardableResult
     static func save( _ document: PDFFileDocument, _ title: String, _ url: URL?, _ modelContext: ModelContext, _ storageSettings:[StorageSettings], _ chooseDestination: (@MainActor (String, URL?, PDFFileDocument?) throws -> URL?)? = nil ) throws -> URL? {
         
+        try LibrarySyncService.shared.requireReady()
+        
+        if LibrarySyncService.isEnabled(modelContext) {
+        
+            return try LibrarySyncService.shared.savePDF(document.data, URL.pdfFileName(title, url), modelContext)
+            
+        }
+        
         switch StorageSettingsService.storage(storageSettings) {
         case .flexibility:
         
@@ -34,10 +42,16 @@ enum WebCaptureService {
             
                 selectedURL = try chooseDestination(title, url, document)
             } else {
+                
                 selectedURL = try savePanel(title, url, document) {
+                
                     try PDFFileService.refreshLocations(modelContext)
+                
                 }
+                
             }
+            
+            
             guard let destination = selectedURL else {
                 return nil
             }
@@ -47,7 +61,6 @@ enum WebCaptureService {
             return destination
 
         case .fixed:
-            
             guard let directory = try StorageSettingsService.fixedStorageURL(storageSettings) else {
                 throw AppError.error("Choose a storage folder in Settings before saving.")
             }
@@ -55,7 +68,11 @@ enum WebCaptureService {
             let isAccessing = directory.startAccessingSecurityScopedResource()
             
             defer {
-                if isAccessing { directory.stopAccessingSecurityScopedResource() }
+                
+                if isAccessing {
+                    directory.stopAccessingSecurityScopedResource()
+                }
+                
             }
             
             try PDFFileService.refreshLocations(modelContext)

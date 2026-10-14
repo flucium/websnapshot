@@ -58,8 +58,7 @@ final class LibraryPDFFileMonitor: ObservableObject {
 }
 
 private final class PDFFileMonitor {
-    private let onMissing: (URL, Bool) -> Void
-
+    
     let url: URL
 
     private var source: DispatchSourceFileSystemObject?
@@ -68,6 +67,7 @@ private final class PDFFileMonitor {
 
     private var isAccessingSecurityScopedResource = false
 
+    private let onMissing: (URL, Bool) -> Void
     
     init(_ url: URL, _ onMissing: @escaping (URL, Bool) -> Void) {
         self.url = url
@@ -103,14 +103,11 @@ private final class PDFFileMonitor {
             return false
         }
 
-        let source = DispatchSource.makeFileSystemObjectSource(
-            fileDescriptor: fileDescriptor,
-            eventMask: [.delete, .rename, .revoke],
-            queue: .main
-        )
+        let source = DispatchSource.makeFileSystemObjectSource(fileDescriptor: fileDescriptor, eventMask: [.delete, .rename, .revoke], queue: .main )
 
         source.setEventHandler { [weak self, weak source] in
             let wasDeleted = source?.data.contains(.delete) == true
+            
             Task { @MainActor in
                 self?.handleFileEvent(wasDeleted)
             }
@@ -139,6 +136,8 @@ private final class PDFFileMonitor {
 
     private func handleFileEvent(_ wasDeleted: Bool) {
         guard FileManager.default.fileExists( atPath: url.path) == false else {
+            stop()
+            _ = start()
             return
         }
 
@@ -152,6 +151,7 @@ private final class PDFFileMonitor {
         }
 
         url.stopAccessingSecurityScopedResource()
+        
         isAccessingSecurityScopedResource = false
     }
 }
