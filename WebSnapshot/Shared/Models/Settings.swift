@@ -25,8 +25,32 @@ extension AppearanceSettings{
 @Model
 final class StorageSettings {
     var storage: Storage
+    
     var fixedStoragePath: String?
+    
     var fixedStorageBookmarkData: Data?
+
+    var syncEnabled: Bool = false
+
+    var syncDriveBookmarkData: Data? = nil
+
+    var syncDrivePath: String? = nil
+    
+    var syncFolderBookmarkData: Data? = nil
+    
+    var syncFolderPath: String? = nil
+    
+    var previousStorageRawValue: String? = nil
+    
+    var previousFixedStoragePath: String? = nil
+    
+    var previousFixedStorageBookmarkData: Data? = nil
+    
+    var syncDeviceID: UUID? = nil
+    
+    var syncCounter: Int64 = 0
+    
+    var pendingSyncChanges: Data? = nil
 
     init(_ storage: Storage) {
         self.storage = storage
