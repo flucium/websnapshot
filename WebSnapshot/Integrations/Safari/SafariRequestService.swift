@@ -39,7 +39,7 @@ final class SafariRequestService: ObservableObject {
         failedRequest != nil && current == nil
     }
 
-    init(capture: @escaping Capture) {
+    init(_ capture: @escaping Capture) {
         self.capture = capture
     }
 
