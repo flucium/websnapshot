@@ -86,21 +86,42 @@ final class AppearanceSettingsService {
 final class StorageSettingsService {
 
     static func storage(_ settings: [StorageSettings]) -> StorageSettings.Storage {
-        settings.first?.storage ?? .flexibility
+        
+        if settings.first?.syncEnabled == true {
+            
+            return .fixed
+        
+        }
+        
+        return settings.first?.storage ?? .flexibility
     }
 
     static func fixedStoragePath(_ settings: [StorageSettings]) -> String? {
-        settings.first?.fixedStoragePath
+        
+        if settings.first?.syncEnabled == true {
+            
+            return settings.first?.syncFolderPath
+        
+        }
+        
+        return settings.first?.fixedStoragePath
     }
 
     static func fixedStorageURL(_ settings: [StorageSettings]) throws -> URL? {
+        
+        if let setting = settings.first, setting.syncEnabled {
+        
+            return try LibrarySyncService.shared.folderURL(setting)
+        
+        }
+        
         guard let bookmarkData = settings.first?.fixedStorageBookmarkData else {
             return nil
         }
 
         var isStale = false
         
-        let url = try URL.resolveSecurityScopedBookmarkData(bookmarkData,&isStale)
+        let url = try URL.resolveSecurityScopedBookmarkData(bookmarkData, &isStale)
 
         if isStale {
             AppLogger.recordDiagnostic("The fixed storage bookmark is stale.","Resolve fixed storage folder",url)
@@ -119,6 +140,14 @@ final class StorageSettingsService {
     }
 
     static func save(_ modelContext: ModelContext,_ storage: StorageSettings.Storage) throws {
+        try LibrarySyncService.shared.requireReady()
+        
+        if LibrarySyncService.isEnabled(modelContext), storage != .fixed {
+        
+            throw AppError.error("Storage is fixed to iCloud Drive/websnapshot while Sync is on.")
+        
+        }
+        
         do {
             try upsert(modelContext,storage)
         } catch let error as AppError {
@@ -131,15 +160,26 @@ final class StorageSettingsService {
     }
 
     static func saveFixedStorage(_ modelContext: ModelContext,_ url: URL) throws {
+        try LibrarySyncService.shared.requireReady()
+        
+        if LibrarySyncService.isEnabled(modelContext) {
+            throw AppError.error("The storage folder cannot be changed while Sync is on.")
+        }
+        
         do {
+            
             let bookmarkData = try URL.securityScopedBookmarkData(url)
 
             try upsert(modelContext, .fixed) {
                 settings in
+                
                 settings.storage = .fixed
+                
                 settings.fixedStoragePath = url.path
+            
                 settings.fixedStorageBookmarkData = bookmarkData
             }
+            
         } catch let error as AppError {
             modelContext.rollback()
             throw error
@@ -162,13 +202,24 @@ final class StorageSettingsService {
     }
 
     static func reset(_ modelContext: ModelContext) throws {
+        try LibrarySyncService.shared.requireReady()
+        
+        if LibrarySyncService.isEnabled(modelContext) {
+            throw AppError.error("Turn off Sync before resetting Storage.")
+        }
+        
         do {
+            
             try upsert(modelContext,.flexibility) {
                 settings in
+                
                 settings.storage = .flexibility
+                
                 settings.fixedStoragePath = nil
+                
                 settings.fixedStorageBookmarkData = nil
             }
+            
         } catch let error as AppError {
             modelContext.rollback()
             throw error
@@ -180,6 +231,7 @@ final class StorageSettingsService {
     }
 
     private static func upsert(_ modelContext: ModelContext,_ storage: StorageSettings.Storage,_ update: ((StorageSettings) -> Void)? = nil) throws {
+        
         let settings = try fetch(modelContext)
         
         let current = settings.first ?? StorageSettings(storage)
