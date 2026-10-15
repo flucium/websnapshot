@@ -31,7 +31,7 @@ final class LibraryContentIndexer: ObservableObject {
 
     func index(_ pdfFiles: [PDFFile], _ modelContext: ModelContext) async {
         
-        guard isRunning == false, !LibrarySyncService.shared.isSwitching else {
+        guard isRunning == false, !LibrarySyncService.shared.state.isSwitching else {
             return
         }
         
@@ -62,7 +62,7 @@ final class LibraryContentIndexer: ObservableObject {
 
         for pdfFile in pdfFiles {
             
-            if Task.isCancelled || LibrarySyncService.shared.isSwitching {
+            if Task.isCancelled || LibrarySyncService.shared.state.isSwitching {
                 return
             }
             
@@ -154,7 +154,7 @@ final class LibraryContentIndexer: ObservableObject {
                 
                 let text = try await extract(request.url)
                 
-                if LibrarySyncService.shared.isSwitching {
+                if LibrarySyncService.shared.state.isSwitching {
                     return
                 }
                 
