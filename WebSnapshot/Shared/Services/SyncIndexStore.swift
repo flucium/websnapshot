@@ -278,7 +278,7 @@ nonisolated struct SyncIndexStore: Sendable {
         guard Array(selected.pathComponents.suffix(2)) == ["Mobile Documents", "com~apple~CloudDocs"] else {
             throw SyncStoreError.wrongDrive
         }
-        // Preserve the URL's security scope from NSOpenPanel or its bookmark.
+
         return selection
     }
 
@@ -644,7 +644,7 @@ nonisolated struct SyncIndexStore: Sendable {
         for (offset, record) in index.files.enumerated() where !record.isDeleted {
         
             guard var location = record.location else {
-                continue
+                throw SyncStoreError.invalidIndex
             }
             
             let source = try fileURL(location.relativePath)
