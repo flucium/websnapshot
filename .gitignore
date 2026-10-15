@@ -80,6 +80,9 @@ fastlane/test_output
 *.txt
 **/*.txt
 
+# TOML
+codex.toml
+
 !version.txt
 !.github
 !.gitignore
