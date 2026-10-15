@@ -342,7 +342,7 @@ final class LibraryViewService {
 
     static func synchronizeLibraryFiles(_ state: LibraryViewState,_ modelContext: ModelContext,_ monitor: LibraryPDFFileMonitor,_ change: LibraryPDFFileMonitor.Change? = nil) {
         
-        if LibrarySyncService.shared.isSwitching || LibrarySyncService.isEnabled(modelContext) {
+        if LibrarySyncService.shared.state.isSwitching || LibrarySyncService.isEnabled(modelContext) {
         
             monitor.stop()
         
@@ -429,7 +429,7 @@ final class LibraryViewService {
 
     static func deleteMissingFiles(_ modelContext: ModelContext,_ pdfFiles: [PDFFile],_ confirmedDeletedFileIDs: Set<PersistentIdentifier> = []) throws {
         
-        if LibrarySyncService.shared.isSwitching || LibrarySyncService.isEnabled(modelContext) {
+        if LibrarySyncService.shared.state.isSwitching || LibrarySyncService.isEnabled(modelContext) {
             return
         }
         
