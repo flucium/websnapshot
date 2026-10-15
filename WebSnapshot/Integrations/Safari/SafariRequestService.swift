@@ -1,10 +1,9 @@
-import Combine
 import Foundation
 import SwiftData
 import WebKit
 
 @MainActor
-final class SafariRequestService: ObservableObject {
+final class SafariRequestService {
     enum FailureAction {
         case retry
         case skip
@@ -12,17 +11,7 @@ final class SafariRequestService: ObservableObject {
 
     typealias Capture = @MainActor (URL, ModelContext, (WebPage) -> Void) async throws -> URL?
     
-    @Published private(set) var pending: [SafariCaptureRequest] = []
-    
-    @Published private(set) var current: SafariCaptureRequest?
-    
-    @Published private(set) var webPage: WebPage?
-    
-    @Published private(set) var savedURL: URL?
-    
-    @Published private(set) var status = "Ready to save from Safari."
-    
-    @Published private(set) var appError: AppError?
+    let state = SafariRequestState()
     
     private var failedRequest: SafariCaptureRequest?
     
@@ -36,7 +25,7 @@ final class SafariRequestService: ObservableObject {
 
     var handleFailure: ((AppError) -> FailureAction)?
     var canRetry: Bool {
-        failedRequest != nil && current == nil
+        failedRequest != nil && state.current == nil
     }
 
     init(_ capture: @escaping Capture) {
@@ -57,16 +46,16 @@ final class SafariRequestService: ObservableObject {
                 receivedIDs.remove(receivedOrder.removeFirst())
             }
             
-            pending.append(request)
+            state.pending.append(request)
             
         } catch {
-            appError = .invalidURL(error.localizedDescription)
+            state.appError = .invalidURL(error.localizedDescription)
         }
         
     }
 
     func startProcessing(_ modelContext: ModelContext) {
-        guard task == nil, !pending.isEmpty, appError == nil else {
+        guard task == nil, !state.pending.isEmpty, state.appError == nil else {
             return
         }
         
@@ -78,34 +67,34 @@ final class SafariRequestService: ObservableObject {
                 startProcessing(modelContext)
             }
             
-            while !pending.isEmpty && !Task.isCancelled {
+            while !state.pending.isEmpty && !Task.isCancelled {
                 
-                let request = pending.removeFirst()
+                let request = state.pending.removeFirst()
                 
-                current = request
+                state.current = request
                 
-                savedURL = nil
+                state.savedURL = nil
                 
                 failedRequest = nil
                 
-                status = "Loading and saving webpage…"
+                state.status = "Loading and saving webpage…"
                 
                 do {
-                    savedURL = try await capture(request.url, modelContext) {
+                    state.savedURL = try await capture(request.url, modelContext) {
                         page in
-                        self.webPage = page
+                        self.state.webPage = page
                     }
                     
-                    status = savedURL == nil ? "Save cancelled." : "PDF saved."
+                    state.status = state.savedURL == nil ? "Save cancelled." : "PDF saved."
                     
                 } catch {
                     if let error = AppError.presentable(error) {
                     
-                        appError = error
+                        state.appError = error
                         
                         failedRequest = request
                         
-                        status = "PDF could not be saved."
+                        state.status = "PDF could not be saved."
                         
                         AppLogger.record(error, "Save webpage from Safari", request.url)
 
@@ -114,22 +103,22 @@ final class SafariRequestService: ObservableObject {
                             let action = handleFailure(error)
                             
                             if action == .retry {
-                                pending.insert(request, at: 0)
+                                state.pending.insert(request, at: 0)
                             }
                             
-                            appError = nil
+                            state.appError = nil
                             
                             failedRequest = nil
                         }
                         
                     } else {
-                        status = "Save cancelled."
+                        state.status = "Save cancelled."
                     }
                 }
                 
-                current = nil
+                state.current = nil
                 
-                if appError != nil {
+                if state.appError != nil {
                     break
                 }
             }
@@ -138,21 +127,21 @@ final class SafariRequestService: ObservableObject {
 
     func retry(_ modelContext: ModelContext) {
         
-        guard let failedRequest, current == nil else {
+        guard let failedRequest, state.current == nil else {
             return
         }
         
-        pending.insert(failedRequest, at: 0)
+        state.pending.insert(failedRequest, at: 0)
         
         self.failedRequest = nil
         
-        appError = nil
+        state.appError = nil
         
         startProcessing(modelContext)
     }
 
     func dismissError(_ modelContext: ModelContext) {
-        appError = nil
+        state.appError = nil
         
         
         failedRequest = nil
@@ -162,10 +151,10 @@ final class SafariRequestService: ObservableObject {
 
     func cancel() {
         
-        pending.removeAll()
+        state.pending.removeAll()
         
         task?.cancel()
         
-        webPage?.stopLoading()
+        state.webPage?.stopLoading()
     }
 }
