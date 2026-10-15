@@ -5,7 +5,7 @@ struct SettingsView: View {
 
     @Environment(\.modelContext) private var modelContext
     
-    @ObservedObject private var syncService = LibrarySyncService.shared
+    @ObservedObject private var syncState = LibrarySyncService.shared.state
 
     @Query private var appearanceSettings: [AppearanceSettings]
     
@@ -14,12 +14,6 @@ struct SettingsView: View {
     @StateObject private var settingsViewState: SettingsViewState = SettingsViewState()
     
     @StateObject private var contentIndexer = LibraryContentIndexer()
-
-    @State private var selectedAppearance: AppearanceSettings.Appearance = .system
-
-    @State private var selectedStorage: StorageSettings.Storage = .flexibility
-
-    @State private var selectedSync = false
 
     private var savedAppearance: AppearanceSettings.Appearance {
         AppearanceSettingsService.appearance(appearanceSettings)
@@ -61,7 +55,13 @@ struct SettingsView: View {
                                 
                             }
 
-                            Picker("Appearance", selection: $selectedAppearance) {
+                            Picker("Appearance", selection: Binding {
+                                settingsViewState.selectedAppearance
+                            } set: { appearance in
+                                Task { @MainActor in
+                                    settingsViewState.selectedAppearance = appearance
+                                }
+                            }) {
                                 
                                 ForEach(AppearanceSettings.Appearance.allCases) {
                                     appearance in
@@ -98,14 +98,20 @@ struct SettingsView: View {
                                 Text("Allow access to iCloud Drive once. The websnapshot folder is created automatically when Sync turns on.")
                                     .font(.callout).foregroundStyle(.secondary)
                             }
-                            Picker("Sync", selection: $selectedSync) {
+                            Picker("Sync", selection: Binding {
+                                settingsViewState.selectedSync
+                            } set: { enabled in
+                                Task { @MainActor in
+                                    settingsViewState.selectedSync = enabled
+                                }
+                            }) {
                                 Text("Off").tag(false)
                                 Text("On").tag(true)
                             }
                             .labelsHidden()
                             .pickerStyle(.segmented)
                             .frame(maxWidth: 360)
-                            if syncService.isSwitching {
+                            if syncState.isSwitching {
                                 HStack {
                                     ProgressView().controlSize(.small)
                                     Text("Copying library…")
@@ -114,7 +120,7 @@ struct SettingsView: View {
                                 Text("Turning Sync off copies PDFs to your previous Fixed folder, or asks for a folder if Storage was Flexibility.")
                                     .font(.callout).foregroundStyle(.secondary)
                             }
-                            if let error = syncService.lastError {
+                            if let error = syncState.lastError {
                                 Text(error.userMessage).font(.callout).foregroundStyle(.secondary)
                             }
                             if storageSettings.first?.syncDriveBookmarkData != nil || storageSettings.first?.syncFolderBookmarkData != nil {
@@ -124,7 +130,7 @@ struct SettingsView: View {
                                     }
                                     if savedSync {
                                         Button("Retry Sync") {
-                                            Task { await syncService.refresh(modelContext) }
+                                            Task { await LibrarySyncService.shared.refresh(modelContext) }
                                         }
                                     }
                                 }
@@ -160,7 +166,13 @@ struct SettingsView: View {
                             
                             }
 
-                            Picker("Storage", selection: $selectedStorage) {
+                            Picker("Storage", selection: Binding {
+                                settingsViewState.selectedStorage
+                            } set: { storage in
+                                Task { @MainActor in
+                                    settingsViewState.selectedStorage = storage
+                                }
+                            }) {
                                 ForEach(StorageSettings.Storage.allCases) { storage in
                             
                                     Text(StorageSettingsService.title(storage))
@@ -173,7 +185,7 @@ struct SettingsView: View {
                             .frame(maxWidth: 360)
                             .disabled(savedSync)
 
-                            if selectedStorage == .fixed {
+                            if settingsViewState.selectedStorage == .fixed {
                                 HStack(spacing: 12) {
                                     
                                     Text(fixedStoragePath ?? "No folder selected")
@@ -265,28 +277,28 @@ struct SettingsView: View {
             .frame(maxWidth: .infinity, alignment: .top)
         }
         .background(Color(nsColor: .windowBackgroundColor))
-        .disabled(syncService.isSwitching)
+        .disabled(syncState.isSwitching)
         .onDisappear {
             settingsViewState.cacheRefreshTask?.cancel()
         }
         .task(id: savedAppearance) {
             let appearance = savedAppearance
-            if selectedAppearance != appearance {
-                selectedAppearance = appearance
+            if settingsViewState.selectedAppearance != appearance {
+                settingsViewState.selectedAppearance = appearance
             }
         }
         .task(id: savedStorage) {
             let storage = savedStorage
-            if selectedStorage != storage {
-                selectedStorage = storage
+            if settingsViewState.selectedStorage != storage {
+                settingsViewState.selectedStorage = storage
             }
         }
         .task(id: savedSync) {
-            if selectedSync != savedSync {
-                selectedSync = savedSync
+            if settingsViewState.selectedSync != savedSync {
+                settingsViewState.selectedSync = savedSync
             }
         }
-        .onChange(of: selectedSync) { _, enabled in
+        .onChange(of: settingsViewState.selectedSync) { _, enabled in
             
             guard enabled != savedSync else {
                 return
@@ -297,13 +309,13 @@ struct SettingsView: View {
                 let succeeded = await SettingsViewService.changeSync(settingsViewState, modelContext, enabled)
                 
                 if !succeeded {
-                    selectedSync = savedSync
+                    settingsViewState.selectedSync = savedSync
                 }
                 
             }
             
         }
-        .onChange(of: selectedAppearance) {
+        .onChange(of: settingsViewState.selectedAppearance) {
             _, appearance in
             
             let previousAppearance = savedAppearance
@@ -316,11 +328,11 @@ struct SettingsView: View {
                 let didSave = SettingsViewService.saveAppearance(settingsViewState, modelContext, appearance)
                 
                 if !didSave {
-                    selectedAppearance = previousAppearance
+                    settingsViewState.selectedAppearance = previousAppearance
                 }
             }
         }
-        .onChange(of: selectedStorage) {
+        .onChange(of: settingsViewState.selectedStorage) {
             _, storage in
             
             let previousStorage = savedStorage
@@ -333,7 +345,7 @@ struct SettingsView: View {
                 let didSave = SettingsViewService.saveStorage(settingsViewState, modelContext, storage)
             
                 if !didSave {
-                    selectedStorage = previousStorage
+                    settingsViewState.selectedStorage = previousStorage
                 }
             }
         }
