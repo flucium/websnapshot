@@ -65,7 +65,7 @@ final class SettingsViewService {
         guard let selected = directoryPanel(SyncIndexStore.defaultCloudDriveURL, "Reconnect iCloud Drive", "Reconnect") else {
             return
         }
-       
+        
         let accessing = selected.startAccessingSecurityScopedResource()
         
         defer {
@@ -152,7 +152,7 @@ final class SettingsViewService {
     }
 
     static func chooseFixedStorage(_ state: SettingsViewState,_ modelContext: ModelContext,_ fixedStoragePath: String?) {
-        guard !LibrarySyncService.isEnabled(modelContext), !LibrarySyncService.shared.isSwitching else { return }
+        guard !LibrarySyncService.isEnabled(modelContext), !LibrarySyncService.shared.state.isSwitching else { return }
         
         let currentURL = fixedStoragePath.map {
             URL(fileURLWithPath: $0, isDirectory: true)
@@ -172,7 +172,7 @@ final class SettingsViewService {
     }
 
     static func refreshContentCache(_ state: SettingsViewState, _ modelContext: ModelContext, _ indexer: LibraryContentIndexer) {
-        guard state.isRefreshingCache == false, !LibrarySyncService.shared.isSwitching else {
+        guard state.isRefreshingCache == false, !LibrarySyncService.shared.state.isSwitching else {
             return
         }
         
