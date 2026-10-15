@@ -459,7 +459,7 @@ struct LibraryView:View {
                 do {
                     try await LibrarySyncService.shared.download(pdfFile, modelContext)
                 
-                    guard !pdfFile.isDeleted, pdfFile.modelContext != nil, !LibrarySyncService.shared.isSwitching else {
+                    guard !pdfFile.isDeleted, pdfFile.modelContext != nil, !LibrarySyncService.shared.state.isSwitching else {
                         return
                     }
                     
