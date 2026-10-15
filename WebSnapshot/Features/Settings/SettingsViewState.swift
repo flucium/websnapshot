@@ -7,6 +7,9 @@ final class SettingsViewState:ObservableObject{
     @Published var errorTitle = "Setting Could Not Be Saved"
     @Published var isRefreshingCache = false
     @Published var cacheRefreshResult: CacheRefreshResult?
+    @Published var selectedAppearance: AppearanceSettings.Appearance = .system
+    @Published var selectedStorage: StorageSettings.Storage = .flexibility
+    @Published var selectedSync = false
     
     var cacheRefreshTask: Task<Void, Never>?
 
