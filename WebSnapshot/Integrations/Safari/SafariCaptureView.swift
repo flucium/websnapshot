@@ -7,22 +7,29 @@ struct SafariCaptureView: View {
     
     @Environment(\.modelContext) private var modelContext
     
-    @EnvironmentObject private var requests: SafariRequestService
+    @ObservedObject private var requestState: SafariRequestState
+
+    private let requests: SafariRequestService
+
+    init(_ requests: SafariRequestService) {
+        self.requests = requests
+        requestState = requests.state
+    }
 
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                if requests.current != nil {
+                if requestState.current != nil {
                     ProgressView()
                         .controlSize(.small)
                 }
     
                 VStack(alignment: .leading, spacing: 4) {
                     
-                    Text(requests.status)
+                    Text(requestState.status)
                         .font(.headline)
                 
-                    if let url = requests.current?.url {
+                    if let url = requestState.current?.url {
                         Text(url.absoluteString)
                             .lineLimit(1)
                             .truncationMode(.middle)
@@ -30,8 +37,8 @@ struct SafariCaptureView: View {
                             .foregroundStyle(.secondary)
                     }
                     
-                    if !requests.pending.isEmpty {
-                        Text("\(requests.pending.count) waiting")
+                    if !requestState.pending.isEmpty {
+                        Text("\(requestState.pending.count) waiting")
                             .font(.caption).foregroundStyle(.secondary)
                     }
                 }
@@ -39,11 +46,11 @@ struct SafariCaptureView: View {
                 
                 Spacer()
                 
-                if requests.current != nil || !requests.pending.isEmpty {
+                if requestState.current != nil || !requestState.pending.isEmpty {
                     Button("Cancel", action: requests.cancel)
                 }
                 
-                if let savedURL = requests.savedURL {
+                if let savedURL = requestState.savedURL {
                     Button("Show in Finder") {
                         NSWorkspace.shared.activateFileViewerSelecting([savedURL])
                     }
@@ -51,7 +58,7 @@ struct SafariCaptureView: View {
             }
             .padding()
 
-            if let error = requests.appError {
+            if let error = requestState.appError {
                 
                 VStack(alignment: .leading, spacing: 8) {
                     
@@ -75,7 +82,7 @@ struct SafariCaptureView: View {
             
             Divider()
             
-            if let page = requests.webPage {
+            if let page = requestState.webPage {
                 WebView(page)
             } else {
                 ContentUnavailableView("Save from Safari", systemImage: "safari", description: Text("Click the WebSnapshot button in Safari to save a webpage as PDF."))
@@ -85,7 +92,7 @@ struct SafariCaptureView: View {
         .onAppear {
             requests.startProcessing(modelContext)
         }
-        .onChange(of: requests.pending.count) {
+        .onChange(of: requestState.pending.count) {
             requests.startProcessing(modelContext)
         }
         .onDisappear {
