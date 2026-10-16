@@ -44,7 +44,13 @@ final class FileIO{
         return (error.domain == NSCocoaErrorDomain && (error.code == CocoaError.fileReadNoSuchFile.rawValue || error.code == CocoaError.fileNoSuchFile.rawValue)) || (error.domain == NSPOSIXErrorDomain && error.code == Int(ENOENT))
     }
 
-    private static func isInTrash(_ url: URL) -> Bool {
+    static func isInTrash(_ url: URL) -> Bool {
+
+        let components = url.resolvingSymlinksInPath().standardizedFileURL.pathComponents
+
+        if let index = components.lastIndex(of: "Mobile Documents"), components.dropFirst(index + 1).first == ".Trash" {
+            return true
+        }
         
         var relationship = FileManager.URLRelationship.other
         
