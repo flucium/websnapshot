@@ -1,19 +1,19 @@
 import SwiftUI
 import PDFKit
 
-struct DirectoryPDFView: NSViewRepresentable {
+struct LibraryPDFView: NSViewRepresentable {
     
-    @ObservedObject var libraryViewState: LibraryViewState
+    @ObservedObject var libraryState: LibraryState
     
     let url: URL
     
-    init(_ url: URL,_ libraryViewState: LibraryViewState) {
+    init(_ url: URL,_ libraryState: LibraryState) {
         self.url = url
-        self.libraryViewState = libraryViewState
+        self.libraryState = libraryState
     }
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(libraryViewState)
+        Coordinator(libraryState)
     }
 
     func makeNSView(context: Context) -> PDFView {
@@ -97,19 +97,19 @@ struct DirectoryPDFView: NSViewRepresentable {
     }
 
     final class Coordinator: NSObject {
-        weak var libraryViewState: LibraryViewState?
+        weak var libraryState: LibraryState?
         
         var loadedURL: URL?
         
         var lastPageIndex: Int?
 
-        init(_ libraryViewState: LibraryViewState) {
-            self.libraryViewState = libraryViewState
+        init(_ libraryState: LibraryState) {
+            self.libraryState = libraryState
         }
 
         func present(_ appError: AppError) {
-            libraryViewState?.errorTitle = "PDF Could Not Be Opened"
-            libraryViewState?.appError = appError
+            libraryState?.errorTitle = "PDF Could Not Be Opened"
+            libraryState?.appError = appError
         }
 
         @objc func pageChanged(_ notification: Notification) {
@@ -134,7 +134,7 @@ struct DirectoryPDFView: NSViewRepresentable {
                     return
                 }
 
-                libraryViewState?.currentPageIndex = pageIndex
+                libraryState?.currentPageIndex = pageIndex
             }
         }
     }
