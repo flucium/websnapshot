@@ -569,7 +569,17 @@ final class LibrarySyncService {
         
         }
         
-        let url = pdf.url
+        let storedURL = pdf.url
+
+        let url = try pdf.resolveURL()
+
+        let accessingFile = url.startAccessingSecurityScopedResource()
+
+        defer {
+            if accessingFile {
+                url.stopAccessingSecurityScopedResource()
+            }
+        }
         
         try await Task.detached(priority: .userInitiated) {
             
@@ -582,7 +592,7 @@ final class LibrarySyncService {
         }.value
         
         
-        guard generation == modeGeneration, pdf.modelContext != nil, !pdf.isDeleted, pdf.url == url, !state.isSwitching, Self.isEnabled(context) else {
+        guard generation == modeGeneration, pdf.modelContext != nil, !pdf.isDeleted, pdf.url == storedURL, !state.isSwitching, Self.isEnabled(context), try pdf.resolveURL() == url else {
             
             throw AppError.error("The library changed during the download. Open the PDF again.")
             
@@ -619,13 +629,19 @@ final class LibrarySyncService {
         guard let bookmark = setting.syncDriveBookmarkData, let savedPath = setting.syncDrivePath else {
             throw AppError.permissionDenied("Allow access to iCloud Drive in Settings to turn on Sync.")
         }
+        
         var stale = false
+        
         let drive = try URL.resolveSecurityScopedBookmarkData(bookmark, &stale)
+        
         _ = try SyncIndexStore.cloudDrive(drive)
-        guard drive.resolvingSymlinksInPath().standardizedFileURL ==
-                URL(fileURLWithPath: savedPath, isDirectory: true).resolvingSymlinksInPath().standardizedFileURL else {
+        
+        guard drive.resolvingSymlinksInPath().standardizedFileURL == URL(fileURLWithPath: savedPath, isDirectory: true).resolvingSymlinksInPath().standardizedFileURL else {
+            
             throw AppError.permissionDenied("Reconnect iCloud Drive in Settings to turn on Sync.")
+            
         }
+        
         return drive
     }
 
