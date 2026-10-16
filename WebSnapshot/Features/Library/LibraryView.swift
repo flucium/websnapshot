@@ -21,60 +21,7 @@ struct LibraryView:View {
     var body: some View {
         Group {
             if libraryViewState.selectedPDFFile == nil {
-                HSplitView {
-                    tagSidebar()
-
-                    VStack {
-                        HStack {
-                            searchTextFieldView()
-
-                            searchTextModeView()
-                        }
-                        .padding(.horizontal)
-
-                        if contentIndexer.pendingCount > 0 {
-                            HStack {
-                                ProgressView().controlSize(.small)
-                                Text("Preparing content search… (\(contentIndexer.pendingCount) PDFs remaining)")
-                                    .font(.caption)
-                                Spacer()
-                            }
-                            .padding(.horizontal)
-                        } else if contentIndexer.failedCount > 0 {
-                            HStack {
-                                Text("Content search is unavailable for some PDFs.")
-                                    .font(.caption)
-                                Button("Retry", action: contentIndexer.retry)
-                                Spacer()
-                            }
-                            .padding(.horizontal)
-                        }
-
-                        HStack {
-                            Button("Import PDFs…") {
-                                LibraryViewService.importPDFs(libraryViewState, modelContext)
-                            }
-
-                            Button("Export PDF…") {
-                                if let selectedPDFRow {
-                                    LibraryViewService.exportPDF(libraryViewState, selectedPDFRow)
-                                }
-                            }
-                            .disabled(selectedPDFRow == nil)
-
-                            Spacer()
-                        }
-                        .padding(.horizontal)
-
-                        pdfListView()
-
-                        if let selectedPDFRow {
-                            Divider()
-                            pdfMetadataView(selectedPDFRow)
-                        }
-                    }
-                    .frame(minWidth: 300, maxWidth: .infinity, maxHeight: .infinity)
-                }
+                libraryContentView()
             } else {
                 pdfView()
             }
@@ -85,7 +32,7 @@ struct LibraryView:View {
             libraryViewState.cancelTranslation()
         }
         .onChange(of: monitoredPDFFilePaths) {
-            scheduleSynchronizeLibraryFiles()
+            LibraryViewService.scheduleSynchronizeLibraryFiles(libraryViewState, modelContext, pdfFileMonitor)
         }
         .onChange(of: availableTagNames) { _, names in
             if case .tag(let selectedName) = libraryViewState.selectedTag, names.contains(selectedName) == false {
@@ -98,7 +45,7 @@ struct LibraryView:View {
             }
         }
         .task {
-            await synchronizeLibraryFilesAfterViewUpdate()
+            await LibraryViewService.synchronizeLibraryFilesAfterViewUpdate(libraryViewState, modelContext, pdfFileMonitor)
 
             while Task.isCancelled == false {
                 do {
@@ -107,7 +54,7 @@ struct LibraryView:View {
                     break
                 }
 
-                await synchronizeLibraryFilesAfterViewUpdate()
+                await LibraryViewService.synchronizeLibraryFilesAfterViewUpdate(libraryViewState, modelContext, pdfFileMonitor)
             }
         }
         .background {
@@ -129,7 +76,64 @@ struct LibraryView:View {
         }
         .sheet(item: $libraryViewState.tagEditorPDFFile,onDismiss: libraryViewState.closeTagEditor) {
             pdfFile in
-            LibraryTagEditorView(libraryViewState: libraryViewState,pdfFile: pdfFile)
+            LibraryTagEditorView(libraryTagEditorViewState: libraryViewState.libraryTagEditorViewState,pdfFile: pdfFile,close: libraryViewState.closeTagEditor)
+        }
+    }
+
+    private func libraryContentView() -> some View {
+        HSplitView {
+            tagSidebar()
+
+            VStack {
+                HStack {
+                    searchTextFieldView()
+
+                    searchTextModeView()
+                }
+                .padding(.horizontal)
+
+                if contentIndexer.pendingCount > 0 {
+                    HStack {
+                        ProgressView().controlSize(.small)
+                        Text("Preparing content search… (\(contentIndexer.pendingCount) PDFs remaining)")
+                            .font(.caption)
+                        Spacer()
+                    }
+                    .padding(.horizontal)
+                } else if contentIndexer.failedCount > 0 {
+                    HStack {
+                        Text("Content search is unavailable for some PDFs.")
+                            .font(.caption)
+                        Button("Retry", action: contentIndexer.retry)
+                        Spacer()
+                    }
+                    .padding(.horizontal)
+                }
+
+                HStack {
+                    Button("Import PDFs…") {
+                        LibraryViewService.importPDFs(libraryViewState, modelContext)
+                    }
+
+                    Button("Export PDF…") {
+                        if let selectedPDFRow {
+                            LibraryViewService.exportPDF(libraryViewState, selectedPDFRow)
+                        }
+                    }
+                    .disabled(selectedPDFRow == nil)
+
+                    Spacer()
+                }
+                .padding(.horizontal)
+
+                pdfListView()
+
+                if let selectedPDFRow {
+                    Divider()
+                    pdfMetadataView(selectedPDFRow)
+                }
+            }
+            .frame(minWidth: 300, maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 
@@ -183,7 +187,7 @@ struct LibraryView:View {
                 pdfFile.tags.contains { $0.normalizedName == name }
             }
 
-            return matchesSelectedTag && LibraryViewService.matches(pdfFile,libraryViewState.searchText,libraryViewState.selectedSearchMode)
+            return matchesSelectedTag && LibraryService.matches(pdfFile,libraryViewState.searchText,libraryViewState.selectedSearchMode)
         }
     }
 
@@ -230,7 +234,7 @@ struct LibraryView:View {
 
     private func searchTextModeView() -> some View{
         Picker("Search mode", selection: $libraryViewState.selectedSearchMode) {
-            ForEach(SearchMode.allCases, id: \.self) {
+            ForEach(LibrarySearchMode.allCases, id: \.self) {
                 searchMode in
                 Text(searchMode.title)
                     .tag(searchMode)
@@ -331,7 +335,7 @@ struct LibraryView:View {
         }
         .contentShape(Rectangle())
         .simultaneousGesture(TapGesture(count: 2).onEnded {
-            openPDF(pdfFile)
+            LibraryViewService.openPDF(libraryViewState, modelContext, pdfFile)
         })
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
             Button("Delete", role: .destructive) {
@@ -344,7 +348,7 @@ struct LibraryView:View {
         }
         .contextMenu {
             Button("Open PDF") {
-                openPDF(pdfFile)
+                LibraryViewService.openPDF(libraryViewState, modelContext, pdfFile)
             }
             
             Button("Edit Tags…") {
@@ -371,7 +375,7 @@ struct LibraryView:View {
             if let selectedPDFFile = libraryViewState.selectedPDFFile{
                 HStack {
                     Button("Back",action: {
-                        closeDisplayedPDF()
+                        LibraryViewService.closeDisplayedPDF(libraryViewState)
                     })
                     
                     Menu("Translation") {
@@ -408,7 +412,7 @@ struct LibraryView:View {
                 .padding(.top, 8)
                 
                 ZStack(alignment: .trailing) {
-                    DirectoryPDFView(selectedPDFFile.resolvedURL,libraryViewState)
+                    LibraryPDFView(selectedPDFFile.resolvedURL,libraryViewState)
 
                     TranslationResultView(
                         text: libraryViewState.translatedText, close: {
@@ -421,71 +425,12 @@ struct LibraryView:View {
                     .allowsHitTesting(libraryViewState.isTranslationPresented)
                     .accessibilityHidden(libraryViewState.isTranslationPresented == false)
                 }
-                
-                
-//                if FileIO.exists(selectedPDFFile.resolvedURL) {
-//                    Text(selectedPDFFile.url.absoluteString)
-//                        .padding(.top, 15)
-//                        .padding(.bottom, 5)
-//                }else{
-//                    Text("The PDF file could not be found.")
-//                        .padding(.top, 15)
-//                        .padding(.bottom, 5)
-//                }
-                
             }
             
         }
     }
 
     
-    private func openPDF(_ pdfFile: PDFFile) {
-        
-        if pdfFile.syncRelativePath != nil {
-        
-            let id = pdfFile.persistentModelID
-            
-            guard libraryViewState.downloadingPDFs.insert(id).inserted else {
-                return
-            }
-            
-            Task {
-                @MainActor in
-                
-                defer {
-                    libraryViewState.downloadingPDFs.remove(id)
-                }
-                
-                do {
-                    try await LibrarySyncService.shared.download(pdfFile, modelContext)
-                
-                    guard !pdfFile.isDeleted, pdfFile.modelContext != nil, !LibrarySyncService.shared.state.isSwitching else {
-                        return
-                    }
-                    
-                    libraryViewState.selectedPDFRowID = id
-                    
-                    libraryViewState.selectedPDFFile = pdfFile
-                    
-                } catch {
-                    
-                    libraryViewState.errorTitle = "PDF Could Not Be Downloaded"
-                    
-                    libraryViewState.appError = AppError(error)
-                }
-                
-            }
-            
-            return
-            
-        }
-        
-        libraryViewState.selectedPDFRowID = pdfFile.persistentModelID
-        
-        libraryViewState.selectedPDFFile = pdfFile
-        
-    }
-
     private func editTags(_ pdfFile: PDFFile) {
         libraryViewState.presentTagEditor(pdfFile)
     }
@@ -494,37 +439,6 @@ struct LibraryView:View {
         Array(pdfFile.tags.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }.prefix(5))
     }
 
-    private func closeDisplayedPDF() {
-        libraryViewState.cancelTranslation()
-
-        Task {
-            
-            @MainActor in
-     
-            await Task.yield()
-            
-            libraryViewState.selectedPDFFile = nil
-        }
-    }
-
-    private func scheduleSynchronizeLibraryFiles() {
-        Task {
-            
-            @MainActor in
-            
-            await synchronizeLibraryFilesAfterViewUpdate()
-        }
-    }
-
-    private func synchronizeLibraryFilesAfterViewUpdate() async {
-        do {
-            try await Task.sleep(nanoseconds: 50_000_000)
-        } catch {
-            return
-        }
-
-        LibraryViewService.synchronizeLibraryFiles(libraryViewState, modelContext, pdfFileMonitor)
-    }
 }
 
 private struct TranslationResultView: View {
@@ -592,6 +506,24 @@ private struct ReadOnlyTextView: NSViewRepresentable {
         }
 
         textView.string = text
+    }
+}
+
+private struct PDFTagBadge: View {
+    let name: String
+
+    init(_ name: String) {
+        self.name = name
+    }
+
+    var body: some View {
+        Label(name, systemImage: "tag")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .background(.quaternary, in: Capsule())
     }
 }
 
