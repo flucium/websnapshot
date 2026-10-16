@@ -121,7 +121,23 @@ final class StorageSettingsService {
 
         var isStale = false
         
-        let url = try URL.resolveSecurityScopedBookmarkData(bookmarkData, &isStale)
+        let url: URL
+
+        do {
+            url = try URL.resolveSecurityScopedBookmarkData(bookmarkData, &isStale)
+        } catch {
+            guard FileIO.isMissingFileError(error), let path = settings.first?.fixedStoragePath else {
+                throw error
+            }
+
+            return URL(fileURLWithPath: path, isDirectory: true)
+        }
+
+        if FileIO.isInTrash(url) {
+            return settings.first?.fixedStoragePath.map {
+                URL(fileURLWithPath: $0, isDirectory: true)
+            }
+        }
 
         if isStale {
             AppLogger.recordDiagnostic("The fixed storage bookmark is stale.","Resolve fixed storage folder",url)
