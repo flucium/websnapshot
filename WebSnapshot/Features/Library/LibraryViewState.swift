@@ -4,7 +4,7 @@ import Translation
 import SwiftData
 
 @MainActor
-final class LibraryViewState:ObservableObject{
+final class LibraryViewState:LibraryState{
 
     enum TagSelection: Hashable {
         case all
@@ -12,15 +12,9 @@ final class LibraryViewState:ObservableObject{
         case tag(String)
     }
     
-    var translationPreparationTask: Task<Void, Never>?
-    
-    @Published var appError:AppError?
-    
-    @Published var errorTitle = "Library Operation Could Not Be Completed"
-    
     @Published var searchText:String = String()
     
-    @Published var selectedSearchMode: SearchMode = .all
+    @Published var selectedSearchMode: LibrarySearchMode = .all
 
     @Published var selectedTag: TagSelection = .all
 
@@ -30,13 +24,6 @@ final class LibraryViewState:ObservableObject{
     
     @Published var tagEditorPDFFile: PDFFile?
     
-    @Published var tagEditorTagNames: [String] = []
-    
-    @Published var tagEditorNewTagName = String()
-    
-    @Published var tagEditorAppError: AppError?
-    
-    @Published  var currentPageIndex = 0
     
     @Published  var translatedText = String()
     
@@ -55,6 +42,10 @@ final class LibraryViewState:ObservableObject{
         }
     }
     
+    
+    let libraryTagEditorViewState = LibraryTagEditorViewState()
+    
+    var translationPreparationTask: Task<Void, Never>?
     
     struct TranslationRequest: Identifiable {
         let id = UUID()
@@ -141,11 +132,7 @@ final class LibraryViewState:ObservableObject{
 
     func presentTagEditor(_ pdfFile: PDFFile) {
     
-        tagEditorTagNames = PDFTagService.tagNames(pdfFile.tags)
-        
-        tagEditorNewTagName = String()
-        
-        tagEditorAppError = nil
+        libraryTagEditorViewState.prepare(pdfFile)
         
         tagEditorPDFFile = pdfFile
     }
@@ -155,11 +142,7 @@ final class LibraryViewState:ObservableObject{
     
         tagEditorPDFFile = nil
         
-        tagEditorTagNames = []
-        
-        tagEditorNewTagName = String()
-        
-        tagEditorAppError = nil
+        libraryTagEditorViewState.clear()
     }
     
 }
