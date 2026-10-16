@@ -30,8 +30,10 @@ final class FileIO{
                 return .unavailable
             }
 
-            guard let names = try? FileManager.default.contentsOfDirectory(atPath: url.deletingLastPathComponent().path), names.contains(url.lastPathComponent) == false else {
+            guard let names = try? FileManager.default.contentsOfDirectory(atPath: url.deletingLastPathComponent().path), names.contains(url.lastPathComponent) == false, names.contains(placeholderURL(url).lastPathComponent) == false else {
+                
                 return .unavailable
+                
             }
             
             return .missing
@@ -73,7 +75,11 @@ final class FileIO{
             }
         }
         
-        return FileManager.default.fileExists(atPath: url.path)
+        return FileManager.default.fileExists(atPath: url.path) || FileManager.default.fileExists(atPath: placeholderURL(url).path)
+    }
+
+    private static func placeholderURL(_ url: URL) -> URL {
+        url.deletingLastPathComponent().appendingPathComponent(".\(url.lastPathComponent).icloud")
     }
     
     static func delete(_ url: URL) throws{
