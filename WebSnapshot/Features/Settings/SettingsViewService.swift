@@ -35,6 +35,7 @@ final class SettingsViewService {
                 if try LibrarySyncService.localStorageURL(saved) != nil {
                     try await LibrarySyncService.shared.setEnabled(false, context)
                 } else {
+                    
                     let initial = saved.previousFixedStoragePath.map {
                         URL(fileURLWithPath: $0, isDirectory: true)
                     }
@@ -83,11 +84,13 @@ final class SettingsViewService {
             }
             
             let drive = try SyncIndexStore.cloudDrive(selected)
+            
             let folder = try SyncIndexStore.cloudFolder(drive)
-            if let savedPath = setting.syncDrivePath,
-               URL(fileURLWithPath: savedPath, isDirectory: true).resolvingSymlinksInPath().standardizedFileURL !=
-                drive.resolvingSymlinksInPath().standardizedFileURL {
+            
+            if let savedPath = setting.syncDrivePath, URL(fileURLWithPath: savedPath, isDirectory: true).resolvingSymlinksInPath().standardizedFileURL != drive.resolvingSymlinksInPath().standardizedFileURL {
+                
                 throw SyncStoreError.wrongDrive
+                
             }
 
             setting.syncDriveBookmarkData = try URL.securityScopedBookmarkData(drive)
@@ -96,7 +99,9 @@ final class SettingsViewService {
             
             if FileManager.default.fileExists(atPath: folder.path) {
                 let bookmark = try URL.securityScopedBookmarkData(folder)
+                
                 setting.syncFolderBookmarkData = bookmark
+                
                 if setting.syncEnabled { setting.fixedStorageBookmarkData = bookmark }
             }
             
@@ -203,7 +208,7 @@ final class SettingsViewService {
 
                 let afterIndexing = try modelContext.fetch(FetchDescriptor<PDFFile>())
                 
-                try LibraryViewService.deleteMissingFiles(modelContext, afterIndexing)
+                try LibraryService.deleteMissingFiles(modelContext, afterIndexing)
                 
                 let remaining = try modelContext.fetch(FetchDescriptor<PDFFile>())
                 
@@ -224,7 +229,7 @@ final class SettingsViewService {
         do {
             let pdfFiles = try modelContext.fetch(FetchDescriptor<PDFFile>())
             
-            try LibraryViewService.deleteMissingFiles(modelContext, pdfFiles)
+            try LibraryService.deleteMissingFiles(modelContext, pdfFiles)
             
             let remaining = try modelContext.fetch(FetchDescriptor<PDFFile>())
             
