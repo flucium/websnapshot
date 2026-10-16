@@ -133,7 +133,7 @@ func availablePDFURL(_ directoryURL: URL,_ fileName: String) -> URL {
     
     var suffix = 2
 
-    while FileManager.default.fileExists(atPath: candidate.path) {
+    while FileIO.exists(candidate) {
         candidate = directoryURL.appendingPathComponent(URL.pdfFileName(fileName, nil,  " \(suffix)"))
         suffix += 1
     }
