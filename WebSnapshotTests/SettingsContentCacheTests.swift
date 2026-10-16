@@ -20,9 +20,9 @@ final class SettingsContentCacheTests: XCTestCase {
             entry.contentFingerprint = "Old fingerprint"
             context.insert(entry)
         }
-        try PDFTagService.replaceTags(["Keep", "Shared"], for: existing, in: context)
-        try PDFTagService.replaceTags(["Remove", "Shared"], for: deleted, in: context)
-        try PDFTagService.replaceTags(["Offline"], for: unavailable, in: context)
+        try PDFTagService.replaceTags(["Keep", "Shared"], existing, context)
+        try PDFTagService.replaceTags(["Remove", "Shared"], deleted, context)
+        try PDFTagService.replaceTags(["Offline"], unavailable, context)
         XCTAssertEqual(unavailable.availability, .unavailable)
 
         let removedCount = try SettingsViewService.invalidateContentCache(context)
@@ -78,7 +78,7 @@ final class SettingsContentCacheTests: XCTestCase {
         try container.mainContext.save()
         let state = SettingsViewState()
         let probe = CacheRefreshProbe()
-        let indexer = LibraryContentIndexer(extract: { try await probe.read($0) })
+        let indexer = LibraryContentIndexer({ try await probe.read($0) })
 
         for _ in 0..<2 {
             SettingsViewService.refreshContentCache(state, container.mainContext, indexer)
@@ -124,11 +124,11 @@ final class SettingsContentCacheTests: XCTestCase {
         let container = try makeContainer()
         let entry = PDFFile(fixture.url)
         container.mainContext.insert(entry)
-        try PDFTagService.replaceTags(["Temporary"], for: entry, in: container.mainContext)
+        try PDFTagService.replaceTags(["Temporary"], entry, container.mainContext)
         let started = expectation(description: "Refresh extraction started")
         let gate = CacheRefreshGate(started)
         let state = SettingsViewState()
-        let indexer = LibraryContentIndexer(extract: { _ in await gate.read() })
+        let indexer = LibraryContentIndexer({ _ in await gate.read() })
 
         SettingsViewService.refreshContentCache(state, container.mainContext, indexer)
         let task = try XCTUnwrap(state.cacheRefreshTask)

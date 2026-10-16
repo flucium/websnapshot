@@ -5,6 +5,32 @@ import XCTest
 
 @MainActor
 final class LibraryFileSynchronizationTests: XCTestCase {
+    func testUndownloadedPDFKeepsItsEntryAndTagsAfterDeletionEvent() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("Article.pdf")
+        let placeholder = directory.appendingPathComponent(".Article.pdf.icloud")
+        let data = Data("placeholder".utf8)
+        try data.write(to: placeholder)
+        let container = try makeContainer()
+        let context = container.mainContext
+        let entry = PDFFile(url)
+        context.insert(entry)
+        try PDFTagService.replaceTags(["Keep"], entry, context)
+
+        XCTAssertEqual(entry.availability, .unavailable)
+        try LibraryViewService.deleteMissingFiles(context, [entry])
+        XCTAssertEqual(try context.fetchCount(FetchDescriptor<PDFFile>()), 1)
+        XCTAssertEqual(try context.fetchCount(FetchDescriptor<PDFTag>()), 1)
+
+        try LibraryViewService.deleteMissingFiles(context, [entry], [entry.persistentModelID])
+        XCTAssertEqual(try context.fetchCount(FetchDescriptor<PDFFile>()), 1)
+        XCTAssertEqual(try context.fetchCount(FetchDescriptor<PDFTag>()), 1)
+        XCTAssertEqual(entry.tags.map(\.name), ["Keep"])
+        XCTAssertEqual(try Data(contentsOf: placeholder), data)
+    }
+
     func testRenamedPDFKeepsItsEntryAndTags() throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -17,7 +43,7 @@ final class LibraryFileSynchronizationTests: XCTestCase {
         let context = container.mainContext
         try PDFFileService.save(context, original)
         let entry = try XCTUnwrap(context.fetch(FetchDescriptor<PDFFile>()).first)
-        try PDFTagService.replaceTags(["Keep"], for: entry, in: context)
+        try PDFTagService.replaceTags(["Keep"], entry, context)
         try FileManager.default.moveItem(at: original, to: renamed)
 
         XCTAssertEqual(try entry.resolveURL().standardizedFileURL, renamed.standardizedFileURL)
@@ -36,7 +62,7 @@ final class LibraryFileSynchronizationTests: XCTestCase {
             Data([0, 1])
         )
         context.insert(entry)
-        try PDFTagService.replaceTags(["Keep"], for: entry, in: context)
+        try PDFTagService.replaceTags(["Keep"], entry, context)
 
         try LibraryViewService.deleteMissingFiles(context, [entry])
 
@@ -55,7 +81,7 @@ final class LibraryFileSynchronizationTests: XCTestCase {
         let context = container.mainContext
         try PDFFileService.save(context, url)
         let entry = try XCTUnwrap(context.fetch(FetchDescriptor<PDFFile>()).first)
-        try PDFTagService.replaceTags(["Temporary"], for: entry, in: context)
+        try PDFTagService.replaceTags(["Temporary"], entry, context)
 
         try FileManager.default.removeItem(at: url)
         try LibraryViewService.deleteMissingFiles(context, [entry])
@@ -78,7 +104,7 @@ final class LibraryFileSynchronizationTests: XCTestCase {
         let context = container.mainContext
         try PDFFileService.save(context, url)
         let entry = try XCTUnwrap(context.fetch(FetchDescriptor<PDFFile>()).first)
-        try PDFTagService.replaceTags(["Temporary"], for: entry, in: context)
+        try PDFTagService.replaceTags(["Temporary"], entry, context)
 
         try FileManager.default.trashItem(at: url, resultingItemURL: &trashedURL)
         try LibraryViewService.deleteMissingFiles(context, [entry])
@@ -99,7 +125,7 @@ final class LibraryFileSynchronizationTests: XCTestCase {
         let context = container.mainContext
         let entry = PDFFile(url)
         context.insert(entry)
-        try PDFTagService.replaceTags(["Temporary"], for: entry, in: context)
+        try PDFTagService.replaceTags(["Temporary"], entry, context)
         let monitor = LibraryPDFFileMonitor()
         defer { monitor.stop() }
         let deleted = expectation(description: "The file monitor reports the external deletion")
@@ -125,6 +151,32 @@ final class LibraryFileSynchronizationTests: XCTestCase {
         XCTAssertEqual(try context.fetchCount(FetchDescriptor<PDFTag>()), 0)
     }
 
+    func testMonitorDetectsDeletionAfterAtomicReplacement() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("document.pdf")
+        try Data("original".utf8).write(to: url)
+        let container = try makeContainer()
+        let entry = PDFFile(url)
+        container.mainContext.insert(entry)
+        try container.mainContext.save()
+        let monitor = LibraryPDFFileMonitor()
+        defer { monitor.stop() }
+        let deleted = expectation(description: "The replacement file is still monitored")
+        monitor.sync([entry]) { change in
+            if change.wasDeleted {
+                deleted.fulfill()
+            }
+        }
+
+        try Data("replacement".utf8).write(to: url, options: .atomic)
+        try await Task.sleep(for: .milliseconds(200))
+        try FileManager.default.removeItem(at: url)
+
+        await fulfillment(of: [deleted], timeout: 3)
+    }
+
     func testDeleteEventDoesNotRemoveAReplacementAtTheSamePath() throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -135,7 +187,7 @@ final class LibraryFileSynchronizationTests: XCTestCase {
         let context = container.mainContext
         let entry = PDFFile(url)
         context.insert(entry)
-        try PDFTagService.replaceTags(["Keep"], for: entry, in: context)
+        try PDFTagService.replaceTags(["Keep"], entry, context)
 
         try LibraryViewService.deleteMissingFiles(
             context, [entry], [entry.persistentModelID]

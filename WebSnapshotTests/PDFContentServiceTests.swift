@@ -11,7 +11,7 @@ final class PDFContentServiceTests: XCTestCase {
         let fixture = try ContentSearchFixture(["First page text", "Second page text"])
         defer { fixture.remove() }
 
-        let text = try await PDFContentService(recognize: { _ in
+        let text = try await PDFContentService({ _ in
             throw AppError.error("Embedded text should not trigger OCR")
         }).text(fixture.url)
 
@@ -38,7 +38,7 @@ final class PDFContentServiceTests: XCTestCase {
     func testOCRFallbackIsOnlyUsedForPagesWithoutText() async throws {
         let fixture = try ContentSearchFixture(["Embedded page text", "Scanned content"], imagePages: [1])
         defer { fixture.remove() }
-        let service = PDFContentService(recognize: { _ in "Recognized image text" })
+        let service = PDFContentService({ _ in "Recognized image text" })
 
         let text = try await service.text(fixture.url)
 

@@ -66,7 +66,7 @@ final class PDFFileSaveTests: XCTestCase {
         try PDFFileService.save(context, original)
         let entry = try XCTUnwrap(context.fetch(FetchDescriptor<PDFFile>()).first)
         let entryID = entry.persistentModelID
-        try PDFTagService.replaceTags(["Original"], for: entry, in: context)
+        try PDFTagService.replaceTags(["Original"], entry, context)
         try FileManager.default.moveItem(at: original, to: renamed)
         try StorageSettingsService.saveFixedStorage(context, directory)
         let settings = try context.fetch(FetchDescriptor<StorageSettings>())
@@ -110,7 +110,7 @@ final class PDFFileSaveTests: XCTestCase {
         let context = container.mainContext
         try PDFFileService.save(context, original)
         let entry = try XCTUnwrap(context.fetch(FetchDescriptor<PDFFile>()).first)
-        try PDFTagService.replaceTags(["Keep"], for: entry, in: context)
+        try PDFTagService.replaceTags(["Keep"], entry, context)
         try FileManager.default.moveItem(at: original, to: renamed)
 
         try PDFFileService.save(context, renamed)
@@ -118,6 +118,52 @@ final class PDFFileSaveTests: XCTestCase {
         XCTAssertEqual(try context.fetchCount(FetchDescriptor<PDFFile>()), 1)
         XCTAssertEqual(entry.url.standardizedFileURL, renamed.standardizedFileURL)
         XCTAssertEqual(entry.tags.map(\.name), ["Keep"])
+    }
+
+    func testRegisteringThroughDirectorySymlinkReusesExistingEntry() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let storage = directory.appendingPathComponent("Storage", isDirectory: true)
+        let alias = directory.appendingPathComponent("Alias", isDirectory: true)
+        try FileManager.default.createDirectory(at: storage, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createSymbolicLink(at: alias, withDestinationURL: storage)
+        let url = storage.appendingPathComponent("Document.pdf")
+        try Data("fixture".utf8).write(to: url)
+        let container = try makeContainer()
+        let context = container.mainContext
+        try PDFFileService.save(context, url)
+        let entry = try XCTUnwrap(context.fetch(FetchDescriptor<PDFFile>()).first)
+        let addedAt = entry.addedAt
+        try PDFTagService.replaceTags(["Keep"], entry, context)
+
+        try PDFFileService.save(context, alias.appendingPathComponent("Document.pdf"))
+
+        XCTAssertEqual(try context.fetchCount(FetchDescriptor<PDFFile>()), 1)
+        XCTAssertEqual(entry.tags.map(\.name), ["Keep"])
+        XCTAssertEqual(entry.addedAt, addedAt)
+    }
+
+    func testDeletingThroughDirectorySymlinkRemovesEntryAndUnusedTags() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let storage = directory.appendingPathComponent("Storage", isDirectory: true)
+        let alias = directory.appendingPathComponent("Alias", isDirectory: true)
+        try FileManager.default.createDirectory(at: storage, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createSymbolicLink(at: alias, withDestinationURL: storage)
+        let url = storage.appendingPathComponent("Document.pdf")
+        let aliasedURL = alias.appendingPathComponent("Document.pdf")
+        try Data("fixture".utf8).write(to: url)
+        let container = try makeContainer()
+        let context = container.mainContext
+        try PDFFileService.save(context, url)
+        let entry = try XCTUnwrap(context.fetch(FetchDescriptor<PDFFile>()).first)
+        try PDFTagService.replaceTags(["Temporary"], entry, context)
+
+        try LibraryViewService.delete(context, aliasedURL, aliasedURL)
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: url.path))
+        XCTAssertEqual(try context.fetchCount(FetchDescriptor<PDFFile>()), 0)
+        XCTAssertEqual(try context.fetchCount(FetchDescriptor<PDFTag>()), 0)
     }
 
     private func makeContainer() throws -> ModelContainer {

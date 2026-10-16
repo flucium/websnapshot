@@ -27,7 +27,23 @@ final class URLWebTests: XCTestCase {
     }
 
     func testMalformedIPLiteralIsRejected() {
-        for address in ["http://[not-an-ip]/", "http://[1:2:3]/", "http://[::gg]/", "http://[::1%25]/"] {
+        for address in ["http://[not-an-ip]/", "http://[1:2:3]/", "http://[::gg]/", "http://[::1%25]/", "http://[localhost]/", "http://[127.0.0.1]/", "https://[example.com]/"] {
+            XCTAssertNil(URL.supportedWebURL(address), address)
+        }
+    }
+
+    func testSingleLabelAndTrailingDotHostsAreAccepted() throws {
+        for address in ["http://nas/", "https://intranet:8443/article", "https://example.com./", "http://nas./"] {
+            let url = try XCTUnwrap(URL.supportedWebURL(address), address)
+            XCTAssertEqual(url.absoluteString, address)
+            XCTAssertTrue(url.isSupportedWebURL, address)
+            XCTAssertNoThrow(try SafariCaptureRequest(id: UUID(), url: url))
+        }
+        XCTAssertEqual(URL.supportedWebURL("nas/article")?.absoluteString, "https://nas/article")
+    }
+
+    func testEmptyAndMalformedHostLabelsAreRejected() {
+        for address in ["http://./", "http://../", "https://example..com/", "https://example.com../", "http://-nas/", "http://nas-/", "https://-example.com/", "http://na_s/"] {
             XCTAssertNil(URL.supportedWebURL(address), address)
         }
     }

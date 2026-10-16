@@ -10,10 +10,11 @@ final class PDFRenderingTests: XCTestCase {
         var mediaBox = CGRect(x: 0, y: 0, width: 612, height: 792)
         let consumer = try XCTUnwrap(CGDataConsumer(data: data))
         let context = try XCTUnwrap(CGContext(consumer: consumer, mediaBox: &mediaBox, nil))
+        let colorSpace = try XCTUnwrap(CGColorSpace(name: CGColorSpace.sRGB))
         context.beginPDFPage(nil)
-        context.setFillColor(CGColor(red: 1, green: 0, blue: 0, alpha: 1))
+        context.setFillColor(try XCTUnwrap(CGColor(colorSpace: colorSpace, components: [1, 0, 0, 1])))
         context.fill(CGRect(x: 50, y: 50, width: 60, height: 60))
-        context.setFillColor(CGColor(red: 0, green: 0, blue: 1, alpha: 1))
+        context.setFillColor(try XCTUnwrap(CGColor(colorSpace: colorSpace, components: [0, 0, 1, 1])))
         context.fill(CGRect(x: 502, y: 682, width: 60, height: 60))
         context.endPDFPage()
         context.closePDF()
@@ -38,7 +39,7 @@ final class PDFRenderingTests: XCTestCase {
         let context = try XCTUnwrap(CGContext(
             data: nil, width: image.width, height: image.height,
             bitsPerComponent: 8, bytesPerRow: image.width * 4,
-            space: CGColorSpaceCreateDeviceRGB(),
+            space: try XCTUnwrap(CGColorSpace(name: CGColorSpace.sRGB)),
             bitmapInfo: CGBitmapInfo.byteOrder32Big.rawValue | CGImageAlphaInfo.premultipliedLast.rawValue
         ))
         context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))

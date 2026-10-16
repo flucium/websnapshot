@@ -11,8 +11,8 @@ final class SafariRequestServiceTests: XCTestCase {
         service.receive(request.openURL)
         service.receive(request.openURL)
         service.receive(try makeRequest().openURL)
-        XCTAssertEqual(service.pending.count, 2)
-        XCTAssertNil(service.appError)
+        XCTAssertEqual(service.state.pending.count, 2)
+        XCTAssertNil(service.state.appError)
     }
 
     func testRequestsRunSeriallyAndFailurePausesQueueUntilRetry() async throws {
@@ -29,17 +29,17 @@ final class SafariRequestServiceTests: XCTestCase {
         service.receive(first.openURL)
         service.receive(second.openURL)
         service.startProcessing(container.mainContext)
-        try await waitUntil { service.appError != nil }
+        try await waitUntil { service.state.appError != nil }
         XCTAssertEqual(attempts, [first.url])
-        XCTAssertEqual(service.pending, [second])
+        XCTAssertEqual(service.state.pending, [second])
         XCTAssertTrue(service.canRetry)
 
         shouldFail = false
         service.retry(container.mainContext)
-        try await waitUntil { service.pending.isEmpty && service.current == nil }
+        try await waitUntil { service.state.pending.isEmpty && service.state.current == nil }
         XCTAssertEqual(attempts, [first.url, first.url, second.url])
-        XCTAssertNil(service.appError)
-        XCTAssertNotNil(service.savedURL)
+        XCTAssertNil(service.state.appError)
+        XCTAssertNotNil(service.state.savedURL)
     }
 
     func testClosingCaptureCancelsActiveWorkAndClearsQueue() async throws {
@@ -56,10 +56,10 @@ final class SafariRequestServiceTests: XCTestCase {
         service.startProcessing(container.mainContext)
         try await waitUntil { started }
         service.cancel()
-        try await waitUntil { service.current == nil }
-        XCTAssertTrue(service.pending.isEmpty)
-        XCTAssertNil(service.appError)
-        XCTAssertNil(service.savedURL)
+        try await waitUntil { service.state.current == nil }
+        XCTAssertTrue(service.state.pending.isEmpty)
+        XCTAssertNil(service.state.appError)
+        XCTAssertNil(service.state.savedURL)
     }
 
     func testWindowlessFailureCanRetryAndFinishQueuedRequests() async throws {
@@ -86,11 +86,11 @@ final class SafariRequestServiceTests: XCTestCase {
         service.receive(second.openURL)
         service.startProcessing(container.mainContext)
 
-        try await waitUntil { attempts.count == 3 && service.current == nil }
+        try await waitUntil { attempts.count == 3 && service.state.current == nil }
         XCTAssertEqual(attempts, [first.url, first.url, second.url])
         XCTAssertEqual(reportedErrors, ["Offline"])
-        XCTAssertNil(service.appError)
-        XCTAssertTrue(service.pending.isEmpty)
+        XCTAssertNil(service.state.appError)
+        XCTAssertTrue(service.state.pending.isEmpty)
     }
 
     func testWindowlessFailureCanSkipAndContinueQueue() async throws {
@@ -111,10 +111,10 @@ final class SafariRequestServiceTests: XCTestCase {
         service.receive(second.openURL)
         service.startProcessing(container.mainContext)
 
-        try await waitUntil { attempts.count == 2 && service.current == nil }
+        try await waitUntil { attempts.count == 2 && service.state.current == nil }
         XCTAssertEqual(attempts, [first.url, second.url])
-        XCTAssertNil(service.appError)
-        XCTAssertTrue(service.pending.isEmpty)
+        XCTAssertNil(service.state.appError)
+        XCTAssertTrue(service.state.pending.isEmpty)
     }
 
     private func makeRequest(_ address: String = "https://example.com") throws -> SafariCaptureRequest {

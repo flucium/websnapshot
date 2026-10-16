@@ -7,22 +7,22 @@ final class PDFTagServiceTests: XCTestCase {
     func testDraftTagOperationsNormalizeSortAndToggleNames() {
         var tagNames = PDFTagService.addingTag(
             "  Work  Notes ",
-            to: ["資料"]
+            ["資料"]
         )
 
         XCTAssertEqual(Set(tagNames), ["Work Notes", "資料"])
 
-        tagNames = PDFTagService.addingTag("work notes", to: tagNames)
+        tagNames = PDFTagService.addingTag("work notes", tagNames)
         XCTAssertEqual(tagNames.count, 2)
-        XCTAssertTrue(PDFTagService.containsTag("WORK NOTES", in: tagNames))
+        XCTAssertTrue(PDFTagService.containsTag("WORK NOTES", tagNames))
 
-        tagNames = PDFTagService.togglingTag("Work Notes", in: tagNames)
+        tagNames = PDFTagService.togglingTag("Work Notes", tagNames)
         XCTAssertEqual(tagNames, ["資料"])
 
-        tagNames = PDFTagService.togglingTag("Research", in: tagNames)
+        tagNames = PDFTagService.togglingTag("Research", tagNames)
         XCTAssertEqual(Set(tagNames), ["Research", "資料"])
 
-        tagNames = PDFTagService.removingTag("research", from: tagNames)
+        tagNames = PDFTagService.removingTag("research", tagNames)
         XCTAssertEqual(tagNames, ["資料"])
     }
 
@@ -37,8 +37,8 @@ final class PDFTagServiceTests: XCTestCase {
 
         try PDFTagService.replaceTags(
             ["  Work  Notes ", "work notes", "資料"],
-            for: pdfFile,
-            in: context
+            pdfFile,
+            context
         )
 
         XCTAssertEqual(pdfFile.tags.count, 2)
@@ -59,21 +59,21 @@ final class PDFTagServiceTests: XCTestCase {
         context.insert(secondPDFFile)
         try context.save()
 
-        try PDFTagService.replaceTags(["Research"], for: firstPDFFile, in: context)
-        try PDFTagService.replaceTags(["research"], for: secondPDFFile, in: context)
+        try PDFTagService.replaceTags(["Research"], firstPDFFile, context)
+        try PDFTagService.replaceTags(["research"], secondPDFFile, context)
 
         var storedTags = try context.fetch(FetchDescriptor<PDFTag>())
         XCTAssertEqual(storedTags.count, 1)
         XCTAssertEqual(storedTags.first?.pdfFiles.count, 2)
 
-        try PDFTagService.replaceTags([], for: firstPDFFile, in: context)
+        try PDFTagService.replaceTags([], firstPDFFile, context)
 
         storedTags = try context.fetch(FetchDescriptor<PDFTag>())
         XCTAssertEqual(storedTags.count, 1)
         XCTAssertEqual(storedTags.first?.pdfFiles.count, 1)
         XCTAssertTrue(storedTags.first?.pdfFiles.first === secondPDFFile)
 
-        try PDFTagService.replaceTags([], for: secondPDFFile, in: context)
+        try PDFTagService.replaceTags([], secondPDFFile, context)
 
         storedTags = try context.fetch(FetchDescriptor<PDFTag>())
         XCTAssertTrue(storedTags.isEmpty)
@@ -88,7 +88,7 @@ final class PDFTagServiceTests: XCTestCase {
 
         context.insert(pdfFile)
         try context.save()
-        try PDFTagService.replaceTags(["Temporary"], for: pdfFile, in: context)
+        try PDFTagService.replaceTags(["Temporary"], pdfFile, context)
 
         try PDFFileService.delete(context, url)
 

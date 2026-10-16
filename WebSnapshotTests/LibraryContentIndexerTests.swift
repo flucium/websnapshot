@@ -21,7 +21,7 @@ final class LibraryContentIndexerTests: XCTestCase {
         XCTAssertFalse(LibraryViewService.matches(entry, "inside the PDF", .tag))
 
         let probe = ExtractionProbe()
-        await LibraryContentIndexer(extract: { try await probe.read($0) }).index([entry], context)
+        await LibraryContentIndexer({ try await probe.read($0) }).index([entry], context)
         let reads = await probe.reads
         XCTAssertEqual(reads, 0)
     }
@@ -54,7 +54,7 @@ final class LibraryContentIndexerTests: XCTestCase {
         let entry = try XCTUnwrap(reopened.mainContext.fetch(FetchDescriptor<PDFFile>()).first)
         XCTAssertTrue(entry.searchableText?.contains("Persisted content") ?? false)
         let probe = ExtractionProbe()
-        await LibraryContentIndexer(extract: { try await probe.read($0) }).index([entry], reopened.mainContext)
+        await LibraryContentIndexer({ try await probe.read($0) }).index([entry], reopened.mainContext)
         let reads = await probe.reads
         XCTAssertEqual(reads, 0)
     }
@@ -99,7 +99,7 @@ final class LibraryContentIndexerTests: XCTestCase {
         container.mainContext.insert(entry)
         try container.mainContext.save()
         let replacement = try ContentSearchFixture.data(["Replacement content"])
-        let indexer = LibraryContentIndexer(extract: { url in
+        let indexer = LibraryContentIndexer({ url in
             try replacement.write(to: url, options: .atomic)
             return "Original content"
         })
@@ -123,7 +123,7 @@ final class LibraryContentIndexerTests: XCTestCase {
         try context.save()
         let started = expectation(description: "Extraction started")
         let gate = ExtractionGate(started)
-        let indexer = LibraryContentIndexer(extract: { _ in await gate.read() })
+        let indexer = LibraryContentIndexer({ _ in await gate.read() })
         let task = Task { await indexer.index([entry], context) }
         await fulfillment(of: [started], timeout: 3)
         context.delete(entry)
@@ -146,7 +146,7 @@ final class LibraryContentIndexerTests: XCTestCase {
         container.mainContext.insert(valid)
         try container.mainContext.save()
         let probe = ExtractionProbe()
-        let indexer = LibraryContentIndexer(extract: { try await probe.read($0) })
+        let indexer = LibraryContentIndexer({ try await probe.read($0) })
 
         await indexer.index([invalid, valid], container.mainContext)
         await indexer.index([invalid, valid], container.mainContext)
@@ -169,13 +169,13 @@ final class LibraryContentIndexerTests: XCTestCase {
         let entry = PDFFile(fixture.url)
         container.mainContext.insert(entry)
         try container.mainContext.save()
-        let cancelled = LibraryContentIndexer(extract: { _ in throw CancellationError() })
+        let cancelled = LibraryContentIndexer({ _ in throw CancellationError() })
         await cancelled.index([entry], container.mainContext)
         XCTAssertNil(entry.searchableText)
         XCTAssertEqual(cancelled.failedCount, 0)
 
         let probe = ExtractionProbe()
-        let indexer = LibraryContentIndexer(extract: { try await probe.read($0) })
+        let indexer = LibraryContentIndexer({ try await probe.read($0) })
         await indexer.index([entry], container.mainContext)
         await indexer.index([entry], container.mainContext)
         let reads = await probe.reads

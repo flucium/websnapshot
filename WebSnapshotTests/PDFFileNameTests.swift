@@ -56,6 +56,26 @@ final class PDFFileNameTests: XCTestCase {
         }
     }
 
+    func testFixedFolderSaveSkipsUndownloadedPDFNames() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let existingNames = [".Article.pdf.icloud", ".Article 2.pdf.icloud", "Article 3.pdf"]
+        let existingData = Data("existing".utf8)
+        for name in existingNames {
+            try existingData.write(to: directory.appendingPathComponent(name))
+        }
+        let savedData = Data("new PDF".utf8)
+
+        let destination = try XCTUnwrap(saveToDirectory("Article", nil, PDFFileDocument(savedData), directory))
+
+        XCTAssertEqual(destination.lastPathComponent, "Article 4.pdf")
+        XCTAssertEqual(try Data(contentsOf: destination), savedData)
+        for name in existingNames {
+            XCTAssertEqual(try Data(contentsOf: directory.appendingPathComponent(name)), existingData)
+        }
+    }
+
     func testTruncationPreservesWholeUnicodeCharacters() {
         let character = "👩🏽‍💻"
         let name = URL.pdfFileName(String(repeating: character, count: 100), nil)
