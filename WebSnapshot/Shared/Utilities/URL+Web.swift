@@ -38,24 +38,27 @@ extension URL{
         }
         
         // Accept IP literals before applying DNS label validation.
-        if localHost(host) || isIPv4(host) || isIPv6(self.host(percentEncoded: false)?.lowercased() ?? host) {
+        let literal = URLComponents(url: self, resolvingAgainstBaseURL: false)?.host ?? host
+
+        if literal.hasPrefix("[") || literal.hasSuffix("]") {
+            return isIPv6(literal.lowercased())
+        }
+
+        if localHost(host) || isIPv4(host) {
             return true
         }
         
         // domain check
-        guard host.contains(".") else {
-            
-            return false
-        }
+        let hostname = host.hasSuffix(".") ? String(host.dropLast()) : host
+
+        let entries = hostname.split(separator: ".",omittingEmptySubsequences: false)
         
-        let entries = host.split(separator: ".",omittingEmptySubsequences: false)
-        
-        guard entries.count >= 2 else {
+        guard entries.isEmpty == false else {
             return false
         }
         
         return entries.allSatisfy {
-            entry in entry.isEmpty == false && entry.unicodeScalars.allSatisfy {
+            entry in entry.isEmpty == false && !entry.hasPrefix("-") && !entry.hasSuffix("-") && entry.unicodeScalars.allSatisfy {
                 CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-").contains($0)
             }
         }
