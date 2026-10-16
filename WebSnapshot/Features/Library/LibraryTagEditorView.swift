@@ -4,10 +4,12 @@ import SwiftUI
 struct LibraryTagEditorView: View {
     @Environment(\.modelContext) private var modelContext
 
-    @ObservedObject var libraryViewState: LibraryViewState
+    @ObservedObject var libraryTagEditorViewState: LibraryTagEditorViewState
 
     let pdfFile: PDFFile
     
+    let close: () -> Void
+
     var body: some View {
         VStack(spacing: 0) {
             header
@@ -28,7 +30,7 @@ struct LibraryTagEditorView: View {
         }
         .frame(width: 560, height: 420)
         .background(.background)
-        .alert(item: $libraryViewState.tagEditorAppError) {
+        .alert(item: $libraryTagEditorViewState.appError) {
             appError in
             AlertModal.show("Tags Could Not Be Saved", appError)
         }
@@ -64,7 +66,7 @@ struct LibraryTagEditorView: View {
             sectionTitle("Add a Tag",  "plus.circle")
 
             HStack(spacing: 10) {
-                TextField("Enter a tag name", text: $libraryViewState.tagEditorNewTagName)
+                TextField("Enter a tag name", text: $libraryTagEditorViewState.newTagName)
                     .textFieldStyle(.roundedBorder)
                     .onSubmit(addNewTag)
 
@@ -87,12 +89,12 @@ struct LibraryTagEditorView: View {
 
                 Spacer()
 
-                Text("\(libraryViewState.tagEditorTagNames.count) selected")
+                Text("\(libraryTagEditorViewState.tagNames.count) selected")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
-            if libraryViewState.tagEditorTagNames.isEmpty {
+            if libraryTagEditorViewState.tagNames.isEmpty {
                 VStack(spacing: 8) {
                     Image(systemName: "tag.slash")
                         .font(.title2)
@@ -110,7 +112,7 @@ struct LibraryTagEditorView: View {
                 
             } else {
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 120), alignment: .leading)], alignment: .leading, spacing: 8) {
-                    ForEach(libraryViewState.tagEditorTagNames, id: \.self) {
+                    ForEach(libraryTagEditorViewState.tagNames, id: \.self) {
                         tagName in
                         SelectedTagButton(tagName) {
                             removeTag(tagName)
@@ -123,14 +125,14 @@ struct LibraryTagEditorView: View {
 
     private var footer: some View {
         HStack(spacing: 10) {
-            Label("\(libraryViewState.tagEditorTagNames.count) tags",systemImage: "tag")
+            Label("\(libraryTagEditorViewState.tagNames.count) tags",systemImage: "tag")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
             Spacer()
 
             Button("Cancel") {
-                libraryViewState.closeTagEditor()
+                close()
             }
             .keyboardShortcut(.cancelAction)
 
@@ -144,7 +146,7 @@ struct LibraryTagEditorView: View {
     }
 
     private var isNewTagNameEmpty: Bool {
-        PDFTagService.normalizedName(libraryViewState.tagEditorNewTagName).isEmpty
+        PDFTagService.normalizedName(libraryTagEditorViewState.newTagName).isEmpty
     }
 
     private func sectionTitle(_ title: String, _ systemImage: String) -> some View {
@@ -153,41 +155,17 @@ struct LibraryTagEditorView: View {
     }
 
     private func addNewTag() {
-        libraryViewState.tagEditorTagNames = PDFTagService.addingTag(libraryViewState.tagEditorNewTagName,libraryViewState.tagEditorTagNames)
-        
-        libraryViewState.tagEditorNewTagName = String()
+        LibraryTagEditorViewService.addNewTag(libraryTagEditorViewState)
     }
 
     private func removeTag(_ name: String) {
-        libraryViewState.tagEditorTagNames = PDFTagService.removingTag(name, libraryViewState.tagEditorTagNames)
+        LibraryTagEditorViewService.removeTag(libraryTagEditorViewState, name)
     }
 
     private func save() {
-        do {
-            try PDFTagService.replaceTags(libraryViewState.tagEditorTagNames,pdfFile,modelContext)
-            
-            libraryViewState.closeTagEditor()
-        } catch {
-            libraryViewState.tagEditorAppError = AppError.presentable(error)
+        if LibraryTagEditorViewService.save(libraryTagEditorViewState, pdfFile, modelContext) {
+            close()
         }
-    }
-}
-
-struct PDFTagBadge: View {
-    let name: String
-
-    init(_ name: String) {
-        self.name = name
-    }
-
-    var body: some View {
-        Label(name, systemImage: "tag")
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            .lineLimit(1)
-            .padding(.horizontal, 7)
-            .padding(.vertical, 3)
-            .background(.quaternary, in: Capsule())
     }
 }
 
