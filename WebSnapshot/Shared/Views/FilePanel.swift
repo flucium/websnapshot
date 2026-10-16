@@ -8,11 +8,18 @@ func directoryPanel(_ directoryURL: URL?, _ title: String = "Choose Storage Fold
     let panel = NSOpenPanel()
 
     panel.canChooseDirectories = true
+    
     panel.canChooseFiles = false
+    
     panel.allowsMultipleSelection = false
+    
     panel.canCreateDirectories = true
+    
+    
     panel.title = title
+    
     panel.prompt = prompt
+    
     panel.directoryURL = directoryURL
 
     guard panel.runModal() == .OK else {
@@ -110,6 +117,8 @@ func saveToDirectory(_ title: String,_ url: URL?,_ pdfFileDocument: PDFFileDocum
     let destination = availablePDFURL(directoryURL,fileName)
 
     do {
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+
         try data.write(to: destination,options: .atomic)
         
         return destination
