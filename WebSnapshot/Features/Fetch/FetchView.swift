@@ -5,6 +5,8 @@ import WebKit
 struct FetchView: View {
     
     @Environment(\.modelContext) private var modelContext
+
+    @EnvironmentObject private var sync: LibrarySyncService
     
     @StateObject private var fetchViewState = FetchViewState()
 
@@ -48,7 +50,7 @@ struct FetchView: View {
             })
             
             Button("Save", action: {
-                FetchViewService.saveWebPage(fetchViewState,modelContext,storageSettings)
+                FetchViewService.saveWebPage(fetchViewState,modelContext,storageSettings, sync: sync)
             })
             .disabled(fetchViewState.isSaving || fetchViewState.webPage.isLoading)
 
@@ -59,7 +61,7 @@ struct FetchView: View {
         .alert(item:$fetchViewState.appError){
             appError in
             AlertModal.show(fetchViewState.failedOperation?.errorTitle ?? "Operation Could Not Be Completed",appError) {
-                FetchViewService.retryFailedOperation(fetchViewState, modelContext, storageSettings)
+                FetchViewService.retryFailedOperation(fetchViewState, modelContext, storageSettings, sync: sync)
             }
         }
         .padding()
@@ -82,4 +84,5 @@ struct FetchView: View {
 
 #Preview {
     FetchView()
+        .environmentObject(LibrarySyncService())
 }
