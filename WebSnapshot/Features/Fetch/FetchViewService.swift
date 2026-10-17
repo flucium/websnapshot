@@ -51,7 +51,7 @@ final class FetchViewService {
         }
     }
 
-    static func saveWebPage(_ state: FetchViewState,_ modelContext: ModelContext,_ storageSettings: [StorageSettings]) {
+    static func saveWebPage(_ state: FetchViewState,_ modelContext: ModelContext,_ storageSettings: [StorageSettings], sync: LibrarySyncService) {
         guard let requestID = state.beginSave() else {
             return
         }
@@ -76,7 +76,7 @@ final class FetchViewService {
         
                 state.pdfFileDocument = document
 
-                guard try WebCaptureService.save(document,page.title,page.url,modelContext,storageSettings) != nil else {
+                guard try WebCaptureService.save(document,page.title,page.url,modelContext,storageSettings, sync: sync) != nil else {
                     return
                 }
 
@@ -94,14 +94,14 @@ final class FetchViewService {
         }
     }
 
-    static func retryFailedOperation( _ state: FetchViewState, _ modelContext: ModelContext, _ storageSettings: [StorageSettings] ) {
+    static func retryFailedOperation( _ state: FetchViewState, _ modelContext: ModelContext, _ storageSettings: [StorageSettings], sync: LibrarySyncService ) {
         switch state.failedOperation {
             
         case .load:
             loadWebPage(state)
             
         case .save:
-            saveWebPage(state, modelContext, storageSettings)
+            saveWebPage(state, modelContext, storageSettings, sync: sync)
             
         case nil:
             break
