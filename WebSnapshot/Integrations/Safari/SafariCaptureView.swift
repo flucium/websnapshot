@@ -7,13 +7,12 @@ struct SafariCaptureView: View {
     
     @Environment(\.modelContext) private var modelContext
     
-    @ObservedObject private var requestState: SafariRequestState
+    @ObservedObject private var requests: SafariRequestService
 
-    private let requests: SafariRequestService
+    private var requestState: SafariRequestState { requests.state }
 
     init(_ requests: SafariRequestService) {
         self.requests = requests
-        requestState = requests.state
     }
 
     var body: some View {
