@@ -1,18 +1,17 @@
 import AppKit
+import Combine
 import CryptoKit
 import Foundation
 import SwiftData
 
 @MainActor
-final class LibrarySyncService {
+final class LibrarySyncService: ObservableObject {
 
-    let state = LibrarySyncState()
+    @Published private(set) var state = LibrarySyncState()
     
     private var isRefreshing = false
     
     private var modeGeneration: UInt64 = 0
-    
-    static let shared = LibrarySyncService()
     
     static func settings(_ context: ModelContext) throws -> StorageSettings? {
     
@@ -79,6 +78,53 @@ final class LibrarySyncService {
             
             state.lastError = AppError(error)
             
+            throw error
+        }
+    }
+
+    func reconnect(_ selected: URL, _ context: ModelContext) throws {
+        let accessing = selected.startAccessingSecurityScopedResource()
+
+        defer {
+
+            if accessing {
+                selected.stopAccessingSecurityScopedResource()
+            }
+        }
+
+        do {
+            try requireReady()
+
+            guard let setting = try Self.settings(context) else {
+                return
+            }
+
+            let drive = try SyncIndexStore.cloudDrive(selected)
+
+            let folder = try SyncIndexStore.cloudFolder(drive)
+
+            if let savedPath = setting.syncDrivePath, URL(fileURLWithPath: savedPath, isDirectory: true).resolvingSymlinksInPath().standardizedFileURL != drive.resolvingSymlinksInPath().standardizedFileURL {
+
+                throw SyncStoreError.wrongDrive
+
+            }
+
+            setting.syncDriveBookmarkData = try URL.securityScopedBookmarkData(drive)
+
+            setting.syncDrivePath = drive.path
+
+            if FileManager.default.fileExists(atPath: folder.path) {
+                let bookmark = try URL.securityScopedBookmarkData(folder)
+
+                setting.syncFolderBookmarkData = bookmark
+
+                if setting.syncEnabled { setting.fixedStorageBookmarkData = bookmark }
+            }
+
+            try context.save()
+
+        } catch {
+            context.rollback()
             throw error
         }
     }
