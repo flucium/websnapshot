@@ -3,10 +3,10 @@ import SwiftData
 
 @MainActor
 final class SettingsViewService {
-    static func changeSync(_ state: SettingsViewState, _ context: ModelContext, _ enabled: Bool, chooseDirectory: (URL?, String, String) -> URL? = directoryPanel) async -> Bool {
+    static func changeSync(_ state: SettingsViewState, _ context: ModelContext, _ enabled: Bool, sync: LibrarySyncService, chooseDirectory: @MainActor (URL?, String, String) -> URL? = directoryPanel) async -> Bool {
         
         do {
-            try LibrarySyncService.shared.requireReady()
+            try sync.requireReady()
             
             guard LibrarySyncService.isEnabled(context) != enabled else {
                 return true
@@ -17,14 +17,14 @@ final class SettingsViewService {
         
                 if saved?.syncDriveBookmarkData != nil {
                 
-                    try await LibrarySyncService.shared.setEnabled(true, context)
+                    try await sync.setEnabled(true, context)
                     
                 } else {
                     
                     guard let selected = chooseDirectory(SyncIndexStore.defaultCloudDriveURL, "Allow Access to iCloud Drive", "Enable Sync") else {
                         return false
                     }
-                    try await LibrarySyncService.shared.setEnabled(true, context, drive: selected)
+                    try await sync.setEnabled(true, context, drive: selected)
                 }
                 
             } else {
@@ -33,7 +33,7 @@ final class SettingsViewService {
                 }
                 
                 if try LibrarySyncService.localStorageURL(saved) != nil {
-                    try await LibrarySyncService.shared.setEnabled(false, context)
+                    try await sync.setEnabled(false, context)
                 } else {
                     
                     let initial = saved.previousFixedStoragePath.map {
@@ -44,7 +44,7 @@ final class SettingsViewService {
                         return false
                     }
                     
-                    try await LibrarySyncService.shared.setEnabled(false, context, localRoot: selected)
+                    try await sync.setEnabled(false, context, localRoot: selected)
                 }
             }
             
@@ -61,60 +61,18 @@ final class SettingsViewService {
         
     }
 
-    static func reconnectSync(_ state: SettingsViewState, _ context: ModelContext) {
+    static func reconnectSync(_ state: SettingsViewState, _ context: ModelContext, sync: LibrarySyncService) {
         
         guard let selected = directoryPanel(SyncIndexStore.defaultCloudDriveURL, "Reconnect iCloud Drive", "Reconnect") else {
             return
         }
         
-        let accessing = selected.startAccessingSecurityScopedResource()
-        
-        defer {
-            
-            if accessing {
-                selected.stopAccessingSecurityScopedResource()
-            }
-        }
-        
         do {
-            try LibrarySyncService.shared.requireReady()
-            
-            guard let setting = try LibrarySyncService.settings(context) else {
-                return
-            }
-            
-            let drive = try SyncIndexStore.cloudDrive(selected)
-            
-            let folder = try SyncIndexStore.cloudFolder(drive)
-            
-            if let savedPath = setting.syncDrivePath, URL(fileURLWithPath: savedPath, isDirectory: true).resolvingSymlinksInPath().standardizedFileURL != drive.resolvingSymlinksInPath().standardizedFileURL {
-                
-                throw SyncStoreError.wrongDrive
-                
-            }
-
-            setting.syncDriveBookmarkData = try URL.securityScopedBookmarkData(drive)
-            
-            setting.syncDrivePath = drive.path
-            
-            if FileManager.default.fileExists(atPath: folder.path) {
-                let bookmark = try URL.securityScopedBookmarkData(folder)
-                
-                setting.syncFolderBookmarkData = bookmark
-                
-                if setting.syncEnabled { setting.fixedStorageBookmarkData = bookmark }
-            }
-            
-            try context.save()
+            try sync.reconnect(selected, context)
             
             clearError(state)
-            
         } catch {
-            
-            context.rollback()
-            
             handle(error, "Sync Folder Could Not Be Reconnected", "Reconnect sync folder", state)
-            
         }
     }
     
@@ -138,13 +96,13 @@ final class SettingsViewService {
     }
 
     @discardableResult
-    static func saveStorage(_ state: SettingsViewState,_ modelContext: ModelContext,_ storage: StorageSettings.Storage) -> Bool {
+    static func saveStorage(_ state: SettingsViewState,_ modelContext: ModelContext,_ storage: StorageSettings.Storage, sync: LibrarySyncService) -> Bool {
         do {
             guard try StorageSettingsService.load(modelContext).storage != storage else {
                 return true
             }
 
-            try StorageSettingsService.save(modelContext, storage)
+            try StorageSettingsService.save(modelContext, storage, sync: sync)
             
             clearError(state)
             
@@ -156,8 +114,8 @@ final class SettingsViewService {
         }
     }
 
-    static func chooseFixedStorage(_ state: SettingsViewState,_ modelContext: ModelContext,_ fixedStoragePath: String?) {
-        guard !LibrarySyncService.isEnabled(modelContext), !LibrarySyncService.shared.state.isSwitching else { return }
+    static func chooseFixedStorage(_ state: SettingsViewState,_ modelContext: ModelContext,_ fixedStoragePath: String?, sync: LibrarySyncService) {
+        guard !LibrarySyncService.isEnabled(modelContext), !sync.state.isSwitching else { return }
         
         let currentURL = fixedStoragePath.map {
             URL(fileURLWithPath: $0, isDirectory: true)
@@ -168,7 +126,7 @@ final class SettingsViewService {
         }
 
         do {
-            try StorageSettingsService.saveFixedStorage(modelContext, selectedURL)
+            try StorageSettingsService.saveFixedStorage(modelContext, selectedURL, sync: sync)
             
             clearError(state)
         } catch {
@@ -176,76 +134,19 @@ final class SettingsViewService {
         }
     }
 
-    static func refreshContentCache(_ state: SettingsViewState, _ modelContext: ModelContext, _ indexer: LibraryContentIndexer) {
-        guard state.isRefreshingCache == false, !LibrarySyncService.shared.state.isSwitching else {
+    static func refreshContentCache(_ state: SettingsViewState, _ modelContext: ModelContext, _ contentService: LibraryContentService) {
+        guard let task = contentService.refreshContentCache(modelContext) else {
             return
         }
         
-        state.isRefreshingCache = true
-        
-        state.cacheRefreshResult = nil
-        
         clearError(state)
 
-        state.cacheRefreshTask = Task(priority: .utility) { @MainActor in
-            defer {
-                state.isRefreshingCache = false
-                state.cacheRefreshTask = nil
-            }
-
+        Task { @MainActor in
             do {
-                try Task.checkCancellation()
-                
-                let removedCount = try invalidateContentCache(modelContext)
-                
-                let pdfFiles = try modelContext.fetch(FetchDescriptor<PDFFile>())
-                
-                indexer.retry()
-                
-                await indexer.index(pdfFiles, modelContext)
-                
-                try Task.checkCancellation()
-
-                let afterIndexing = try modelContext.fetch(FetchDescriptor<PDFFile>())
-                
-                try LibraryService.deleteMissingFiles(modelContext, afterIndexing)
-                
-                let remaining = try modelContext.fetch(FetchDescriptor<PDFFile>())
-                
-                let refreshedCount = remaining.filter {
-                    $0.searchableText != nil
-                }.count
-                
-                state.cacheRefreshResult = SettingsViewState.CacheRefreshResult(refreshedCount: refreshedCount, removedCount: removedCount + afterIndexing.count - remaining.count, unavailableCount: remaining.count - refreshedCount)
-                
+                try await task.value
             } catch {
                 handle(error, "Search Cache Could Not Be Refreshed", "Refresh content search cache", state)
             }
-        }
-    }
-
-    @discardableResult
-    static func invalidateContentCache(_ modelContext: ModelContext) throws -> Int {
-        do {
-            let pdfFiles = try modelContext.fetch(FetchDescriptor<PDFFile>())
-            
-            try LibraryService.deleteMissingFiles(modelContext, pdfFiles)
-            
-            let remaining = try modelContext.fetch(FetchDescriptor<PDFFile>())
-            
-            for pdfFile in remaining {
-                pdfFile.searchableText = nil
-                pdfFile.contentFingerprint = nil
-            }
-            
-            if modelContext.hasChanges {
-                try modelContext.save()
-            }
-            
-            return pdfFiles.count - remaining.count
-        } catch {
-            modelContext.rollback()
-            throw error
         }
     }
 
