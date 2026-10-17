@@ -107,11 +107,11 @@ final class StorageSettingsService {
         return settings.first?.fixedStoragePath
     }
 
-    static func fixedStorageURL(_ settings: [StorageSettings]) throws -> URL? {
+    static func fixedStorageURL(_ settings: [StorageSettings], sync: LibrarySyncService) throws -> URL? {
         
         if let setting = settings.first, setting.syncEnabled {
         
-            return try LibrarySyncService.shared.folderURL(setting)
+            return try sync.folderURL(setting)
         
         }
         
@@ -155,8 +155,8 @@ final class StorageSettingsService {
         }
     }
 
-    static func save(_ modelContext: ModelContext,_ storage: StorageSettings.Storage) throws {
-        try LibrarySyncService.shared.requireReady()
+    static func save(_ modelContext: ModelContext,_ storage: StorageSettings.Storage, sync: LibrarySyncService) throws {
+        try sync.requireReady()
         
         if LibrarySyncService.isEnabled(modelContext), storage != .fixed {
         
@@ -175,8 +175,8 @@ final class StorageSettingsService {
         }
     }
 
-    static func saveFixedStorage(_ modelContext: ModelContext,_ url: URL) throws {
-        try LibrarySyncService.shared.requireReady()
+    static func saveFixedStorage(_ modelContext: ModelContext,_ url: URL, sync: LibrarySyncService) throws {
+        try sync.requireReady()
         
         if LibrarySyncService.isEnabled(modelContext) {
             throw AppError.error("The storage folder cannot be changed while Sync is on.")
@@ -217,8 +217,8 @@ final class StorageSettingsService {
         }
     }
 
-    static func reset(_ modelContext: ModelContext) throws {
-        try LibrarySyncService.shared.requireReady()
+    static func reset(_ modelContext: ModelContext, sync: LibrarySyncService) throws {
+        try sync.requireReady()
         
         if LibrarySyncService.isEnabled(modelContext) {
             throw AppError.error("Turn off Sync before resetting Storage.")
