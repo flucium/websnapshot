@@ -49,9 +49,9 @@ final class PDFTagService {
         }
     }
 
-    static func replaceTags(_ names: [String], _ pdfFile: PDFFile, _ modelContext: ModelContext ) throws {
+    static func replaceTags(_ names: [String], _ pdfFile: PDFFile, _ modelContext: ModelContext, sync: LibrarySyncService ) throws {
         
-        try LibrarySyncService.shared.requireReady()
+        try sync.requireReady()
         
         guard pdfFile.modelContext != nil, !pdfFile.isDeleted else {
             throw AppError.error("This PDF is no longer in the library.")
@@ -109,7 +109,7 @@ final class PDFTagService {
                 modelContext.delete(tag)
             }
 
-            try LibrarySyncService.shared.queueTags( tagNames(selectedTags), previous: previousNames, pdfFile, modelContext)
+            try sync.queueTags( tagNames(selectedTags), previous: previousNames, pdfFile, modelContext)
             
             try modelContext.save()
             
