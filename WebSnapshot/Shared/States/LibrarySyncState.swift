@@ -1,8 +1,6 @@
-import Combine
-
 @MainActor
-final class LibrarySyncState: ObservableObject {
-    @Published var isSwitching = false
+struct LibrarySyncState {
+    var isSwitching = false
 
-    @Published var lastError: AppError?
+    var lastError: AppError?
 }
