@@ -4,6 +4,8 @@ import SwiftUI
 struct LibraryTagEditorView: View {
     @Environment(\.modelContext) private var modelContext
 
+    @EnvironmentObject private var sync: LibrarySyncService
+
     @ObservedObject var libraryTagEditorViewState: LibraryTagEditorViewState
 
     let pdfFile: PDFFile
@@ -163,7 +165,7 @@ struct LibraryTagEditorView: View {
     }
 
     private func save() {
-        if LibraryTagEditorViewService.save(libraryTagEditorViewState, pdfFile, modelContext) {
+        if LibraryTagEditorViewService.save(libraryTagEditorViewState, pdfFile, modelContext, sync: sync) {
             close()
         }
     }
