@@ -3,15 +3,15 @@ import SwiftData
 
 final class PDFFileService {
     
-    static func save(_ modelContext: ModelContext, _ url:URL) throws {
+    static func save(_ modelContext: ModelContext, _ url:URL, sync: LibrarySyncService) throws {
         
-        try LibrarySyncService.shared.requireReady()
+        try sync.requireReady()
        
         if LibrarySyncService.isEnabled(modelContext) {
             
             do {
                 
-                try LibrarySyncService.shared.registerPDF(url, modelContext)
+                try sync.registerPDF(url, modelContext)
                 
             }catch {
             
@@ -77,9 +77,9 @@ final class PDFFileService {
     }
     
 
-    static func refreshLocations(_ modelContext: ModelContext) throws {
+    static func refreshLocations(_ modelContext: ModelContext, sync: LibrarySyncService) throws {
         
-        try LibrarySyncService.shared.requireReady()
+        try sync.requireReady()
         
         if LibrarySyncService.isEnabled(modelContext) {
             return
@@ -132,9 +132,9 @@ final class PDFFileService {
         return changed
     }
     
-    static func delete(_ modelContext: ModelContext , _ url: URL) throws {
+    static func delete(_ modelContext: ModelContext , _ url: URL, sync: LibrarySyncService) throws {
         
-        try LibrarySyncService.shared.requireReady()
+        try sync.requireReady()
         
         let fileURL = normalizedURL(url)
         
@@ -144,7 +144,7 @@ final class PDFFileService {
             
                 for pdf in try fetch(modelContext) where normalizedURL(pdf.url) == fileURL {
                     
-                    try LibrarySyncService.shared.deletePDF(pdf, modelContext)
+                    try sync.deletePDF(pdf, modelContext)
                     
                 }
                 
@@ -191,6 +191,40 @@ final class PDFFileService {
     }
     
     
+    static func deleteMissingFiles(_ modelContext: ModelContext,_ pdfFiles: [PDFFile], sync: LibrarySyncService, _ confirmedDeletedFileIDs: Set<PersistentIdentifier> = []) throws {
+
+        if sync.state.isSwitching || LibrarySyncService.isEnabled(modelContext) {
+            return
+        }
+
+        var needsSave = false
+
+        let missingPDFFiles = pdfFiles.filter {
+            $0.availability == .missing || (confirmedDeletedFileIDs.contains($0.persistentModelID) && FileIO.exists($0.resolvedURL) == false)
+        }
+
+        PDFTagService.deleteTagsOrphanedByDeleting(missingPDFFiles, modelContext )
+
+        for pdfFile in missingPDFFiles {
+
+            modelContext.delete(pdfFile)
+
+            needsSave = true
+
+        }
+
+        if needsSave {
+            do {
+                try modelContext.save()
+            } catch {
+
+                modelContext.rollback()
+
+                throw AppError.system( "The library could not be synchronized.", error.localizedDescription, error )
+            }
+        }
+    }
+
     static func refreshBookmarks(_ pdfFileURLs: [URL],_ modelContext: ModelContext) throws {
         
         let pdfFilePaths = Set(pdfFileURLs.map{
