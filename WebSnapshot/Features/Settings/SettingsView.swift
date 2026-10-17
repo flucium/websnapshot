@@ -5,15 +5,20 @@ struct SettingsView: View {
 
     @Environment(\.modelContext) private var modelContext
     
-    @ObservedObject private var syncState = LibrarySyncService.shared.state
+    @EnvironmentObject private var sync: LibrarySyncService
+    
+    @EnvironmentObject private var contentService: LibraryContentService
 
+    @StateObject private var settingsViewState: SettingsViewState = SettingsViewState()
+    
     @Query private var appearanceSettings: [AppearanceSettings]
     
     @Query private var storageSettings: [StorageSettings]
 
-    @StateObject private var settingsViewState: SettingsViewState = SettingsViewState()
     
-    @StateObject private var contentIndexer = LibraryContentIndexer()
+    private var syncState: LibrarySyncState { sync.state }
+    
+    private var contentState: LibraryContentState { contentService.state }
 
     private var savedAppearance: AppearanceSettings.Appearance {
         AppearanceSettingsService.appearance(appearanceSettings)
@@ -126,11 +131,11 @@ struct SettingsView: View {
                             if storageSettings.first?.syncDriveBookmarkData != nil || storageSettings.first?.syncFolderBookmarkData != nil {
                                 HStack {
                                     Button("Reconnect iCloud Drive…") {
-                                        SettingsViewService.reconnectSync(settingsViewState, modelContext)
+                                        SettingsViewService.reconnectSync(settingsViewState, modelContext, sync: sync)
                                     }
                                     if savedSync {
                                         Button("Retry Sync") {
-                                            Task { await LibrarySyncService.shared.refresh(modelContext) }
+                                            Task { await sync.refresh(modelContext) }
                                         }
                                     }
                                 }
@@ -198,7 +203,7 @@ struct SettingsView: View {
                                     Spacer(minLength: 8)
 
                                     Button(fixedStoragePath == nil ? "Choose Folder…" : "Change…" ) {
-                                        SettingsViewService.chooseFixedStorage( settingsViewState, modelContext, fixedStoragePath )
+                                        SettingsViewService.chooseFixedStorage( settingsViewState, modelContext, fixedStoragePath, sync: sync )
                                     }
                                     .disabled(savedSync)
                                     
@@ -234,22 +239,22 @@ struct SettingsView: View {
                             }
 
                             Button("Refresh Cache") {
-                                SettingsViewService.refreshContentCache(settingsViewState, modelContext, contentIndexer)
+                                SettingsViewService.refreshContentCache(settingsViewState, modelContext, contentService)
                             }
-                            .disabled(settingsViewState.isRefreshingCache)
+                            .disabled(contentState.isRefreshingCache)
 
-                            if settingsViewState.isRefreshingCache {
+                            if contentState.isRefreshingCache {
                                 HStack {
                                     ProgressView().controlSize(.small)
-                                    if contentIndexer.pendingCount > 0 {
-                                        Text("Refreshing… (\(contentIndexer.pendingCount) PDFs remaining)")
+                                    if contentState.pendingCount > 0 {
+                                        Text("Refreshing… (\(contentState.pendingCount) PDFs remaining)")
                                     } else {
                                         Text("Refreshing…")
                                     }
                                 }
                                 .font(.callout)
                                 .foregroundStyle(.secondary)
-                            } else if let result = settingsViewState.cacheRefreshResult {
+                            } else if let result = contentState.cacheRefreshResult {
                                 Text("Refreshed \(result.refreshedCount) PDFs. Removed \(result.removedCount) deleted PDFs.")
                                     .font(.callout)
                                     .foregroundStyle(.secondary)
@@ -278,9 +283,6 @@ struct SettingsView: View {
         }
         .background(Color(nsColor: .windowBackgroundColor))
         .disabled(syncState.isSwitching)
-        .onDisappear {
-            settingsViewState.cacheRefreshTask?.cancel()
-        }
         .task(id: savedAppearance) {
             let appearance = savedAppearance
             if settingsViewState.selectedAppearance != appearance {
@@ -306,7 +308,7 @@ struct SettingsView: View {
             
             Task { @MainActor in
             
-                let succeeded = await SettingsViewService.changeSync(settingsViewState, modelContext, enabled)
+                let succeeded = await SettingsViewService.changeSync(settingsViewState, modelContext, enabled, sync: sync)
                 
                 if !succeeded {
                     settingsViewState.selectedSync = savedSync
@@ -342,7 +344,7 @@ struct SettingsView: View {
             }
 
             Task { @MainActor in
-                let didSave = SettingsViewService.saveStorage(settingsViewState, modelContext, storage)
+                let didSave = SettingsViewService.saveStorage(settingsViewState, modelContext, storage, sync: sync)
             
                 if !didSave {
                     settingsViewState.selectedStorage = previousStorage
@@ -357,5 +359,10 @@ struct SettingsView: View {
 }
 
 #Preview {
+    let sync = LibrarySyncService()
+    let contentService = LibraryContentService(sync: sync)
+
     SettingsView()
+        .environmentObject(contentService)
+        .environmentObject(sync)
 }
