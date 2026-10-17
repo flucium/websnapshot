@@ -5,9 +5,9 @@ import PDFKit
 
 @MainActor
 final class LibraryService {
-    static func importPDF(_ sourceURL: URL, _  directoryURL: URL, _ modelContext: ModelContext) throws -> URL {
+    static func importPDF(_ sourceURL: URL, _  directoryURL: URL, _ modelContext: ModelContext, sync: LibrarySyncService) throws -> URL {
 
-        try LibrarySyncService.shared.requireReady()
+        try sync.requireReady()
 
         let isAccessingSource = sourceURL.startAccessingSecurityScopedResource()
 
@@ -35,12 +35,12 @@ final class LibraryService {
                 try Data(contentsOf: $0)
             }
 
-            return try LibrarySyncService.shared.savePDF( data, sourceURL.lastPathComponent, modelContext )
+            return try sync.savePDF( data, sourceURL.lastPathComponent, modelContext )
         }
 
         if sourceURL.deletingLastPathComponent().resolvingSymlinksInPath().standardizedFileURL == directoryURL.resolvingSymlinksInPath().standardizedFileURL {
 
-            try PDFFileService.save(modelContext, sourceURL)
+            try PDFFileService.save(modelContext, sourceURL, sync: sync)
 
             return sourceURL
         }
@@ -52,7 +52,7 @@ final class LibraryService {
 
             do {
 
-                try PDFFileService.save(modelContext, destination)
+                try PDFFileService.save(modelContext, destination, sync: sync)
 
             } catch {
 
@@ -108,12 +108,12 @@ final class LibraryService {
         }
     }
 
-    static func delete( _ modelContext: ModelContext, _ url: URL, _ resolvedURL: URL, _ removeFile: ((URL) throws -> Void)? = nil ) throws {
-        try LibrarySyncService.shared.requireReady()
+    static func delete( _ modelContext: ModelContext, _ url: URL, _ resolvedURL: URL, sync: LibrarySyncService, _ removeFile: ((URL) throws -> Void)? = nil ) throws {
+        try sync.requireReady()
 
         if LibrarySyncService.isEnabled(modelContext) {
 
-            try PDFFileService.delete(modelContext, url)
+            try PDFFileService.delete(modelContext, url, sync: sync)
 
             return
 
@@ -131,46 +131,12 @@ final class LibraryService {
 
         do {
 
-            try PDFFileService.delete(modelContext, url)
+            try PDFFileService.delete(modelContext, url, sync: sync)
 
         } catch {
             AppLogger.recordDiagnostic("The file was deleted, but its library entry could not be removed. Automatic synchronization will retry the cleanup.","Delete PDF library entry",resolvedURL)
 
             throw error
-        }
-    }
-
-    static func deleteMissingFiles(_ modelContext: ModelContext,_ pdfFiles: [PDFFile],_ confirmedDeletedFileIDs: Set<PersistentIdentifier> = []) throws {
-
-        if LibrarySyncService.shared.state.isSwitching || LibrarySyncService.isEnabled(modelContext) {
-            return
-        }
-
-        var needsSave = false
-
-        let missingPDFFiles = pdfFiles.filter {
-            $0.availability == .missing || (confirmedDeletedFileIDs.contains($0.persistentModelID) && FileIO.exists($0.resolvedURL) == false)
-        }
-
-        PDFTagService.deleteTagsOrphanedByDeleting(missingPDFFiles, modelContext )
-
-        for pdfFile in missingPDFFiles {
-
-            modelContext.delete(pdfFile)
-
-            needsSave = true
-
-        }
-
-        if needsSave {
-            do {
-                try modelContext.save()
-            } catch {
-
-                modelContext.rollback()
-
-                throw AppError.system( "The library could not be synchronized.", error.localizedDescription, error )
-            }
         }
     }
 
