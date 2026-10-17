@@ -9,31 +9,38 @@ struct WebSnapshotApp: App {
     var body: some Scene {
         WindowGroup {
             HomeView()
+                .environmentObject(appDelegate.content)
+                .environmentObject(appDelegate.sync)
                 .frame(minWidth: 980, minHeight: 400)
         }
         .defaultSize(width: 1000, height: 600)
         .windowResizability(.contentMinSize)
-        .modelContainer(SafariAppServices.modelContainer)
+        .modelContainer(appDelegate.modelContainer)
     }
 }
 
 @MainActor
-private enum SafariAppServices {
-    
-    static let modelContainer: ModelContainer = {
+final class WebSnapshotAppDelegate: NSObject, NSApplicationDelegate {
+    let modelContainer: ModelContainer
+    let sync: LibrarySyncService
+    let content: LibraryContentService
+    let safariRequests: SafariRequestService
+
+    override init() {
+        let sync = LibrarySyncService()
+        self.sync = sync
+        content = LibraryContentService(sync: sync)
+        safariRequests = SafariRequestService { url, context, onStart in
+            try await WebCaptureService.capture(url, context, sync: sync, onStart)
+        }
+
         do {
-            return try ModelContainer(for: AppearanceSettings.self, StorageSettings.self, PDFFile.self, PDFTag.self, configurations: ModelConfiguration(cloudKitDatabase: .none))
+            modelContainer = try ModelContainer(for: AppearanceSettings.self, StorageSettings.self, PDFFile.self, PDFTag.self, configurations: ModelConfiguration(cloudKitDatabase: .none))
         } catch {
             fatalError("Could not open the WebSnapshot library: \(error)")
         }
-    }()
-
-    static let safariRequests = SafariRequestService(WebCaptureService.capture)
-    
-}
-
-@MainActor
-final class WebSnapshotAppDelegate: NSObject, NSApplicationDelegate {
+        super.init()
+    }
     
     private var appearanceObservation: NSKeyValueObservation?
     
@@ -46,7 +53,7 @@ final class WebSnapshotAppDelegate: NSObject, NSApplicationDelegate {
             
             while !Task.isCancelled {
                 
-                await LibrarySyncService.shared.refresh(SafariAppServices.modelContainer.mainContext)
+                await sync.refresh(modelContainer.mainContext)
                 
                 do {
                     try await Task.sleep(for: .seconds(2))
@@ -108,7 +115,7 @@ final class WebSnapshotAppDelegate: NSObject, NSApplicationDelegate {
 
     func application(_ application: NSApplication, open urls: [URL]) {
         
-        let requests = SafariAppServices.safariRequests
+        let requests = safariRequests
         
         requests.handleFailure = {
             
@@ -141,6 +148,6 @@ final class WebSnapshotAppDelegate: NSObject, NSApplicationDelegate {
             requests.receive(url)
         }
         
-        requests.startProcessing(SafariAppServices.modelContainer.mainContext)
+        requests.startProcessing(modelContainer.mainContext)
     }
 }
