@@ -4,7 +4,7 @@ import WebKit
 
 @MainActor
 enum WebCaptureService {
-    static func capture( _ url: URL, _ modelContext: ModelContext, _ onStart: (WebPage) -> Void ) async throws -> URL? {
+    static func capture( _ url: URL, _ modelContext: ModelContext, sync: LibrarySyncService, _ onStart: (WebPage) -> Void ) async throws -> URL? {
         
         guard url.isSupportedWebURL else {
             throw AppError.invalidURL("Enter a valid HTTP or HTTPS address.")
@@ -18,17 +18,17 @@ enum WebCaptureService {
         
         let settings = try modelContext.fetch(FetchDescriptor<StorageSettings>())
         
-        return try save(document, page.title, page.url, modelContext,  settings)
+        return try save(document, page.title, page.url, modelContext,  settings, sync: sync)
     }
 
     @discardableResult
-    static func save( _ document: PDFFileDocument, _ title: String, _ url: URL?, _ modelContext: ModelContext, _ storageSettings:[StorageSettings], _ chooseDestination: (@MainActor (String, URL?, PDFFileDocument?) throws -> URL?)? = nil ) throws -> URL? {
+    static func save( _ document: PDFFileDocument, _ title: String, _ url: URL?, _ modelContext: ModelContext, _ storageSettings:[StorageSettings], sync: LibrarySyncService, _ chooseDestination: (@MainActor (String, URL?, PDFFileDocument?) throws -> URL?)? = nil ) throws -> URL? {
         
-        try LibrarySyncService.shared.requireReady()
+        try sync.requireReady()
         
         if LibrarySyncService.isEnabled(modelContext) {
         
-            return try LibrarySyncService.shared.savePDF(document.data, URL.pdfFileName(title, url), modelContext)
+            return try sync.savePDF(document.data, URL.pdfFileName(title, url), modelContext)
             
         }
         
@@ -38,14 +38,14 @@ enum WebCaptureService {
             let selectedURL: URL?
         
             if let chooseDestination {
-                try PDFFileService.refreshLocations(modelContext)
+                try PDFFileService.refreshLocations(modelContext, sync: sync)
             
                 selectedURL = try chooseDestination(title, url, document)
             } else {
                 
                 selectedURL = try savePanel(title, url, document) {
                 
-                    try PDFFileService.refreshLocations(modelContext)
+                    try PDFFileService.refreshLocations(modelContext, sync: sync)
                 
                 }
                 
@@ -56,12 +56,12 @@ enum WebCaptureService {
                 return nil
             }
             
-            try PDFFileService.save(modelContext, destination)
+            try PDFFileService.save(modelContext, destination, sync: sync)
             
             return destination
 
         case .fixed:
-            guard let directory = try StorageSettingsService.fixedStorageURL(storageSettings) else {
+            guard let directory = try StorageSettingsService.fixedStorageURL(storageSettings, sync: sync) else {
                 throw AppError.error("Choose a storage folder in Settings before saving.")
             }
             
@@ -75,13 +75,13 @@ enum WebCaptureService {
                 
             }
             
-            try PDFFileService.refreshLocations(modelContext)
+            try PDFFileService.refreshLocations(modelContext, sync: sync)
             
             guard let destination = try saveToDirectory(title, url, document, directory) else {
                 return nil
             }
             
-            try PDFFileService.save(modelContext, destination)
+            try PDFFileService.save(modelContext, destination, sync: sync)
             
             return destination
         }
