@@ -5,7 +5,7 @@ import Translation
 
 @MainActor
 final class LibraryViewService {
-    static func importPDFs(_ state: LibraryViewState, _ modelContext: ModelContext) {
+    static func importPDFs(_ state: LibraryViewState, _ modelContext: ModelContext, sync: LibrarySyncService) {
 
         guard let sourceURLs = importPDFsPanel(), sourceURLs.isEmpty == false else {
             return
@@ -19,7 +19,7 @@ final class LibraryViewService {
 
             switch StorageSettingsService.storage(settings) {
             case .fixed:
-                destinationDirectory = try StorageSettingsService.fixedStorageURL(settings)
+                destinationDirectory = try StorageSettingsService.fixedStorageURL(settings, sync: sync)
 
                 if destinationDirectory == nil {
                     throw AppError.error("Choose a storage folder in Settings before importing.")
@@ -35,13 +35,13 @@ final class LibraryViewService {
                 return
             }
 
-            importPDFs(state, modelContext, sourceURLs, destinationDirectory)
+            importPDFs(state, modelContext, sourceURLs, destinationDirectory, sync: sync)
         } catch {
             handle(error, "PDFs Could Not Be Imported", "Import PDFs", state)
         }
     }
 
-    static func importPDFs(_ state: LibraryViewState, _ modelContext: ModelContext, _ sourceURLs: [URL], _ destinationDirectory: URL) {
+    static func importPDFs(_ state: LibraryViewState, _ modelContext: ModelContext, _ sourceURLs: [URL], _ destinationDirectory: URL, sync: LibrarySyncService) {
         guard sourceURLs.isEmpty == false else {
             return
         }
@@ -52,7 +52,7 @@ final class LibraryViewService {
 
         for sourceURL in sourceURLs {
             do {
-                let destination = try LibraryService.importPDF(sourceURL, destinationDirectory, modelContext)
+                let destination = try LibraryService.importPDF(sourceURL, destinationDirectory, modelContext, sync: sync)
                 importedURLs.append(destination)
             } catch {
                 guard let appError = AppError.presentable(error) else {
@@ -176,9 +176,9 @@ final class LibraryViewService {
         }
     }
 
-    static func deletePDF(_ state: LibraryViewState, _ modelContext: ModelContext, _ pdfFile: PDFFile) {
+    static func deletePDF(_ state: LibraryViewState, _ modelContext: ModelContext, _ pdfFile: PDFFile, sync: LibrarySyncService) {
         do {
-            try LibraryService.delete(modelContext, pdfFile.url, pdfFile.resolvedURL)
+            try LibraryService.delete(modelContext, pdfFile.url, pdfFile.resolvedURL, sync: sync)
 
             state.selectedPDFFile = nil
 
@@ -188,7 +188,7 @@ final class LibraryViewService {
         }
     }
 
-    static func deleteDisplayedPDF(_ state: LibraryViewState, _ modelContext: ModelContext, _ pdfFile: PDFFile) {
+    static func deleteDisplayedPDF(_ state: LibraryViewState, _ modelContext: ModelContext, _ pdfFile: PDFFile, sync: LibrarySyncService) {
 
         let url = pdfFile.url
 
@@ -205,7 +205,7 @@ final class LibraryViewService {
             await Task.yield()
 
             do {
-                try LibraryService.delete(modelContext, url, resolvedURL)
+                try LibraryService.delete(modelContext, url, resolvedURL, sync: sync)
             } catch {
                 handle(error, "PDF Could Not Be Deleted", "Delete PDF", state, resolvedURL)
             }
@@ -235,9 +235,9 @@ final class LibraryViewService {
         }
     }
 
-    static func synchronizeLibraryFiles(_ state: LibraryViewState,_ modelContext: ModelContext,_ monitor: LibraryPDFFileMonitor,_ change: LibraryPDFFileMonitor.Change? = nil) {
+    static func synchronizeLibraryFiles(_ state: LibraryViewState,_ modelContext: ModelContext,_ monitor: LibraryPDFFileMonitor, sync: LibrarySyncService, _ change: LibraryPDFFileMonitor.Change? = nil) {
 
-        if LibrarySyncService.shared.state.isSwitching || LibrarySyncService.isEnabled(modelContext) {
+        if sync.state.isSwitching || LibrarySyncService.isEnabled(modelContext) {
 
             monitor.stop()
 
@@ -270,7 +270,7 @@ final class LibraryViewService {
         do {
             let pdfFiles = try modelContext.fetch(FetchDescriptor<PDFFile>())
 
-            try LibraryService.deleteMissingFiles(modelContext, pdfFiles, confirmedDeletedFileIDs)
+            try PDFFileService.deleteMissingFiles(modelContext, pdfFiles, sync: sync, confirmedDeletedFileIDs)
 
             let existingPDFFiles = try modelContext.fetch(FetchDescriptor<PDFFile>()).filter {
                 $0.availability != .missing
@@ -282,7 +282,7 @@ final class LibraryViewService {
                     return
                 }
 
-                synchronizeLibraryFiles(state, modelContext, monitor, change)
+                synchronizeLibraryFiles(state, modelContext, monitor, sync: sync, change)
             }
 
         } catch {
@@ -290,7 +290,7 @@ final class LibraryViewService {
         }
     }
 
-    static func openPDF(_ state: LibraryViewState, _ modelContext: ModelContext, _ pdfFile: PDFFile) {
+    static func openPDF(_ state: LibraryViewState, _ modelContext: ModelContext, _ pdfFile: PDFFile, sync: LibrarySyncService) {
 
         if pdfFile.syncRelativePath != nil {
 
@@ -308,9 +308,9 @@ final class LibraryViewService {
                 }
 
                 do {
-                    try await LibrarySyncService.shared.download(pdfFile, modelContext)
+                    try await sync.download(pdfFile, modelContext)
 
-                    guard !pdfFile.isDeleted, pdfFile.modelContext != nil, !LibrarySyncService.shared.state.isSwitching else {
+                    guard !pdfFile.isDeleted, pdfFile.modelContext != nil, !sync.state.isSwitching else {
                         return
                     }
 
@@ -350,23 +350,23 @@ final class LibraryViewService {
         }
     }
 
-    static func scheduleSynchronizeLibraryFiles(_ state: LibraryViewState, _ modelContext: ModelContext, _ monitor: LibraryPDFFileMonitor) {
+    static func scheduleSynchronizeLibraryFiles(_ state: LibraryViewState, _ modelContext: ModelContext, _ monitor: LibraryPDFFileMonitor, sync: LibrarySyncService) {
         Task {
 
             @MainActor in
 
-            await synchronizeLibraryFilesAfterViewUpdate(state, modelContext, monitor)
+            await synchronizeLibraryFilesAfterViewUpdate(state, modelContext, monitor, sync: sync)
         }
     }
 
-    static func synchronizeLibraryFilesAfterViewUpdate(_ state: LibraryViewState, _ modelContext: ModelContext, _ monitor: LibraryPDFFileMonitor) async {
+    static func synchronizeLibraryFilesAfterViewUpdate(_ state: LibraryViewState, _ modelContext: ModelContext, _ monitor: LibraryPDFFileMonitor, sync: LibrarySyncService) async {
         do {
             try await Task.sleep(nanoseconds: 50_000_000)
         } catch {
             return
         }
 
-        synchronizeLibraryFiles(state, modelContext, monitor)
+        synchronizeLibraryFiles(state, modelContext, monitor, sync: sync)
     }
 
     private static func closeMissingPDF(_ state: LibraryViewState) {
