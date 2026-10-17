@@ -7,6 +7,8 @@ import XCTest
 
 @MainActor
 final class SettingsViewRenderingTests: XCTestCase {
+    @MainActor private lazy var sync = LibrarySyncService()
+
     func testOpeningAndChangingSettingsDoesNotPublishDuringViewUpdates() async throws {
         let startedAt = Date()
         let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
@@ -20,7 +22,11 @@ final class SettingsViewRenderingTests: XCTestCase {
         container.mainContext.insert(StorageSettings(.fixed))
         try container.mainContext.save()
 
-        let hostingView = NSHostingView(rootView: SettingsView().modelContainer(container))
+        let contentService = LibraryContentService(sync: sync)
+        let hostingView = NSHostingView(rootView: SettingsView()
+            .environmentObject(contentService)
+            .environmentObject(sync)
+            .modelContainer(container))
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 800, height: 600),
             styleMask: [.titled, .closable],

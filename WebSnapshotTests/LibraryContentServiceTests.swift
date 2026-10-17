@@ -4,7 +4,9 @@ import XCTest
 @testable import WebSnapshot
 
 @MainActor
-final class LibraryContentIndexerTests: XCTestCase {
+final class LibraryContentServiceTests: XCTestCase {
+    @MainActor private lazy var sync = LibrarySyncService()
+
     func testLegacyEntryBecomesSearchableAndDoesNotNeedReindexing() async throws {
         let fixture = try ContentSearchFixture(["Text found only inside the PDF"])
         defer { fixture.remove() }
@@ -15,13 +17,13 @@ final class LibraryContentIndexerTests: XCTestCase {
         try context.save()
         XCTAssertNil(entry.searchableText)
 
-        await LibraryContentIndexer().index([entry], context)
-        XCTAssertTrue(LibraryViewService.matches(entry, "inside the PDF", .all))
-        XCTAssertFalse(LibraryViewService.matches(entry, "inside the PDF", .title))
-        XCTAssertFalse(LibraryViewService.matches(entry, "inside the PDF", .tag))
+        await LibraryContentService(sync: sync).index([entry], context)
+        XCTAssertTrue(LibraryService.matches(entry, "inside the PDF", .all))
+        XCTAssertFalse(LibraryService.matches(entry, "inside the PDF", .title))
+        XCTAssertFalse(LibraryService.matches(entry, "inside the PDF", .tag))
 
         let probe = ExtractionProbe()
-        await LibraryContentIndexer({ try await probe.read($0) }).index([entry], context)
+        await LibraryContentService(sync: sync, { try await probe.read($0) }).index([entry], context)
         let reads = await probe.reads
         XCTAssertEqual(reads, 0)
     }
@@ -31,17 +33,17 @@ final class LibraryContentIndexerTests: XCTestCase {
         entry.tags = [PDFTag("Research", normalizedName: "research")]
         entry.searchableText = "本文には日本語と Searchable Text が含まれます"
 
-        XCTAssertTrue(LibraryViewService.matches(entry, "  searchable text  ", .all))
-        XCTAssertTrue(LibraryViewService.matches(entry, "日本語", .all))
-        XCTAssertTrue(LibraryViewService.matches(entry, "report", .all))
-        XCTAssertTrue(LibraryViewService.matches(entry, "research", .all))
-        XCTAssertTrue(LibraryViewService.matches(entry, "REPORT", .title))
-        XCTAssertTrue(LibraryViewService.matches(entry, "RESEARCH", .tag))
-        XCTAssertFalse(LibraryViewService.matches(entry, "日本語", .title))
-        XCTAssertFalse(LibraryViewService.matches(entry, "日本語", .tag))
-        XCTAssertTrue(LibraryViewService.matches(entry, " \n ", .all))
+        XCTAssertTrue(LibraryService.matches(entry, "  searchable text  ", .all))
+        XCTAssertTrue(LibraryService.matches(entry, "日本語", .all))
+        XCTAssertTrue(LibraryService.matches(entry, "report", .all))
+        XCTAssertTrue(LibraryService.matches(entry, "research", .all))
+        XCTAssertTrue(LibraryService.matches(entry, "REPORT", .title))
+        XCTAssertTrue(LibraryService.matches(entry, "RESEARCH", .tag))
+        XCTAssertFalse(LibraryService.matches(entry, "日本語", .title))
+        XCTAssertFalse(LibraryService.matches(entry, "日本語", .tag))
+        XCTAssertTrue(LibraryService.matches(entry, " \n ", .all))
         entry.searchableText = nil
-        XCTAssertFalse(LibraryViewService.matches(entry, "日本語", .all))
+        XCTAssertFalse(LibraryService.matches(entry, "日本語", .all))
     }
 
     func testCacheSurvivesReopeningTheStore() async throws {
@@ -54,7 +56,7 @@ final class LibraryContentIndexerTests: XCTestCase {
         let entry = try XCTUnwrap(reopened.mainContext.fetch(FetchDescriptor<PDFFile>()).first)
         XCTAssertTrue(entry.searchableText?.contains("Persisted content") ?? false)
         let probe = ExtractionProbe()
-        await LibraryContentIndexer({ try await probe.read($0) }).index([entry], reopened.mainContext)
+        await LibraryContentService(sync: sync, { try await probe.read($0) }).index([entry], reopened.mainContext)
         let reads = await probe.reads
         XCTAssertEqual(reads, 0)
     }
@@ -70,8 +72,8 @@ final class LibraryContentIndexerTests: XCTestCase {
         XCTAssertEqual(entry.url, fixture.url)
         XCTAssertEqual(entry.tags.map(\.name), ["Keep"])
         XCTAssertNil(entry.searchableText)
-        await LibraryContentIndexer().index([entry], container.mainContext)
-        XCTAssertTrue(LibraryViewService.matches(entry, "Existing PDF content", .all))
+        await LibraryContentService(sync: sync).index([entry], container.mainContext)
+        XCTAssertTrue(LibraryService.matches(entry, "Existing PDF content", .all))
     }
 
     func testUpdatedPDFReplacesOldContent() async throws {
@@ -81,14 +83,14 @@ final class LibraryContentIndexerTests: XCTestCase {
         let entry = PDFFile(fixture.url)
         container.mainContext.insert(entry)
         try container.mainContext.save()
-        let indexer = LibraryContentIndexer()
+        let indexer = LibraryContentService(sync: sync)
         await indexer.index([entry], container.mainContext)
 
         try ContentSearchFixture.data(["Replacement content"]).write(to: fixture.url, options: .atomic)
         await indexer.index([entry], container.mainContext)
 
-        XCTAssertTrue(LibraryViewService.matches(entry, "Replacement", .all))
-        XCTAssertFalse(LibraryViewService.matches(entry, "Original", .all))
+        XCTAssertTrue(LibraryService.matches(entry, "Replacement", .all))
+        XCTAssertFalse(LibraryService.matches(entry, "Original", .all))
     }
 
     func testChangedPDFDoesNotReceiveAStaleExtraction() async throws {
@@ -99,7 +101,7 @@ final class LibraryContentIndexerTests: XCTestCase {
         container.mainContext.insert(entry)
         try container.mainContext.save()
         let replacement = try ContentSearchFixture.data(["Replacement content"])
-        let indexer = LibraryContentIndexer({ url in
+        let indexer = LibraryContentService(sync: sync, { url in
             try replacement.write(to: url, options: .atomic)
             return "Original content"
         })
@@ -108,9 +110,9 @@ final class LibraryContentIndexerTests: XCTestCase {
 
         XCTAssertNil(entry.searchableText)
         XCTAssertNil(entry.contentFingerprint)
-        XCTAssertEqual(indexer.pendingCount, 0)
-        await LibraryContentIndexer().index([entry], container.mainContext)
-        XCTAssertTrue(LibraryViewService.matches(entry, "Replacement", .all))
+        XCTAssertEqual(indexer.state.pendingCount, 0)
+        await LibraryContentService(sync: sync).index([entry], container.mainContext)
+        XCTAssertTrue(LibraryService.matches(entry, "Replacement", .all))
     }
 
     func testDeletedEntryDoesNotGetRecreatedAfterExtraction() async throws {
@@ -123,7 +125,7 @@ final class LibraryContentIndexerTests: XCTestCase {
         try context.save()
         let started = expectation(description: "Extraction started")
         let gate = ExtractionGate(started)
-        let indexer = LibraryContentIndexer({ _ in await gate.read() })
+        let indexer = LibraryContentService(sync: sync, { _ in await gate.read() })
         let task = Task { await indexer.index([entry], context) }
         await fulfillment(of: [started], timeout: 3)
         context.delete(entry)
@@ -146,13 +148,13 @@ final class LibraryContentIndexerTests: XCTestCase {
         container.mainContext.insert(valid)
         try container.mainContext.save()
         let probe = ExtractionProbe()
-        let indexer = LibraryContentIndexer({ try await probe.read($0) })
+        let indexer = LibraryContentService(sync: sync, { try await probe.read($0) })
 
         await indexer.index([invalid, valid], container.mainContext)
         await indexer.index([invalid, valid], container.mainContext)
         let reads = await probe.reads
         XCTAssertEqual(reads, 2)
-        XCTAssertEqual(indexer.failedCount, 1)
+        XCTAssertEqual(indexer.state.failedCount, 1)
         XCTAssertNil(invalid.searchableText)
         XCTAssertTrue(valid.searchableText?.contains("Valid content") ?? false)
 
@@ -169,13 +171,13 @@ final class LibraryContentIndexerTests: XCTestCase {
         let entry = PDFFile(fixture.url)
         container.mainContext.insert(entry)
         try container.mainContext.save()
-        let cancelled = LibraryContentIndexer({ _ in throw CancellationError() })
+        let cancelled = LibraryContentService(sync: sync, { _ in throw CancellationError() })
         await cancelled.index([entry], container.mainContext)
         XCTAssertNil(entry.searchableText)
-        XCTAssertEqual(cancelled.failedCount, 0)
+        XCTAssertEqual(cancelled.state.failedCount, 0)
 
         let probe = ExtractionProbe()
-        let indexer = LibraryContentIndexer({ try await probe.read($0) })
+        let indexer = LibraryContentService(sync: sync, { try await probe.read($0) })
         await indexer.index([entry], container.mainContext)
         await indexer.index([entry], container.mainContext)
         let reads = await probe.reads
@@ -193,7 +195,7 @@ final class LibraryContentIndexerTests: XCTestCase {
         let entry = PDFFile(url)
         container.mainContext.insert(entry)
         try container.mainContext.save()
-        await LibraryContentIndexer().index([entry], container.mainContext)
+        await LibraryContentService(sync: sync).index([entry], container.mainContext)
     }
 
     private func populateLegacyStore(_ configuration: ModelConfiguration, _ url: URL) throws {

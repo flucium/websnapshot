@@ -5,6 +5,8 @@ import XCTest
 
 @MainActor
 final class SettingsViewServiceTests: XCTestCase {
+    @MainActor private lazy var sync = LibrarySyncService()
+
     func testUnchangedDefaultsDoNotCreateSettingsOrPublish() throws {
         let container = try makeContainer()
         let context = container.mainContext
@@ -16,7 +18,7 @@ final class SettingsViewServiceTests: XCTestCase {
         defer { subscription.cancel() }
 
         XCTAssertTrue(SettingsViewService.saveAppearance(state, context, .system))
-        XCTAssertTrue(SettingsViewService.saveStorage(state, context, .flexibility))
+        XCTAssertTrue(SettingsViewService.saveStorage(state, context, .flexibility, sync: sync))
 
         XCTAssertTrue(try context.fetch(FetchDescriptor<AppearanceSettings>()).isEmpty)
         XCTAssertTrue(try context.fetch(FetchDescriptor<StorageSettings>()).isEmpty)
@@ -47,7 +49,7 @@ final class SettingsViewServiceTests: XCTestCase {
         defer { subscription.cancel() }
 
         XCTAssertTrue(SettingsViewService.saveAppearance(state, context, .dark))
-        XCTAssertTrue(SettingsViewService.saveStorage(state, context, .fixed))
+        XCTAssertTrue(SettingsViewService.saveStorage(state, context, .fixed, sync: sync))
 
         XCTAssertTrue(context.hasChanges)
         XCTAssertEqual(state.appError, previousError)
@@ -94,8 +96,8 @@ final class SettingsViewServiceTests: XCTestCase {
         }
         defer { subscription.cancel() }
 
-        XCTAssertTrue(SettingsViewService.saveStorage(state, context, .fixed))
-        XCTAssertTrue(SettingsViewService.saveStorage(state, context, .flexibility))
+        XCTAssertTrue(SettingsViewService.saveStorage(state, context, .fixed, sync: sync))
+        XCTAssertTrue(SettingsViewService.saveStorage(state, context, .flexibility, sync: sync))
 
         let readContext = ModelContext(container)
         let settings = try readContext.fetch(FetchDescriptor<StorageSettings>())
@@ -137,7 +139,7 @@ final class SettingsViewServiceTests: XCTestCase {
         }
         defer { subscription.cancel() }
 
-        XCTAssertTrue(SettingsViewService.saveStorage(state, context, .fixed))
+        XCTAssertTrue(SettingsViewService.saveStorage(state, context, .fixed, sync: sync))
 
         XCTAssertNil(state.appError)
         XCTAssertEqual(publicationCount, 1)

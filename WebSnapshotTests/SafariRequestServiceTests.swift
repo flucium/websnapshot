@@ -1,10 +1,30 @@
 import Foundation
+import Combine
 import SwiftData
 import XCTest
 @testable import WebSnapshot
 
 @MainActor
 final class SafariRequestServiceTests: XCTestCase {
+    func testQueueChangesPublishWithoutChangingSnapshotsOrAnotherService() throws {
+        let service = SafariRequestService { _, _, _ in nil }
+        let other = SafariRequestService { _, _, _ in nil }
+        let initialState = service.state
+        var publishedCounts: [Int] = []
+        let observation = service.$state.sink { publishedCounts.append($0.pending.count) }
+        defer { observation.cancel() }
+
+        service.receive(try makeRequest().openURL)
+        var snapshot = service.state
+        snapshot.pending.removeAll()
+
+        XCTAssertEqual(service.state.pending.count, 1)
+        XCTAssertTrue(snapshot.pending.isEmpty)
+        XCTAssertTrue(initialState.pending.isEmpty)
+        XCTAssertTrue(other.state.pending.isEmpty)
+        XCTAssertEqual(publishedCounts, [0, 1])
+    }
+
     func testDeliveryIsDeduplicatedButSeparateClicksOnSameURLAreQueued() throws {
         let service = SafariRequestService { _, _, _ in nil }
         let request = try makeRequest()

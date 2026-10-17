@@ -6,19 +6,21 @@ import XCTest
 
 @MainActor
 final class WebCaptureServiceTests: XCTestCase {
+    @MainActor private lazy var sync = LibrarySyncService()
+
     func testFixedStorageSavesAndRegistersWithoutOpeningPanelOrOverwriting() throws {
         let container = try makeContainer()
         let directory = try makeDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
-        try StorageSettingsService.saveFixedStorage(container.mainContext, directory)
+        try StorageSettingsService.saveFixedStorage(container.mainContext, directory, sync: sync)
         let settings = try container.mainContext.fetch(FetchDescriptor<StorageSettings>())
         let document = try makePDF()
 
         let first = try XCTUnwrap(WebCaptureService.save(document, "Article", nil,
             container.mainContext, settings,
-            { _, _, _ in XCTFail("Fixed storage must not open a panel"); return nil }))
+            sync: sync, { _, _, _ in XCTFail("Fixed storage must not open a panel"); return nil }))
         let second = try XCTUnwrap(WebCaptureService.save(document, "Article", nil,
-            container.mainContext, settings))
+            container.mainContext, settings, sync: sync))
 
         XCTAssertNotEqual(first, second)
         XCTAssertEqual(first.deletingLastPathComponent().resolvingSymlinksInPath().pathComponents, directory.resolvingSymlinksInPath().pathComponents)
@@ -35,7 +37,7 @@ final class WebCaptureServiceTests: XCTestCase {
         let document = try makePDF()
         var panelWasOpened = false
         let result = try WebCaptureService.save(document, "Article", nil,
-            container.mainContext, []) { title, _, data in
+            container.mainContext, [], sync: sync) { title, _, data in
                 panelWasOpened = true
                 XCTAssertEqual(title, "Article")
                 try XCTUnwrap(data).data.write(to: destination)
@@ -53,14 +55,14 @@ final class WebCaptureServiceTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: directory) }
         let storage = directory.appendingPathComponent("Storage", isDirectory: true)
         try FileManager.default.createDirectory(at: storage, withIntermediateDirectories: true)
-        try StorageSettingsService.saveFixedStorage(container.mainContext, storage)
+        try StorageSettingsService.saveFixedStorage(container.mainContext, storage, sync: sync)
         let settings = try container.mainContext.fetch(FetchDescriptor<StorageSettings>())
         try FileManager.default.removeItem(at: storage)
         let document = try makePDF()
 
         let destination = try XCTUnwrap(WebCaptureService.save(document, "Article", nil,
             container.mainContext, settings,
-            { _, _, _ in XCTFail("Fixed storage must not open a panel"); return nil }))
+            sync: sync, { _, _, _ in XCTFail("Fixed storage must not open a panel"); return nil }))
 
         XCTAssertEqual(destination.deletingLastPathComponent().resolvingSymlinksInPath(), storage.resolvingSymlinksInPath())
         XCTAssertEqual(try Data(contentsOf: destination), document.data)
@@ -74,13 +76,13 @@ final class WebCaptureServiceTests: XCTestCase {
         let parent = directory.appendingPathComponent("Parent", isDirectory: true)
         let storage = parent.appendingPathComponent("Storage", isDirectory: true)
         try FileManager.default.createDirectory(at: storage, withIntermediateDirectories: true)
-        try StorageSettingsService.saveFixedStorage(container.mainContext, storage)
+        try StorageSettingsService.saveFixedStorage(container.mainContext, storage, sync: sync)
         let settings = try container.mainContext.fetch(FetchDescriptor<StorageSettings>())
         try FileManager.default.removeItem(at: parent)
         let document = try makePDF()
 
         let destination = try XCTUnwrap(WebCaptureService.save(document, "Article", nil,
-            container.mainContext, settings))
+            container.mainContext, settings, sync: sync))
 
         XCTAssertEqual(destination.deletingLastPathComponent().resolvingSymlinksInPath(), storage.resolvingSymlinksInPath())
         XCTAssertEqual(try Data(contentsOf: destination), document.data)
@@ -94,14 +96,14 @@ final class WebCaptureServiceTests: XCTestCase {
         let parent = directory.appendingPathComponent("Parent", isDirectory: true)
         let storage = parent.appendingPathComponent("Storage", isDirectory: true)
         try FileManager.default.createDirectory(at: storage, withIntermediateDirectories: true)
-        try StorageSettingsService.saveFixedStorage(container.mainContext, storage)
+        try StorageSettingsService.saveFixedStorage(container.mainContext, storage, sync: sync)
         let settings = try container.mainContext.fetch(FetchDescriptor<StorageSettings>())
         try FileManager.default.removeItem(at: parent)
         let data = Data("Existing file".utf8)
         try data.write(to: parent)
 
         XCTAssertThrowsError(try WebCaptureService.save(makePDF(), "Article", nil,
-            container.mainContext, settings))
+            container.mainContext, settings, sync: sync))
 
         XCTAssertEqual(try Data(contentsOf: parent), data)
         XCTAssertTrue(try container.mainContext.fetch(FetchDescriptor<PDFFile>()).isEmpty)
@@ -118,15 +120,15 @@ final class WebCaptureServiceTests: XCTestCase {
         try FileManager.default.createDirectory(at: trash.deletingLastPathComponent(), withIntermediateDirectories: true)
         let existing = Data("Existing PDF".utf8)
         try existing.write(to: storage.appendingPathComponent("Article.pdf"))
-        try StorageSettingsService.saveFixedStorage(container.mainContext, storage)
+        try StorageSettingsService.saveFixedStorage(container.mainContext, storage, sync: sync)
         let settings = try container.mainContext.fetch(FetchDescriptor<StorageSettings>())
         try FileManager.default.moveItem(at: storage, to: trash)
         let document = try makePDF()
 
         let first = try XCTUnwrap(WebCaptureService.save(document, "Article", nil,
-            container.mainContext, settings))
+            container.mainContext, settings, sync: sync))
         let second = try XCTUnwrap(WebCaptureService.save(document, "Article", nil,
-            container.mainContext, settings))
+            container.mainContext, settings, sync: sync))
 
         XCTAssertEqual(first.deletingLastPathComponent().resolvingSymlinksInPath(), storage.resolvingSymlinksInPath())
         XCTAssertEqual(second.deletingLastPathComponent().resolvingSymlinksInPath(), storage.resolvingSymlinksInPath())
@@ -145,13 +147,13 @@ final class WebCaptureServiceTests: XCTestCase {
         let storage = directory.appendingPathComponent("Storage", isDirectory: true)
         let renamed = directory.appendingPathComponent("Renamed", isDirectory: true)
         try FileManager.default.createDirectory(at: storage, withIntermediateDirectories: true)
-        try StorageSettingsService.saveFixedStorage(container.mainContext, storage)
+        try StorageSettingsService.saveFixedStorage(container.mainContext, storage, sync: sync)
         let settings = try container.mainContext.fetch(FetchDescriptor<StorageSettings>())
         try FileManager.default.moveItem(at: storage, to: renamed)
         let document = try makePDF()
 
         let destination = try XCTUnwrap(WebCaptureService.save(document, "Article", nil,
-            container.mainContext, settings))
+            container.mainContext, settings, sync: sync))
 
         XCTAssertEqual(destination.deletingLastPathComponent().resolvingSymlinksInPath(), renamed.resolvingSymlinksInPath())
         XCTAssertEqual(try Data(contentsOf: destination), document.data)
@@ -162,7 +164,7 @@ final class WebCaptureServiceTests: XCTestCase {
         let container = try makeContainer()
         let result = try WebCaptureService.save(makePDF(), "Article", nil,
             container.mainContext, [],
-            { _, _, _ in nil })
+            sync: sync, { _, _, _ in nil })
         XCTAssertNil(result)
         XCTAssertTrue(try container.mainContext.fetch(FetchDescriptor<PDFFile>()).isEmpty)
     }
@@ -171,7 +173,7 @@ final class WebCaptureServiceTests: XCTestCase {
         let container = try makeContainer()
         XCTAssertThrowsError(try WebCaptureService.save(makePDF(), "Article", nil,
             container.mainContext, [StorageSettings(.fixed)],
-            { _, _, _ in XCTFail("Must report the missing folder"); return nil }))
+            sync: sync, { _, _, _ in XCTFail("Must report the missing folder"); return nil }))
         XCTAssertTrue(try container.mainContext.fetch(FetchDescriptor<PDFFile>()).isEmpty)
     }
 

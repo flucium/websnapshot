@@ -5,6 +5,8 @@ import XCTest
 
 @MainActor
 final class PDFFileSaveTests: XCTestCase {
+    @MainActor private lazy var sync = LibrarySyncService()
+
     func testNewRegistrationRecordsDateWithoutResettingItOnSave() throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -16,7 +18,7 @@ final class PDFFileSaveTests: XCTestCase {
         let context = container.mainContext
 
         let beforeSave = Date()
-        try PDFFileService.save(context, url)
+        try PDFFileService.save(context, url, sync: sync)
         let afterSave = Date()
 
         let pdfFile = try XCTUnwrap(context.fetch(FetchDescriptor<PDFFile>()).first)
@@ -24,7 +26,7 @@ final class PDFFileSaveTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(addedAt, beforeSave)
         XCTAssertLessThanOrEqual(addedAt, afterSave)
 
-        try PDFFileService.save(context, url)
+        try PDFFileService.save(context, url, sync: sync)
         XCTAssertEqual(pdfFile.addedAt, addedAt)
     }
 
@@ -41,7 +43,7 @@ final class PDFFileSaveTests: XCTestCase {
         context.insert(pdfFile)
         try context.save()
 
-        try PDFFileService.save(context, url)
+        try PDFFileService.save(context, url, sync: sync)
 
         XCTAssertNil(pdfFile.addedAt)
     }
@@ -63,19 +65,19 @@ final class PDFFileSaveTests: XCTestCase {
         try Data("original".utf8).write(to: original)
         let container = try makeContainer()
         let context = container.mainContext
-        try PDFFileService.save(context, original)
+        try PDFFileService.save(context, original, sync: sync)
         let entry = try XCTUnwrap(context.fetch(FetchDescriptor<PDFFile>()).first)
         let entryID = entry.persistentModelID
-        try PDFTagService.replaceTags(["Original"], entry, context)
+        try PDFTagService.replaceTags(["Original"], entry, context, sync: sync)
         try FileManager.default.moveItem(at: original, to: renamed)
-        try StorageSettingsService.saveFixedStorage(context, directory)
+        try StorageSettingsService.saveFixedStorage(context, directory, sync: sync)
         let settings = try context.fetch(FetchDescriptor<StorageSettings>())
         let document = PDFFileDocument(Data("new".utf8))
         let savedURL: URL?
         if fixedStorage {
-            savedURL = try WebCaptureService.save(document, "A", nil, context, settings)
+            savedURL = try WebCaptureService.save(document, "A", nil, context, settings, sync: sync)
         } else {
-            savedURL = try WebCaptureService.save(document, "A", nil, context, []) { _, _, document in
+            savedURL = try WebCaptureService.save(document, "A", nil, context, [], sync: sync) { _, _, document in
                 try XCTUnwrap(document).data.write(to: original, options: .atomic)
                 return original
             }
@@ -93,7 +95,7 @@ final class PDFFileSaveTests: XCTestCase {
         XCTAssertTrue(newEntry.tags.isEmpty)
 
         // Deleting the new record must not also delete the renamed record.
-        try PDFFileService.delete(context, newEntry.url)
+        try PDFFileService.delete(context, newEntry.url, sync: sync)
         XCTAssertEqual(try context.fetchCount(FetchDescriptor<PDFFile>()), 1)
         XCTAssertEqual(try context.fetchCount(FetchDescriptor<PDFTag>()), 1)
         XCTAssertEqual(try Data(contentsOf: renamed), Data("original".utf8))
@@ -108,12 +110,12 @@ final class PDFFileSaveTests: XCTestCase {
         try Data("original".utf8).write(to: original)
         let container = try makeContainer()
         let context = container.mainContext
-        try PDFFileService.save(context, original)
+        try PDFFileService.save(context, original, sync: sync)
         let entry = try XCTUnwrap(context.fetch(FetchDescriptor<PDFFile>()).first)
-        try PDFTagService.replaceTags(["Keep"], entry, context)
+        try PDFTagService.replaceTags(["Keep"], entry, context, sync: sync)
         try FileManager.default.moveItem(at: original, to: renamed)
 
-        try PDFFileService.save(context, renamed)
+        try PDFFileService.save(context, renamed, sync: sync)
 
         XCTAssertEqual(try context.fetchCount(FetchDescriptor<PDFFile>()), 1)
         XCTAssertEqual(entry.url.standardizedFileURL, renamed.standardizedFileURL)
@@ -131,12 +133,12 @@ final class PDFFileSaveTests: XCTestCase {
         try Data("fixture".utf8).write(to: url)
         let container = try makeContainer()
         let context = container.mainContext
-        try PDFFileService.save(context, url)
+        try PDFFileService.save(context, url, sync: sync)
         let entry = try XCTUnwrap(context.fetch(FetchDescriptor<PDFFile>()).first)
         let addedAt = entry.addedAt
-        try PDFTagService.replaceTags(["Keep"], entry, context)
+        try PDFTagService.replaceTags(["Keep"], entry, context, sync: sync)
 
-        try PDFFileService.save(context, alias.appendingPathComponent("Document.pdf"))
+        try PDFFileService.save(context, alias.appendingPathComponent("Document.pdf"), sync: sync)
 
         XCTAssertEqual(try context.fetchCount(FetchDescriptor<PDFFile>()), 1)
         XCTAssertEqual(entry.tags.map(\.name), ["Keep"])
@@ -155,11 +157,11 @@ final class PDFFileSaveTests: XCTestCase {
         try Data("fixture".utf8).write(to: url)
         let container = try makeContainer()
         let context = container.mainContext
-        try PDFFileService.save(context, url)
+        try PDFFileService.save(context, url, sync: sync)
         let entry = try XCTUnwrap(context.fetch(FetchDescriptor<PDFFile>()).first)
-        try PDFTagService.replaceTags(["Temporary"], entry, context)
+        try PDFTagService.replaceTags(["Temporary"], entry, context, sync: sync)
 
-        try LibraryViewService.delete(context, aliasedURL, aliasedURL)
+        try LibraryService.delete(context, aliasedURL, aliasedURL, sync: sync)
 
         XCTAssertFalse(FileManager.default.fileExists(atPath: url.path))
         XCTAssertEqual(try context.fetchCount(FetchDescriptor<PDFFile>()), 0)

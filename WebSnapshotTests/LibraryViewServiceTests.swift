@@ -9,6 +9,8 @@ private enum ExpectedFailure: Error {
 }
 
 final class LibraryViewServiceTests: XCTestCase {
+    @MainActor private lazy var sync = LibrarySyncService()
+
     @MainActor
     func testBatchImportCopiesAllPDFsWithUniqueNamesAndSelectsLastImport() throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -36,7 +38,7 @@ final class LibraryViewServiceTests: XCTestCase {
         state.selectedTag = .untagged
         state.appError = .error("Previous error")
 
-        LibraryViewService.importPDFs(state, context, sources, importDirectory)
+        LibraryViewService.importPDFs(state, context, sources, importDirectory, sync: sync)
 
         let importedPDFs = try context.fetch(FetchDescriptor<PDFFile>())
         XCTAssertEqual(Set(importedPDFs.map { $0.url.lastPathComponent }), ["Report 2.pdf", "Report 3.pdf"])
@@ -71,7 +73,7 @@ final class LibraryViewServiceTests: XCTestCase {
         let context = container.mainContext
         let state = LibraryViewState()
 
-        LibraryViewService.importPDFs(state, context, sources, importDirectory)
+        LibraryViewService.importPDFs(state, context, sources, importDirectory, sync: sync)
 
         let importedPDFs = try context.fetch(FetchDescriptor<PDFFile>())
         XCTAssertEqual(Set(importedPDFs.map { $0.url.lastPathComponent }), ["First.pdf", "Second.pdf"])
@@ -110,7 +112,7 @@ final class LibraryViewServiceTests: XCTestCase {
         state.searchText = "Existing"
         state.selectedTag = .untagged
 
-        LibraryViewService.importPDFs(state, context, sources, importDirectory)
+        LibraryViewService.importPDFs(state, context, sources, importDirectory, sync: sync)
 
         XCTAssertEqual(try context.fetchCount(FetchDescriptor<PDFFile>()), 1)
         XCTAssertTrue(try FileManager.default.contentsOfDirectory(atPath: importDirectory.path).isEmpty)
@@ -137,8 +139,8 @@ final class LibraryViewServiceTests: XCTestCase {
         )
         let context = container.mainContext
 
-        let first = try LibraryViewService.importPDF(source, importDirectory, context)
-        let second = try LibraryViewService.importPDF(source, importDirectory, context)
+        let first = try LibraryService.importPDF(source, importDirectory, context, sync: sync)
+        let second = try LibraryService.importPDF(source, importDirectory, context, sync: sync)
 
         XCTAssertNotEqual(first, second)
         XCTAssertEqual(first.lastPathComponent, "Report.pdf")
@@ -167,16 +169,16 @@ final class LibraryViewServiceTests: XCTestCase {
             configurations: ModelConfiguration(isStoredInMemoryOnly: true)
         )
         let context = container.mainContext
-        try StorageSettingsService.saveFixedStorage(context, directory)
+        try StorageSettingsService.saveFixedStorage(context, directory, sync: sync)
         let settings = try context.fetch(FetchDescriptor<StorageSettings>())
-        let importDirectory = try XCTUnwrap(StorageSettingsService.fixedStorageURL(settings))
+        let importDirectory = try XCTUnwrap(StorageSettingsService.fixedStorageURL(settings, sync: sync))
 
-        let first = try LibraryViewService.importPDF(source, importDirectory, context)
+        let first = try LibraryService.importPDF(source, importDirectory, context, sync: sync)
         let pdfFile = try XCTUnwrap(context.fetch(FetchDescriptor<PDFFile>()).first)
         let entryID = pdfFile.persistentModelID
         let addedAt = try XCTUnwrap(pdfFile.addedAt)
-        try PDFTagService.replaceTags(["Keep"], pdfFile, context)
-        let second = try LibraryViewService.importPDF(source, importDirectory, context)
+        try PDFTagService.replaceTags(["Keep"], pdfFile, context, sync: sync)
+        let second = try LibraryService.importPDF(source, importDirectory, context, sync: sync)
 
         XCTAssertEqual(first, source)
         XCTAssertEqual(second, source)
@@ -209,8 +211,8 @@ final class LibraryViewServiceTests: XCTestCase {
         )
         let context = container.mainContext
 
-        let first = try LibraryViewService.importPDF(source, alias, context)
-        let second = try LibraryViewService.importPDF(aliasedSource, storage, context)
+        let first = try LibraryService.importPDF(source, alias, context, sync: sync)
+        let second = try LibraryService.importPDF(aliasedSource, storage, context, sync: sync)
 
         XCTAssertEqual(first, source)
         XCTAssertEqual(second, aliasedSource)
@@ -233,7 +235,7 @@ final class LibraryViewServiceTests: XCTestCase {
             configurations: ModelConfiguration(isStoredInMemoryOnly: true)
         )
 
-        XCTAssertThrowsError(try LibraryViewService.importPDF(source, directory, container.mainContext))
+        XCTAssertThrowsError(try LibraryService.importPDF(source, directory, container.mainContext, sync: sync))
         XCTAssertFalse(FileManager.default.fileExists(atPath: directory.appendingPathComponent("Invalid 2.pdf").path))
         XCTAssertEqual(try container.mainContext.fetchCount(FetchDescriptor<PDFFile>()), 0)
     }
@@ -250,11 +252,11 @@ final class LibraryViewServiceTests: XCTestCase {
         try pdfData.write(to: source)
         try Data("old copy".utf8).write(to: destination)
 
-        try LibraryViewService.exportPDF(source, destination)
+        try LibraryService.exportPDF(source, destination)
 
         XCTAssertEqual(try Data(contentsOf: source), pdfData)
         XCTAssertEqual(try Data(contentsOf: destination), pdfData)
-        XCTAssertThrowsError(try LibraryViewService.exportPDF(source, source))
+        XCTAssertThrowsError(try LibraryService.exportPDF(source, source))
         XCTAssertEqual(try Data(contentsOf: source), pdfData)
     }
 
@@ -273,11 +275,11 @@ final class LibraryViewServiceTests: XCTestCase {
         try context.save()
 
         XCTAssertThrowsError(
-            try LibraryViewService.delete(
+            try LibraryService.delete(
                 context,
                 url,
                 url,
-                { _ in
+                sync: sync, { _ in
                     throw ExpectedFailure.fileDeletion
                 }
             )
@@ -296,42 +298,42 @@ final class LibraryViewServiceTests: XCTestCase {
         ]
 
         XCTAssertTrue(
-            LibraryViewService.matches(
+            LibraryService.matches(
                 pdfFile,
                 "quarterly",
                 .title
             )
         )
         XCTAssertFalse(
-            LibraryViewService.matches(
+            LibraryService.matches(
                 pdfFile,
                 "research",
                 .title
             )
         )
         XCTAssertTrue(
-            LibraryViewService.matches(
+            LibraryService.matches(
                 pdfFile,
                 "RESEARCH",
                 .tag
             )
         )
         XCTAssertFalse(
-            LibraryViewService.matches(
+            LibraryService.matches(
                 pdfFile,
                 "quarterly",
                 .tag
             )
         )
         XCTAssertTrue(
-            LibraryViewService.matches(
+            LibraryService.matches(
                 pdfFile,
                 "research",
                 .all
             )
         )
         XCTAssertTrue(
-            LibraryViewService.matches(
+            LibraryService.matches(
                 pdfFile,
                 "  ",
                 .tag
@@ -354,9 +356,9 @@ final class LibraryViewServiceTests: XCTestCase {
 
         context.insert(pdfFile)
         try context.save()
-        try PDFTagService.replaceTags(["Missing"], pdfFile, context)
+        try PDFTagService.replaceTags(["Missing"], pdfFile, context, sync: sync)
 
-        try LibraryViewService.deleteMissingFiles(context, [pdfFile])
+        try PDFFileService.deleteMissingFiles(context, [pdfFile], sync: sync)
 
         XCTAssertTrue(try context.fetch(FetchDescriptor<PDFFile>()).isEmpty)
         XCTAssertTrue(try context.fetch(FetchDescriptor<PDFTag>()).isEmpty)

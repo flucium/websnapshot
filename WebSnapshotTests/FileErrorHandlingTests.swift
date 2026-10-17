@@ -42,7 +42,7 @@ final class FileErrorHandlingTests: XCTestCase {
     func testUnreadablePDFDataIsRejected() {
         let invalidData = Data("not a PDF".utf8)
 
-        XCTAssertThrowsError(try DirectoryPDFView.document(invalidData)) { error in
+        XCTAssertThrowsError(try LibraryPDFView.document(invalidData)) { error in
             XCTAssertEqual((error as? AppError)?.kind, .invalidFileType)
         }
     }
