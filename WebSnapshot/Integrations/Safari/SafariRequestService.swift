@@ -1,17 +1,16 @@
 import Foundation
+import Combine
 import SwiftData
 import WebKit
 
 @MainActor
-final class SafariRequestService {
+final class SafariRequestService: ObservableObject {
     enum FailureAction {
         case retry
         case skip
     }
 
-    typealias Capture = @MainActor (URL, ModelContext, (WebPage) -> Void) async throws -> URL?
-    
-    let state = SafariRequestState()
+    @Published private(set) var state = SafariRequestState()
     
     private var failedRequest: SafariCaptureRequest?
     
@@ -22,6 +21,8 @@ final class SafariRequestService {
     private var task: Task<Void, Never>?
     
     private let capture: Capture
+    
+    typealias Capture = @MainActor (URL, ModelContext, (WebPage) -> Void) async throws -> URL?
 
     var handleFailure: ((AppError) -> FailureAction)?
     var canRetry: Bool {
