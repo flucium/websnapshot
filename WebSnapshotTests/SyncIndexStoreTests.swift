@@ -49,7 +49,7 @@ nonisolated final class SyncIndexStoreTests: XCTestCase {
             let store = SyncIndexStore(root: directory.appendingPathComponent("websnapshot"))
             let added = Date(timeIntervalSince1970: 123)
             let id = UUID()
-            let local = SyncLocalPDF(id: id, url: source, addedAt: added, tagNames: ["Article"], sharedPath: nil, sharedHash: nil)
+            let local = SyncLocalPDF(id: id, url: source, addedAt: added, tagNames: ["Article"], sharedHash: nil)
             let index = try store.prepareEnable([local], UUID(), 0)
             let entry = try XCTUnwrap(index.files.first)
             let location = try XCTUnwrap(entry.location)
@@ -70,7 +70,7 @@ nonisolated final class SyncIndexStoreTests: XCTestCase {
             try Data("fixture".utf8).write(to: source)
             let store = SyncIndexStore(root: directory.appendingPathComponent("websnapshot"))
             let id = UUID()
-            var local = SyncLocalPDF(id: id, url: source, addedAt: nil, tagNames: ["Original"], sharedPath: nil, sharedHash: nil)
+            var local = SyncLocalPDF(id: id, url: source, addedAt: nil, tagNames: ["Original"], sharedHash: nil)
             let initial = try store.prepareEnable([local], UUID(), 0)
             local.sharedHash = initial.files.first?.location?.contentHash
             local.baselineTags = ["Original"]
@@ -89,7 +89,7 @@ nonisolated final class SyncIndexStoreTests: XCTestCase {
             try Data("fixture".utf8).write(to: source)
             let store = SyncIndexStore(root: directory.appendingPathComponent("websnapshot"))
             let id = UUID()
-            var local = SyncLocalPDF(id: id, url: source, addedAt: nil, tagNames: ["Original"], sharedPath: nil, sharedHash: nil)
+            var local = SyncLocalPDF(id: id, url: source, addedAt: nil, tagNames: ["Original"], sharedHash: nil)
             _ = try store.prepareEnable([local], UUID(), 0)
             local.baselineTags = ["Original"]
             local.tagNames = ["Original", "Offline"]
@@ -107,7 +107,7 @@ nonisolated final class SyncIndexStoreTests: XCTestCase {
             try Data("fixture".utf8).write(to: source)
             let store = SyncIndexStore(root: directory.appendingPathComponent("websnapshot"))
             let id = UUID()
-            _ = try store.prepareEnable([SyncLocalPDF(id: id, url: source, addedAt: nil, tagNames: [], sharedPath: nil, sharedHash: nil)], UUID(), 0)
+            _ = try store.prepareEnable([SyncLocalPDF(id: id, url: source, addedAt: nil, tagNames: [], sharedHash: nil)], UUID(), 0)
             let (index, urls) = try store.prepareDisable(SyncIndex(), directory.appendingPathComponent("local"))
             let local = try XCTUnwrap(urls[id])
             let cloud = try store.fileURL(XCTUnwrap(index.files[0].location).relativePath)
@@ -167,7 +167,7 @@ nonisolated final class SyncIndexStoreTests: XCTestCase {
             try contents.write(to: source)
             let store = SyncIndexStore(root: directory.appendingPathComponent("websnapshot"))
             let pdfs = (0..<2).map { _ in
-                SyncLocalPDF(id: UUID(), url: source, addedAt: nil, tagNames: [], sharedPath: nil, sharedHash: nil)
+                SyncLocalPDF(id: UUID(), url: source, addedAt: nil, tagNames: [], sharedHash: nil)
             }
             _ = try store.prepareEnable(pdfs, UUID(), 0)
             let destination = directory.appendingPathComponent("local", isDirectory: true)
@@ -197,7 +197,7 @@ nonisolated final class SyncIndexStoreTests: XCTestCase {
             let contents = Data("fixture".utf8)
             try contents.write(to: source)
             let store = SyncIndexStore(root: directory.appendingPathComponent("websnapshot"))
-            let pdf = SyncLocalPDF(id: UUID(), url: source, addedAt: nil, tagNames: ["Keep"], sharedPath: nil, sharedHash: nil)
+            let pdf = SyncLocalPDF(id: UUID(), url: source, addedAt: nil, tagNames: ["Keep"], sharedHash: nil)
             _ = try store.prepareEnable([pdf], UUID(), 0)
 
             let (index, urls) = try store.prepareDisable(SyncIndex(), directory)
@@ -216,7 +216,7 @@ nonisolated final class SyncIndexStoreTests: XCTestCase {
             let source = directory.appendingPathComponent("abcd.pdf")
             try Data("synced PDF".utf8).write(to: source)
             let store = SyncIndexStore(root: directory.appendingPathComponent("websnapshot"))
-            let pdf = SyncLocalPDF(id: UUID(), url: source, addedAt: nil, tagNames: [], sharedPath: nil, sharedHash: nil)
+            let pdf = SyncLocalPDF(id: UUID(), url: source, addedAt: nil, tagNames: [], sharedHash: nil)
             _ = try store.prepareEnable([pdf], UUID(), 0)
             try Data("local edit".utf8).write(to: source)
 
@@ -238,7 +238,7 @@ nonisolated final class SyncIndexStoreTests: XCTestCase {
             try contents.write(to: source)
             let store = SyncIndexStore(root: directory.appendingPathComponent("websnapshot"))
             let pdfs = (1...2).map {
-                SyncLocalPDF(id: UUID(uuidString: "00000000-0000-0000-0000-00000000000\($0)")!, url: source, addedAt: nil, tagNames: [], sharedPath: nil, sharedHash: nil)
+                SyncLocalPDF(id: UUID(uuidString: "00000000-0000-0000-0000-00000000000\($0)")!, url: source, addedAt: nil, tagNames: [], sharedHash: nil)
             }
             let index = try store.prepareEnable(pdfs, UUID(), 0)
             let missing = try store.fileURL(XCTUnwrap(index.files.last?.location).relativePath)
@@ -263,7 +263,7 @@ nonisolated final class SyncIndexStoreTests: XCTestCase {
             let contents = Data("fixture".utf8)
             try contents.write(to: source)
             let store = SyncIndexStore(root: directory.appendingPathComponent("websnapshot"))
-            var local = SyncLocalPDF(id: UUID(), url: source, addedAt: nil, tagNames: [], sharedPath: nil, sharedHash: nil)
+            var local = SyncLocalPDF(id: UUID(), url: source, addedAt: nil, tagNames: [], sharedHash: nil)
             let initial = try store.prepareEnable([local], UUID(), 0)
             let location = try XCTUnwrap(initial.files.first?.location)
             let cloudPDF = try store.fileURL(location.relativePath)
@@ -282,12 +282,12 @@ nonisolated final class SyncIndexStoreTests: XCTestCase {
             let source = directory.appendingPathComponent("abcd.pdf")
             try Data("original".utf8).write(to: source)
             let store = SyncIndexStore(root: directory.appendingPathComponent("websnapshot"))
-            var local = SyncLocalPDF(id: UUID(), url: source, addedAt: nil, tagNames: [], sharedPath: nil, sharedHash: nil)
+            var local = SyncLocalPDF(id: UUID(), url: source, addedAt: nil, tagNames: [], sharedHash: nil)
             let initial = try store.prepareEnable([local], UUID(), 0)
             local.sharedHash = initial.files.first?.location?.contentHash
             let remote = directory.appendingPathComponent("remote.pdf")
             try Data("remote edit".utf8).write(to: remote)
-            let changed = SyncLocalPDF(id: local.id, url: remote, addedAt: nil, tagNames: [], sharedPath: nil, sharedHash: nil)
+            let changed = SyncLocalPDF(id: local.id, url: remote, addedAt: nil, tagNames: [], sharedHash: nil)
             let updated = try store.prepareEnable([changed], UUID(), initial.counter)
 
             let restored = try store.prepareEnable([local], UUID(), initial.counter)
@@ -390,7 +390,7 @@ nonisolated final class SyncIndexStoreTests: XCTestCase {
             let source = directory.appendingPathComponent("abcd.pdf")
             try Data("fixture".utf8).write(to: source)
             let id = UUID()
-            let pdf = SyncLocalPDF(id: id, url: source, addedAt: nil, tagNames: ["Keep"], sharedPath: nil, sharedHash: nil)
+            let pdf = SyncLocalPDF(id: id, url: source, addedAt: nil, tagNames: ["Keep"], sharedHash: nil)
             let store = SyncIndexStore(root: cloud)
             _ = try store.prepareEnable([pdf], UUID(), 0)
             let (index, local) = try store.prepareDisable(SyncIndex(), directory.appendingPathComponent("local"))
@@ -403,7 +403,7 @@ nonisolated final class SyncIndexStoreTests: XCTestCase {
             defer { if accessing { remembered.stopAccessingSecurityScopedResource() } }
             let recreated = try SyncIndexStore.prepareCloudFolder(SyncIndexStore.cloudDrive(remembered))
             let localPDF = SyncLocalPDF(id: id, url: try XCTUnwrap(local[id]), addedAt: nil, tagNames: ["Keep"],
-                                       sharedPath: nil, sharedHash: index.files.first?.location?.contentHash,
+                                       sharedHash: index.files.first?.location?.contentHash,
                                        baselineTags: ["Keep"])
             let restored = try SyncIndexStore(root: recreated).prepareEnable([localPDF], UUID(), index.counter)
 
@@ -450,8 +450,8 @@ nonisolated final class SyncIndexStoreTests: XCTestCase {
             try Data("first".utf8).write(to: a)
             try Data("second".utf8).write(to: b)
             let store = SyncIndexStore(root: directory.appendingPathComponent("websnapshot"))
-            let first = SyncLocalPDF(id: UUID(), url: a, addedAt: nil, tagNames: [], sharedPath: nil, sharedHash: nil)
-            let second = SyncLocalPDF(id: UUID(), url: b, addedAt: nil, tagNames: [], sharedPath: nil, sharedHash: nil)
+            let first = SyncLocalPDF(id: UUID(), url: a, addedAt: nil, tagNames: [], sharedHash: nil)
+            let second = SyncLocalPDF(id: UUID(), url: b, addedAt: nil, tagNames: [], sharedHash: nil)
             _ = try store.prepareEnable([first], UUID(), 0)
             let index = try store.prepareEnable([second], UUID(), 0)
             let firstPath = try XCTUnwrap(index.files.first { $0.id == first.id }?.location?.relativePath)

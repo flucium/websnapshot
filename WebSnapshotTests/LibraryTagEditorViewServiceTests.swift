@@ -12,7 +12,7 @@ final class LibraryTagEditorViewServiceTests: XCTestCase {
         let context = container.mainContext
         let pdfFile = PDFFile(URL(fileURLWithPath: "/tmp/Article.pdf"))
         context.insert(pdfFile)
-        try PDFTagService.replaceTags(["Original"], pdfFile, context, sync: sync)
+        try LibraryService.replaceTags(["Original"], pdfFile, context, sync: sync)
         let state = LibraryViewState()
         state.presentTagEditor(pdfFile)
         let editor = state.libraryTagEditorViewState
@@ -45,7 +45,7 @@ final class LibraryTagEditorViewServiceTests: XCTestCase {
         let context = container.mainContext
         let pdfFile = PDFFile(URL(fileURLWithPath: "/tmp/Article.pdf"))
         context.insert(pdfFile)
-        try PDFTagService.replaceTags(["Original"], pdfFile, context, sync: sync)
+        try LibraryService.replaceTags(["Original"], pdfFile, context, sync: sync)
         let state = LibraryViewState()
         state.presentTagEditor(pdfFile)
         let editor = state.libraryTagEditorViewState

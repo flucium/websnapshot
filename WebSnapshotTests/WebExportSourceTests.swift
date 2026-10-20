@@ -46,7 +46,7 @@ final class WebExportSourceTests: XCTestCase {
             return true;
             """)
         do {
-            _ = try await WebService.export(page)
+            _ = try await WebPDFService.export(page)
             XCTFail("An export that navigated during preparation must not return PDF data")
         } catch {
             XCTAssertEqual((error as? AppError)?.kind, .invalidLoad)
@@ -69,7 +69,7 @@ final class WebExportSourceTests: XCTestCase {
             baseURL: try XCTUnwrap(URL(string: "https://example.com/article"))
         ))
 
-        let exported = try await WebService.export(page)
+        let exported = try await WebPDFService.export(page)
         let document = try XCTUnwrap(PDFDocument(data: exported.data))
         let text = try XCTUnwrap(document.string)
 

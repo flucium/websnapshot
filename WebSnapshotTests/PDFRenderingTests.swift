@@ -25,7 +25,7 @@ final class PDFRenderingTests: XCTestCase {
 
         for rotation in [0, 90, 180, 270] {
             page.rotation = rotation
-            let image = try LibraryService.render(page, 72)
+            let image = try PDFContentService.render(page, 72)
             let swapsDimensions = rotation == 90 || rotation == 270
             XCTAssertEqual(image.width, swapsDimensions ? 692 : 512)
             XCTAssertEqual(image.height, swapsDimensions ? 512 : 692)

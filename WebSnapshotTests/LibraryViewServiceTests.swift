@@ -177,7 +177,7 @@ final class LibraryViewServiceTests: XCTestCase {
         let pdfFile = try XCTUnwrap(context.fetch(FetchDescriptor<PDFFile>()).first)
         let entryID = pdfFile.persistentModelID
         let addedAt = try XCTUnwrap(pdfFile.addedAt)
-        try PDFTagService.replaceTags(["Keep"], pdfFile, context, sync: sync)
+        try LibraryService.replaceTags(["Keep"], pdfFile, context, sync: sync)
         let second = try LibraryService.importPDF(source, importDirectory, context, sync: sync)
 
         XCTAssertEqual(first, source)
@@ -298,42 +298,42 @@ final class LibraryViewServiceTests: XCTestCase {
         ]
 
         XCTAssertTrue(
-            LibraryService.matches(
+            LibrarySearch.matches(
                 pdfFile,
                 "quarterly",
                 .title
             )
         )
         XCTAssertFalse(
-            LibraryService.matches(
+            LibrarySearch.matches(
                 pdfFile,
                 "research",
                 .title
             )
         )
         XCTAssertTrue(
-            LibraryService.matches(
+            LibrarySearch.matches(
                 pdfFile,
                 "RESEARCH",
                 .tag
             )
         )
         XCTAssertFalse(
-            LibraryService.matches(
+            LibrarySearch.matches(
                 pdfFile,
                 "quarterly",
                 .tag
             )
         )
         XCTAssertTrue(
-            LibraryService.matches(
+            LibrarySearch.matches(
                 pdfFile,
                 "research",
                 .all
             )
         )
         XCTAssertTrue(
-            LibraryService.matches(
+            LibrarySearch.matches(
                 pdfFile,
                 "  ",
                 .tag
@@ -356,9 +356,9 @@ final class LibraryViewServiceTests: XCTestCase {
 
         context.insert(pdfFile)
         try context.save()
-        try PDFTagService.replaceTags(["Missing"], pdfFile, context, sync: sync)
+        try LibraryService.replaceTags(["Missing"], pdfFile, context, sync: sync)
 
-        try PDFFileService.deleteMissingFiles(context, [pdfFile], sync: sync)
+        try LibraryService.deleteMissingFiles(context, [pdfFile], sync: sync)
 
         XCTAssertTrue(try context.fetch(FetchDescriptor<PDFFile>()).isEmpty)
         XCTAssertTrue(try context.fetch(FetchDescriptor<PDFTag>()).isEmpty)

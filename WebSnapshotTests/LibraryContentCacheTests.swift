@@ -23,9 +23,9 @@ final class LibraryContentCacheTests: XCTestCase {
             entry.contentFingerprint = "Old fingerprint"
             context.insert(entry)
         }
-        try PDFTagService.replaceTags(["Keep", "Shared"], existing, context, sync: sync)
-        try PDFTagService.replaceTags(["Remove", "Shared"], deleted, context, sync: sync)
-        try PDFTagService.replaceTags(["Offline"], unavailable, context, sync: sync)
+        try LibraryService.replaceTags(["Keep", "Shared"], existing, context, sync: sync)
+        try LibraryService.replaceTags(["Remove", "Shared"], deleted, context, sync: sync)
+        try LibraryService.replaceTags(["Offline"], unavailable, context, sync: sync)
         XCTAssertEqual(unavailable.availability, .unavailable)
 
         let service = LibraryContentService(sync: sync, { _ in throw AppError.error("Extraction unavailable") })
@@ -63,8 +63,8 @@ final class LibraryContentCacheTests: XCTestCase {
         XCTAssertEqual(result.refreshedCount, 1)
         XCTAssertEqual(result.removedCount, 1)
         XCTAssertEqual(result.unavailableCount, 0)
-        XCTAssertTrue(LibraryService.matches(existing, "Fresh searchable content", .all))
-        XCTAssertFalse(LibraryService.matches(existing, "Stale text", .all))
+        XCTAssertTrue(LibrarySearch.matches(existing, "Fresh searchable content", .all))
+        XCTAssertFalse(LibrarySearch.matches(existing, "Stale text", .all))
         XCTAssertEqual(try Data(contentsOf: fixture.url), originalData)
         XCTAssertFalse(service.state.isRefreshingCache)
         XCTAssertNil(service.cacheRefreshTask)
@@ -126,7 +126,7 @@ final class LibraryContentCacheTests: XCTestCase {
         let container = try makeContainer()
         let entry = PDFFile(fixture.url)
         container.mainContext.insert(entry)
-        try PDFTagService.replaceTags(["Temporary"], entry, container.mainContext, sync: sync)
+        try LibraryService.replaceTags(["Temporary"], entry, container.mainContext, sync: sync)
         let started = expectation(description: "Refresh extraction started")
         let gate = CacheRefreshGate(started)
         let service = LibraryContentService(sync: sync, { _ in await gate.read() })

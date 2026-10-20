@@ -18,9 +18,9 @@ final class LibraryContentServiceTests: XCTestCase {
         XCTAssertNil(entry.searchableText)
 
         await LibraryContentService(sync: sync).index([entry], context)
-        XCTAssertTrue(LibraryService.matches(entry, "inside the PDF", .all))
-        XCTAssertFalse(LibraryService.matches(entry, "inside the PDF", .title))
-        XCTAssertFalse(LibraryService.matches(entry, "inside the PDF", .tag))
+        XCTAssertTrue(LibrarySearch.matches(entry, "inside the PDF", .all))
+        XCTAssertFalse(LibrarySearch.matches(entry, "inside the PDF", .title))
+        XCTAssertFalse(LibrarySearch.matches(entry, "inside the PDF", .tag))
 
         let probe = ExtractionProbe()
         await LibraryContentService(sync: sync, { try await probe.read($0) }).index([entry], context)
@@ -33,17 +33,17 @@ final class LibraryContentServiceTests: XCTestCase {
         entry.tags = [PDFTag("Research", normalizedName: "research")]
         entry.searchableText = "本文には日本語と Searchable Text が含まれます"
 
-        XCTAssertTrue(LibraryService.matches(entry, "  searchable text  ", .all))
-        XCTAssertTrue(LibraryService.matches(entry, "日本語", .all))
-        XCTAssertTrue(LibraryService.matches(entry, "report", .all))
-        XCTAssertTrue(LibraryService.matches(entry, "research", .all))
-        XCTAssertTrue(LibraryService.matches(entry, "REPORT", .title))
-        XCTAssertTrue(LibraryService.matches(entry, "RESEARCH", .tag))
-        XCTAssertFalse(LibraryService.matches(entry, "日本語", .title))
-        XCTAssertFalse(LibraryService.matches(entry, "日本語", .tag))
-        XCTAssertTrue(LibraryService.matches(entry, " \n ", .all))
+        XCTAssertTrue(LibrarySearch.matches(entry, "  searchable text  ", .all))
+        XCTAssertTrue(LibrarySearch.matches(entry, "日本語", .all))
+        XCTAssertTrue(LibrarySearch.matches(entry, "report", .all))
+        XCTAssertTrue(LibrarySearch.matches(entry, "research", .all))
+        XCTAssertTrue(LibrarySearch.matches(entry, "REPORT", .title))
+        XCTAssertTrue(LibrarySearch.matches(entry, "RESEARCH", .tag))
+        XCTAssertFalse(LibrarySearch.matches(entry, "日本語", .title))
+        XCTAssertFalse(LibrarySearch.matches(entry, "日本語", .tag))
+        XCTAssertTrue(LibrarySearch.matches(entry, " \n ", .all))
         entry.searchableText = nil
-        XCTAssertFalse(LibraryService.matches(entry, "日本語", .all))
+        XCTAssertFalse(LibrarySearch.matches(entry, "日本語", .all))
     }
 
     func testCacheSurvivesReopeningTheStore() async throws {
@@ -73,7 +73,7 @@ final class LibraryContentServiceTests: XCTestCase {
         XCTAssertEqual(entry.tags.map(\.name), ["Keep"])
         XCTAssertNil(entry.searchableText)
         await LibraryContentService(sync: sync).index([entry], container.mainContext)
-        XCTAssertTrue(LibraryService.matches(entry, "Existing PDF content", .all))
+        XCTAssertTrue(LibrarySearch.matches(entry, "Existing PDF content", .all))
     }
 
     func testUpdatedPDFReplacesOldContent() async throws {
@@ -89,8 +89,8 @@ final class LibraryContentServiceTests: XCTestCase {
         try ContentSearchFixture.data(["Replacement content"]).write(to: fixture.url, options: .atomic)
         await indexer.index([entry], container.mainContext)
 
-        XCTAssertTrue(LibraryService.matches(entry, "Replacement", .all))
-        XCTAssertFalse(LibraryService.matches(entry, "Original", .all))
+        XCTAssertTrue(LibrarySearch.matches(entry, "Replacement", .all))
+        XCTAssertFalse(LibrarySearch.matches(entry, "Original", .all))
     }
 
     func testChangedPDFDoesNotReceiveAStaleExtraction() async throws {
@@ -112,7 +112,7 @@ final class LibraryContentServiceTests: XCTestCase {
         XCTAssertNil(entry.contentFingerprint)
         XCTAssertEqual(indexer.state.pendingCount, 0)
         await LibraryContentService(sync: sync).index([entry], container.mainContext)
-        XCTAssertTrue(LibraryService.matches(entry, "Replacement", .all))
+        XCTAssertTrue(LibrarySearch.matches(entry, "Replacement", .all))
     }
 
     func testDeletedEntryDoesNotGetRecreatedAfterExtraction() async throws {

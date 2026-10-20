@@ -26,8 +26,8 @@ final class PDFFileNameTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: directory) }
         let firstData = Data("first".utf8)
         let secondData = Data("second".utf8)
-        let first = try XCTUnwrap(saveToDirectory("Example.com", nil, PDFFileDocument(firstData), directory))
-        let second = try XCTUnwrap(saveToDirectory("Example.com", nil, PDFFileDocument(secondData), directory))
+        let first = try XCTUnwrap(PDFFileStore.save(firstData, URL.pdfFileName("Example.com", nil), in: directory))
+        let second = try XCTUnwrap(PDFFileStore.save(secondData, URL.pdfFileName("Example.com", nil), in: directory))
 
         XCTAssertEqual(first.lastPathComponent, "Example.com.pdf")
         XCTAssertEqual(second.lastPathComponent, "Example.com 2.pdf")
@@ -46,7 +46,7 @@ final class PDFFileNameTests: XCTestCase {
             var destinations = Set<URL>()
             for index in 1...12 {
                 let data = Data("PDF \(index)".utf8)
-                let destination = try XCTUnwrap(saveToDirectory(title, url, PDFFileDocument(data), directory))
+                let destination = try XCTUnwrap(PDFFileStore.save(data, URL.pdfFileName(title, url), in: directory))
                 XCTAssertLessThanOrEqual(destination.lastPathComponent.utf8.count, 240)
                 XCTAssertEqual(destination.pathExtension, "pdf")
                 XCTAssertTrue(destinations.insert(destination).inserted)
@@ -67,7 +67,7 @@ final class PDFFileNameTests: XCTestCase {
         }
         let savedData = Data("new PDF".utf8)
 
-        let destination = try XCTUnwrap(saveToDirectory("Article", nil, PDFFileDocument(savedData), directory))
+        let destination = try XCTUnwrap(PDFFileStore.save(savedData, URL.pdfFileName("Article", nil), in: directory))
 
         XCTAssertEqual(destination.lastPathComponent, "Article 4.pdf")
         XCTAssertEqual(try Data(contentsOf: destination), savedData)
