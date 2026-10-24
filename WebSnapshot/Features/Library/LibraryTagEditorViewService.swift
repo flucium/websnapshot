@@ -14,8 +14,9 @@ final class LibraryTagEditorViewService {
     }
 
     static func save(_ state: LibraryTagEditorViewState, _ pdfFile: PDFFile, _ modelContext: ModelContext, sync: LibrarySyncService) -> Bool {
+        
         do {
-            try PDFTagService.replaceTags(state.tagNames,pdfFile,modelContext, sync: sync)
+            try LibraryService.replaceTags(state.tagNames,pdfFile,modelContext, sync: sync)
 
             return true
         } catch {
@@ -23,5 +24,6 @@ final class LibraryTagEditorViewService {
 
             return false
         }
+        
     }
 }
