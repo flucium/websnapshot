@@ -84,6 +84,7 @@ codex.toml
 
 # Other
 ARCHITECTURE.md
+codex.git.sh
 
 !version.txt
 !.github
