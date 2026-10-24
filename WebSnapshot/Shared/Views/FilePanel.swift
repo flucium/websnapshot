@@ -1,25 +1,26 @@
-import Foundation
 import AppKit
+import Foundation
 import UniformTypeIdentifiers
 
 @MainActor
-func directoryPanel(_ directoryURL: URL?, _ title: String = "Choose Storage Folder", _ prompt: String = "Choose") -> URL? {
-    
+func directoryPanel(_ directoryURL: URL?, _ title: String = "Choose Storage Folder", _ prompt: String = "Choose")
+    -> URL?
+{
+
     let panel = NSOpenPanel()
 
     panel.canChooseDirectories = true
-    
+
     panel.canChooseFiles = false
-    
+
     panel.allowsMultipleSelection = false
-    
+
     panel.canCreateDirectories = true
-    
-    
+
     panel.title = title
-    
+
     panel.prompt = prompt
-    
+
     panel.directoryURL = directoryURL
 
     guard panel.runModal() == .OK else {
@@ -61,82 +62,18 @@ func exportPDFPanel(_ fileName: String) -> URL? {
 }
 
 @MainActor
-func savePanel(_ title: String,_ url: URL?,_ pdfFileDocument: PDFFileDocument?,beforeWrite: () throws -> Void = {}) throws -> URL? {
-    guard let data = pdfFileDocument?.data else {
-        return nil
-    }
-    
+func savePanel(_ fileName: String) -> URL? {
     let panel = NSSavePanel()
     
     panel.allowedContentTypes = [.pdf]
+    
     panel.canCreateDirectories = true
+    
     panel.title = "Save"
-    panel.nameFieldStringValue = URL.pdfFileName(title,url)
     
-    FileManager.default.urls(for: .documentDirectory,in: .userDomainMask).first.map {
-        panel.directoryURL = $0
-    }
-
-    prepareForSafariDialog()
+    panel.nameFieldStringValue = fileName
     
-    guard panel.runModal() == .OK, let destination = panel.url else {
-        return nil
-    }
+    panel.directoryURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
     
-    do {
-        try beforeWrite()
-        
-        try data.write(to: destination,options: .atomic)
-        
-        return destination
-    } catch {
-        throw AppError(error)
-    }
-}
-
-@MainActor
-func prepareForSafariDialog() {
-    if NSApp.isHidden {
-        for window in NSApp.windows where !(window is NSPanel) {
-            window.orderOut(nil)
-        }
-        NSApp.unhide(nil)
-    }
-    NSApp.activate(ignoringOtherApps: true)
-}
-
-@MainActor
-func saveToDirectory(_ title: String,_ url: URL?,_ pdfFileDocument: PDFFileDocument?,_ directoryURL: URL) throws -> URL? {
-    
-    guard let data = pdfFileDocument?.data else {
-        return nil
-    }
-
-    let fileName = URL.pdfFileName(title,url)
-    
-    let destination = availablePDFURL(directoryURL,fileName)
-
-    do {
-        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
-
-        try data.write(to: destination,options: .atomic)
-        
-        return destination
-    } catch {
-        throw AppError(error)
-    }
-}
-
-func availablePDFURL(_ directoryURL: URL,_ fileName: String) -> URL {
-    
-    var candidate = directoryURL.appendingPathComponent(fileName)
-    
-    var suffix = 2
-
-    while FileIO.exists(candidate) {
-        candidate = directoryURL.appendingPathComponent(URL.pdfFileName(fileName, nil,  " \(suffix)"))
-        suffix += 1
-    }
-
-    return candidate
+    return panel.runModal() == .OK ? panel.url : nil
 }
