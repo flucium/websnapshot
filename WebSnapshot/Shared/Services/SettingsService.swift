@@ -2,7 +2,7 @@ import Foundation
 import SwiftData
 
 
-final class AppearanceSettingsService {
+enum AppearanceSettingsService {
     
     static func appearance(_ settings: [AppearanceSettings]) -> AppearanceSettings.Appearance {
         settings.first?.appearance ?? .system
@@ -83,7 +83,7 @@ final class AppearanceSettingsService {
     
 }
 
-final class StorageSettingsService {
+enum StorageSettingsService {
 
     static func storage(_ settings: [StorageSettings]) -> StorageSettings.Storage {
         
