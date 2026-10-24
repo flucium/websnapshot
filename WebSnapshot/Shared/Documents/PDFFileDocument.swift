@@ -1,7 +1,7 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-final class PDFFileDocument: FileDocument {
+struct PDFFileDocument: FileDocument {
     
     static var readableContentTypes: [UTType] { [.pdf] }
 
