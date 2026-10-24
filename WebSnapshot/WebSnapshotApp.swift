@@ -27,11 +27,23 @@ final class WebSnapshotAppDelegate: NSObject, NSApplicationDelegate {
     let safariRequests: SafariRequestService
 
     override init() {
+        
         let sync = LibrarySyncService()
+        
         self.sync = sync
+        
         content = LibraryContentService(sync: sync)
-        safariRequests = SafariRequestService { url, context, onStart in
-            try await WebCaptureService.capture(url, context, sync: sync, onStart)
+        
+        safariRequests = SafariRequestService {
+            
+            url, context, onStart in
+            
+            try await WebCaptureService.capture(url, context, sync: sync, chooseDestination: { name in
+                prepareForSafariDialog()
+                
+                return savePanel(name)
+                
+            }, onStart)
         }
 
         do {
