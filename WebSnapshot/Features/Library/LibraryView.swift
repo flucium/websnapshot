@@ -36,9 +36,6 @@ struct LibraryView:View {
             
             libraryViewState.cancelTranslation()
         }
-        .onChange(of: monitoredPDFFilePaths) {
-            LibraryViewService.scheduleSynchronizeLibraryFiles(libraryViewState, modelContext, pdfFileMonitor, sync: sync)
-        }
         .onChange(of: availableTagNames) { _, names in
             if case .tag(let selectedName) = libraryViewState.selectedTag, names.contains(selectedName) == false {
                 libraryViewState.selectedTag = .all
@@ -49,7 +46,7 @@ struct LibraryView:View {
                 libraryViewState.selectedPDFRowID = nil
             }
         }
-        .task {
+        .task(id: monitoredPDFFilePaths) {
             await LibraryViewService.synchronizeLibraryFilesAfterViewUpdate(libraryViewState, modelContext, pdfFileMonitor, sync: sync)
 
             while Task.isCancelled == false {
@@ -192,7 +189,7 @@ struct LibraryView:View {
                 pdfFile.tags.contains { $0.normalizedName == name }
             }
 
-            return matchesSelectedTag && LibraryService.matches(pdfFile,libraryViewState.searchText,libraryViewState.selectedSearchMode)
+            return matchesSelectedTag && LibrarySearch.matches(pdfFile,libraryViewState.searchText,libraryViewState.selectedSearchMode)
         }
     }
 
