@@ -43,10 +43,8 @@ struct LibraryPDFView: NSViewRepresentable {
             }
         }
 
-        let data: Data
-
         do {
-            data = try Data(contentsOf: url)
+            view.document = try Self.document(Data(contentsOf: url))
         } catch {
             view.document = nil
 
@@ -57,29 +55,7 @@ struct LibraryPDFView: NSViewRepresentable {
             DispatchQueue.main.async {
                 context.coordinator.present(appError)
             }
-            
-            return
         }
-
-        let document: PDFDocument
-
-        do {
-            document = try Self.document(data)
-        } catch {
-            view.document = nil
-
-            let appError = AppError(error)
-            
-            AppLogger.record(appError, "Open PDF", url)
-
-            DispatchQueue.main.async {
-                context.coordinator.present(appError)
-            }
-            
-            return
-        }
-
-        view.document = document
     }
 
     static func document(_ data: Data) throws -> PDFDocument {
