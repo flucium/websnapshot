@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 import Combine
 import SwiftData
@@ -300,6 +301,118 @@ final class LibrarySyncServiceTests: XCTestCase {
             XCTAssertEqual(pdf.tags.map(\.name), ["Keep"])
         }
         XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: directory.path).filter { $0.hasSuffix(".pdf") }, ["Saved.pdf"])
+    }
+
+    func testTurningSyncOffImportsFixedFolderPDFsAndPreservesTagsWithoutDuplicates() async throws {
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let fixed = directory.appendingPathComponent("Fixed", isDirectory: true)
+        try FileManager.default.createDirectory(at: fixed, withIntermediateDirectories: true)
+        let container = try makeContainer()
+        let context = container.mainContext
+        let data = try makePDFData()
+        let original = fixed.appendingPathComponent("Original.pdf")
+        try data.write(to: original)
+        try LibraryService.registerPDF(context, original, sync: sync)
+        let pdf = try XCTUnwrap(context.fetch(FetchDescriptor<PDFFile>()).first)
+        let added = pdf.addedAt
+        try LibraryService.replaceTags(["Article", "Research"], pdf, context, sync: sync)
+        try StorageSettingsService.saveFixedStorage(context, fixed, sync: sync)
+        let drive = try makeDrive(directory)
+        try await sync.setEnabled(true, context, drive: drive)
+        let cloudPDF = pdf.url
+        let id = pdf.libraryID
+        let imported = fixed.appendingPathComponent("Added.PDF")
+        try data.write(to: imported)
+        try data.write(to: fixed.appendingPathComponent(".Hidden.pdf"))
+        try data.write(to: fixed.appendingPathComponent("Notes.txt"))
+        try Data("invalid PDF".utf8).write(to: fixed.appendingPathComponent("Invalid.pdf"))
+        try FileManager.default.createDirectory(at: fixed.appendingPathComponent("Folder.pdf"), withIntermediateDirectories: true)
+        let outside = directory.appendingPathComponent("Outside.pdf")
+        try data.write(to: outside)
+        try FileManager.default.createSymbolicLink(at: fixed.appendingPathComponent("Linked.pdf"), withDestinationURL: outside)
+        let state = SettingsViewState()
+
+        let succeeded = await SettingsViewService.changeSync(state, context, false, sync: sync) { _, _, _ in
+            XCTFail("Fixed storage must use the saved folder without prompting")
+            return nil
+        }
+
+        XCTAssertTrue(succeeded)
+        XCTAssertNil(state.appError)
+        XCTAssertFalse(LibrarySyncService.isEnabled(context))
+        let files = try context.fetch(FetchDescriptor<PDFFile>())
+        XCTAssertEqual(Set(files.map { $0.url.resolvingSymlinksInPath().standardizedFileURL }), Set([original, imported].map { $0.resolvingSymlinksInPath().standardizedFileURL }))
+        XCTAssertEqual(pdf.libraryID, id)
+        XCTAssertEqual(pdf.addedAt, added)
+        XCTAssertEqual(Set(pdf.tags.map(\.name)), ["Article", "Research"])
+        XCTAssertEqual(try context.fetchCount(FetchDescriptor<PDFTag>()), 2)
+        XCTAssertEqual(try Data(contentsOf: cloudPDF), data)
+        XCTAssertEqual(try Data(contentsOf: original), data)
+        XCTAssertEqual(try Data(contentsOf: imported), data)
+        let stored = ModelContext(container)
+        XCTAssertEqual(try stored.fetchCount(FetchDescriptor<PDFFile>()), 2)
+        XCTAssertEqual(try stored.fetchCount(FetchDescriptor<PDFTag>()), 2)
+
+        try await sync.setEnabled(true, context)
+        try await sync.setEnabled(false, context)
+
+        XCTAssertEqual(try context.fetchCount(FetchDescriptor<PDFFile>()), 2)
+        XCTAssertEqual(Set(pdf.tags.map(\.name)), ["Article", "Research"])
+        XCTAssertEqual(try context.fetchCount(FetchDescriptor<PDFTag>()), 2)
+    }
+
+    func testTurningSyncOffImportsConflictingFixedPDFWithoutOverwritingFilesOrTags() async throws {
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let fixed = directory.appendingPathComponent("Fixed", isDirectory: true)
+        try FileManager.default.createDirectory(at: fixed, withIntermediateDirectories: true)
+        let container = try makeContainer()
+        let context = container.mainContext
+        try StorageSettingsService.saveFixedStorage(context, fixed, sync: sync)
+        try await sync.setEnabled(true, context, drive: makeDrive(directory))
+        let data = try makePDFData()
+        let cloudPDF = try sync.savePDF(data, "Article.pdf", context)
+        let pdf = try XCTUnwrap(context.fetch(FetchDescriptor<PDFFile>()).first)
+        let id = pdf.libraryID
+        try LibraryService.replaceTags(["Research"], pdf, context, sync: sync)
+        let local = fixed.appendingPathComponent("Article.pdf")
+        let localData = data + Data("\n% Local copy".utf8)
+        try localData.write(to: local)
+
+        try await sync.setEnabled(false, context)
+
+        let files = try context.fetch(FetchDescriptor<PDFFile>())
+        XCTAssertEqual(files.count, 2)
+        XCTAssertEqual(pdf.url.resolvingSymlinksInPath().standardizedFileURL, fixed.appendingPathComponent("Article 2.pdf").resolvingSymlinksInPath().standardizedFileURL)
+        XCTAssertEqual(pdf.libraryID, id)
+        XCTAssertEqual(pdf.tags.map(\.name), ["Research"])
+        XCTAssertEqual(try Data(contentsOf: pdf.resolveURL()), data)
+        XCTAssertEqual(try Data(contentsOf: cloudPDF), data)
+        XCTAssertEqual(try Data(contentsOf: local), localData)
+        let imported = try XCTUnwrap(files.first { $0.url.resolvingSymlinksInPath().standardizedFileURL == local.resolvingSymlinksInPath().standardizedFileURL })
+        XCTAssertTrue(imported.tags.isEmpty)
+        XCTAssertNil(imported.syncRelativePath)
+    }
+
+    func testTurningSyncOffDoesNotImportUnregisteredPDFsForFlexibility() async throws {
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let container = try makeContainer()
+        let context = container.mainContext
+        try await sync.setEnabled(true, context, drive: makeDrive(directory))
+        let destination = directory.appendingPathComponent("Selected", isDirectory: true)
+        try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
+        let data = try makePDFData()
+        let unrelated = destination.appendingPathComponent("Unrelated.pdf")
+        try data.write(to: unrelated)
+        _ = try sync.savePDF(data, "Synced.pdf", context)
+
+        try await sync.setEnabled(false, context, localRoot: destination)
+
+        XCTAssertEqual(try context.fetch(FetchDescriptor<PDFFile>()).map(\.url), [destination.appendingPathComponent("Synced.pdf")])
+        XCTAssertEqual(try Data(contentsOf: unrelated), data)
+        XCTAssertEqual(try LibrarySyncService.settings(context)?.storage, .flexibility)
     }
 
     func testTurningSyncOffAsksForFolderAndPreservesFlexibility() async throws {
@@ -633,6 +746,17 @@ final class LibrarySyncServiceTests: XCTestCase {
         XCTAssertEqual(saved.syncDrivePath, drive.path)
         XCTAssertNil(saved.syncDriveBookmarkData)
         XCTAssertNil(saved.syncFolderBookmarkData)
+    }
+
+    private func makePDFData() throws -> Data {
+        let data = NSMutableData()
+        var box = CGRect(x: 0, y: 0, width: 100, height: 100)
+        let consumer = try XCTUnwrap(CGDataConsumer(data: data))
+        let context = try XCTUnwrap(CGContext(consumer: consumer, mediaBox: &box, nil))
+        context.beginPDFPage(nil)
+        context.endPDFPage()
+        context.closePDF()
+        return data as Data
     }
 
     private func makeDrive(_ directory: URL) throws -> URL {
