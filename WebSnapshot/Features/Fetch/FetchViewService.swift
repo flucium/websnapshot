@@ -66,17 +66,14 @@ final class FetchViewService {
             }
             
             do {
-                let document = try await WebService.export(page)
+                let document = try await WebPDFService.export(page)
 
                 try Task.checkCancellation()
                 
                 guard state.isCurrentSave(requestID), state.webPage === page else {
                     return
                 }
-        
-                state.pdfFileDocument = document
-
-                guard try WebCaptureService.save(document,page.title,page.url,modelContext,storageSettings, sync: sync) != nil else {
+                guard try LibraryService.savePDF(document.data, URL.pdfFileName(page.title, page.url), modelContext, storageSettings, sync: sync, chooseDestination: savePanel) != nil else {
                     return
                 }
 
