@@ -42,6 +42,7 @@ final class LibraryViewService {
     }
 
     static func importPDFs(_ state: LibraryViewState, _ modelContext: ModelContext, _ sourceURLs: [URL], _ destinationDirectory: URL, sync: LibrarySyncService) {
+        
         guard sourceURLs.isEmpty == false else {
             return
         }
@@ -132,7 +133,11 @@ final class LibraryViewService {
             do {
                 try Task.checkCancellation()
 
-                let text = try await LibraryService.textForTranslation(request.url, request.pageIndex)
+                let text = try await PDFContentService().text(request.url, pageIndex: request.pageIndex)
+
+                guard !text.isEmpty else {
+                    throw AppError.textRecognitionFailed("No text was found on the displayed PDF page.")
+                }
 
                 try Task.checkCancellation()
 
@@ -270,7 +275,7 @@ final class LibraryViewService {
         do {
             let pdfFiles = try modelContext.fetch(FetchDescriptor<PDFFile>())
 
-            try PDFFileService.deleteMissingFiles(modelContext, pdfFiles, sync: sync, confirmedDeletedFileIDs)
+            try LibraryService.deleteMissingFiles(modelContext, pdfFiles, sync: sync, confirmedDeletedFileIDs)
 
             let existingPDFFiles = try modelContext.fetch(FetchDescriptor<PDFFile>()).filter {
                 $0.availability != .missing
@@ -347,15 +352,6 @@ final class LibraryViewService {
             await Task.yield()
 
             state.selectedPDFFile = nil
-        }
-    }
-
-    static func scheduleSynchronizeLibraryFiles(_ state: LibraryViewState, _ modelContext: ModelContext, _ monitor: LibraryPDFFileMonitor, sync: LibrarySyncService) {
-        Task {
-
-            @MainActor in
-
-            await synchronizeLibraryFilesAfterViewUpdate(state, modelContext, monitor, sync: sync)
         }
     }
 
