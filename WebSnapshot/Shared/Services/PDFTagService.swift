@@ -1,7 +1,7 @@
 import Foundation
 import SwiftData
 
-final class PDFTagService {
+enum PDFTagService {
     nonisolated static func displayName(_ input: String) -> String {
         PDFTagName.display(input)
     }
@@ -17,7 +17,7 @@ final class PDFTagService {
     static func addingTag(_ input: String, _ tagNames: [String]) -> [String] {
         let name = displayName(input)
 
-        guard name.isEmpty == false, containsTag(name,  tagNames) == false else {
+        guard name.isEmpty == false, containsTag(name, tagNames) == false else {
             return tagNames
         }
 
@@ -25,7 +25,7 @@ final class PDFTagService {
     }
 
     static func togglingTag(_ name: String, _ tagNames: [String]) -> [String] {
-        if containsTag(name,  tagNames) {
+        if containsTag(name, tagNames) {
             return removingTag(name, tagNames)
         }
 
@@ -33,7 +33,7 @@ final class PDFTagService {
     }
 
     static func removingTag(_ name: String, _ tagNames: [String]) -> [String] {
-        
+
         let targetNormalizedName = normalizedName(name)
 
         return tagNames.filter {
@@ -49,111 +49,94 @@ final class PDFTagService {
         }
     }
 
-    static func replaceTags(_ names: [String], _ pdfFile: PDFFile, _ modelContext: ModelContext, sync: LibrarySyncService ) throws {
-        
-        try sync.requireReady()
-        
-        guard pdfFile.modelContext != nil, !pdfFile.isDeleted else {
-            throw AppError.error("This PDF is no longer in the library.")
+    static func replaceTags(_ names: [String], _ pdfFile: PDFFile, _ modelContext: ModelContext) throws {
+        var storedTags = try tagsByName(modelContext)
+
+        let selectedTags = resolveTags(names, modelContext, &storedTags)
+
+        let selectedNames = Set(selectedTags.map(\.normalizedName))
+
+        let orphanedTags = pdfFile.tags.filter {
+            tag in
+
+            selectedNames.contains(tag.normalizedName) == false && tag.pdfFiles.allSatisfy {
+                $0 === pdfFile
+            }
+
         }
-        
-        let previousNames = tagNames(pdfFile.tags)
-        
-        let requestedTags = uniqueTags(names)
 
-        do {
-            
-            let storedTags = try fetch(modelContext)
-            
-            let storedTagsByName = Dictionary( storedTags.map {
-                ($0.normalizedName, $0)
-            }, uniquingKeysWith: {
-                first,
-                _ in first
-            } )
+        pdfFile.tags = selectedTags
 
-            let selectedTags: [PDFTag] = requestedTags.map {
-               
-                requestedTag -> PDFTag in
-                
-                if let storedTag = storedTagsByName[requestedTag.normalizedName] {
-                    return storedTag
-                }
+        for tag in orphanedTags {
+            modelContext.delete(tag)
+        }
 
-                let tag = PDFTag( requestedTag.name, normalizedName: requestedTag.normalizedName)
-                
-                modelContext.insert(tag)
-                
-                return tag
-                
-            }
-            .sorted {
-                
-                $0.name.localizedStandardCompare($1.name) == .orderedAscending
-            
+    }
+
+    static func tagsByName(_ modelContext: ModelContext) throws -> [String: PDFTag] {
+        Dictionary(try modelContext.fetch(FetchDescriptor<PDFTag>()).map {
+            ($0.normalizedName, $0)
+        }, uniquingKeysWith: {
+            first, _ in first
+        })
+    }
+
+    static func resolveTags(_ names: [String], _ modelContext: ModelContext, _ storedTags: inout [String: PDFTag]) -> [PDFTag] {
+        uniqueTags(names).map {
+            requestedTag in
+
+            if let storedTag = storedTags[requestedTag.normalizedName] {
+                return storedTag
             }
 
-            let selectedNames = Set(selectedTags.map(\.normalizedName))
-            
-            let orphanedTags = pdfFile.tags.filter { tag in
-                
-                selectedNames.contains(tag.normalizedName) == false && tag.pdfFiles.allSatisfy {
-                    $0 === pdfFile
-                }
-                
-            }
+            let tag = PDFTag(requestedTag.name, normalizedName: requestedTag.normalizedName)
 
-            pdfFile.tags = selectedTags
+            modelContext.insert(tag)
 
-            for tag in orphanedTags {
-                modelContext.delete(tag)
-            }
+            storedTags[requestedTag.normalizedName] = tag
 
-            try sync.queueTags( tagNames(selectedTags), previous: previousNames, pdfFile, modelContext)
-            
-            try modelContext.save()
-            
-        } catch {
-            modelContext.rollback()
-            
-            throw AppError.system("The tags could not be saved.", error.localizedDescription, error)
+            return tag
+        }
+        .sorted {
+            $0.name.localizedStandardCompare($1.name) == .orderedAscending
         }
     }
 
     static func deleteTagsOrphanedByDeleting(_ pdfFiles: [PDFFile], _ modelContext: ModelContext) {
-        
-        let deletedPDFFileIDs = Set( pdfFiles.map(\.persistentModelID) )
-        
+
+        let deletedPDFFileIDs = Set(pdfFiles.map(\.persistentModelID))
+
         var tagsByID: [PersistentIdentifier: PDFTag] = [:]
 
         for tag in pdfFiles.flatMap(\.tags) {
-            
+
             tagsByID[tag.persistentModelID] = tag
-        
+
         }
 
-        for tag in tagsByID.values where tag.pdfFiles.allSatisfy({
-            
+        for tag in tagsByID.values
+        where tag.pdfFiles.allSatisfy({
+
             deletedPDFFileIDs.contains($0.persistentModelID)
-            
+
         }) {
-        
+
             modelContext.delete(tag)
-        
+
         }
-        
+
     }
 
     private static func uniqueTags(_ names: [String]) -> [(name: String, normalizedName: String)] {
-        
+
         var encounteredNames = Set<String>()
 
         return names.compactMap {
-            
+
             input in
-            
+
             let name = displayName(input)
-            
+
             let normalizedName = normalizedName(name)
 
             guard normalizedName.isEmpty == false, encounteredNames.insert(normalizedName).inserted else {
@@ -162,10 +145,6 @@ final class PDFTagService {
 
             return (name, normalizedName)
         }
-    }
-
-    private static func fetch(_ modelContext: ModelContext) throws -> [PDFTag] {
-        try modelContext.fetch( FetchDescriptor<PDFTag>() )
     }
 
     private static func sortedTagNames(_ tagNames: [String]) -> [String] {
