@@ -98,4 +98,24 @@ final class FileIO{
             throw AppError(error)
         }
     }
+    
+    static func moveToTrash(_ url:URL) throws{
+        
+        let isAccessing = url.startAccessingSecurityScopedResource()
+        
+        defer{
+            if isAccessing{
+                url.stopAccessingSecurityScopedResource()
+            }
+        }
+        
+        do{
+            var trashedURL:NSURL?;
+            
+            try FileManager.default.trashItem(at: url, resultingItemURL: &trashedURL)
+            
+        } catch{
+            throw AppError(error)
+        }
+    }
 }
