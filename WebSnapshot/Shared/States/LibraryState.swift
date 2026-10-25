@@ -1,4 +1,11 @@
 @MainActor
+struct LibrarySyncState {
+    var isSwitching = false
+
+    var lastError: AppError?
+}
+
+@MainActor
 struct LibraryContentState {
     var isIndexing = false
 
