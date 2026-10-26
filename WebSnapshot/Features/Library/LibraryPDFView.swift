@@ -3,11 +3,11 @@ import PDFKit
 
 struct LibraryPDFView: NSViewRepresentable {
     
-    @ObservedObject var libraryState: LibraryState
+    @ObservedObject var libraryState: LibraryViewState
     
     let url: URL
     
-    init(_ url: URL,_ libraryState: LibraryState) {
+    init(_ url: URL,_ libraryState: LibraryViewState) {
         self.url = url
         self.libraryState = libraryState
     }
@@ -73,13 +73,13 @@ struct LibraryPDFView: NSViewRepresentable {
     }
 
     final class Coordinator: NSObject {
-        weak var libraryState: LibraryState?
+        weak var libraryState: LibraryViewState?
         
         var loadedURL: URL?
         
         var lastPageIndex: Int?
 
-        init(_ libraryState: LibraryState) {
+        init(_ libraryState: LibraryViewState) {
             self.libraryState = libraryState
         }
 

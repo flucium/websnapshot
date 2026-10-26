@@ -4,13 +4,19 @@ import Translation
 import SwiftData
 
 @MainActor
-final class LibraryViewState:LibraryState{
+final class LibraryViewState:ObservableObject{
 
     enum TagSelection: Hashable {
         case all
         case untagged
         case tag(String)
     }
+    
+    @Published var appError:AppError?
+
+    @Published var errorTitle = "Library Operation Could Not Be Completed"
+
+    @Published var currentPageIndex = 0
     
     @Published var searchText:String = String()
     
