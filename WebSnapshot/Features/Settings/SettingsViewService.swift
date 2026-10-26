@@ -21,7 +21,7 @@ final class SettingsViewService {
                     
                 } else {
                     
-                    guard let selected = chooseDirectory(SyncIndexStore.defaultCloudDriveURL, "Allow Access to iCloud Drive", "Enable Sync") else {
+                    guard let selected = chooseDirectory(SyncFileStore.defaultCloudDriveURL, "Allow Access to iCloud Drive", "Enable Sync") else {
                         return false
                     }
                     try await sync.setEnabled(true, context, drive: selected)
@@ -63,7 +63,7 @@ final class SettingsViewService {
 
     static func reconnectSync(_ state: SettingsViewState, _ context: ModelContext, sync: LibrarySyncService) {
         
-        guard let selected = directoryPanel(SyncIndexStore.defaultCloudDriveURL, "Reconnect iCloud Drive", "Reconnect") else {
+        guard let selected = directoryPanel(SyncFileStore.defaultCloudDriveURL, "Reconnect iCloud Drive", "Reconnect") else {
             return
         }
         
