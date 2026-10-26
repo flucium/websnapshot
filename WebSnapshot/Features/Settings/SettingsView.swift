@@ -132,8 +132,8 @@ struct SettingsView: View {
     }
     
   
-    @ViewBuilder
-    func appearanceView() -> some View{
+    
+    private func appearanceView() -> some View{
         HStack(alignment: .top, spacing: 16) {
         
             Image(systemName: "circle.lefthalf.filled")
@@ -191,8 +191,8 @@ struct SettingsView: View {
 
     }
     
-    @ViewBuilder
-    func icloudSyncView() -> some View{
+    
+    private func icloudSyncView() -> some View{
         HStack(alignment: .top, spacing: 16) {
             Image(systemName: "icloud")
                 .font(.system(size: 18, weight: .semibold))
@@ -256,8 +256,8 @@ struct SettingsView: View {
     }
     
     
-    @ViewBuilder
-    func storageView() -> some View{
+    
+    private func storageView() -> some View{
         HStack(alignment: .top, spacing: 16) {
             
             Image(systemName: "folder")
@@ -331,8 +331,8 @@ struct SettingsView: View {
         }
     }
     
-    @ViewBuilder
-    func refreshCacheView() -> some View{
+    
+    private func refreshCacheView() -> some View{
         HStack(alignment: .top, spacing: 16) {
             Image(systemName: "arrow.clockwise")
                 .font(.system(size: 18, weight: .semibold))
