@@ -10,7 +10,7 @@ struct HomeView: View {
     
     @Query private var appearanceSettings: [AppearanceSettings]
     
-    private var syncState: LibrarySyncState { sync.state }
+    private var librarySyncState: LibrarySyncState { sync.state }
 
     private var appearance: AppearanceSettings.Appearance {
         appearance(appearanceSettings)
@@ -73,7 +73,7 @@ struct HomeView: View {
         .onAppear {
             updateApplicationAppearance(appearance)
         }
-        .disabled(syncState.isSwitching)
+        .disabled(librarySyncState.isSwitching)
         .onChange(of: appearance) {
             _, changedAppearance in
             updateApplicationAppearance(changedAppearance)
