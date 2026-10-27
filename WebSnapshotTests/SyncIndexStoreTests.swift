@@ -50,7 +50,7 @@ nonisolated final class SyncIndexStoreTests: XCTestCase {
             let added = Date(timeIntervalSince1970: 123)
             let id = UUID()
             let local = SyncLocalPDF(id: id, url: source, addedAt: added, tagNames: ["Article"], sharedHash: nil)
-            let index = try store.prepareEnable([local], UUID(), 0)
+            let index = try SyncMigration(root: store.root).prepareEnable([local], UUID(), 0)
             let entry = try XCTUnwrap(index.files.first)
             let location = try XCTUnwrap(entry.location)
             XCTAssertEqual(entry.id, id)
@@ -58,7 +58,7 @@ nonisolated final class SyncIndexStoreTests: XCTestCase {
             XCTAssertEqual(entry.tags?.names, ["Article"])
             XCTAssertFalse(location.relativePath.hasPrefix("/"))
             XCTAssertEqual(try Data(contentsOf: source), Data("fixture".utf8))
-            XCTAssertEqual(try Data(contentsOf: store.fileURL(location.relativePath)), Data("fixture".utf8))
+            XCTAssertEqual(try Data(contentsOf: SyncFileStore(root: store.root).fileURL(location.relativePath)), Data("fixture".utf8))
             XCTAssertEqual(try store.load(), index)
             XCTAssertEqual(try SyncIndex.decode(Data(contentsOf: store.root.appendingPathComponent("index.json"))), index)
         }
@@ -71,13 +71,13 @@ nonisolated final class SyncIndexStoreTests: XCTestCase {
             let store = SyncIndexStore(root: directory.appendingPathComponent("websnapshot"))
             let id = UUID()
             var local = SyncLocalPDF(id: id, url: source, addedAt: nil, tagNames: ["Original"], sharedHash: nil)
-            let initial = try store.prepareEnable([local], UUID(), 0)
+            let initial = try SyncMigration(root: store.root).prepareEnable([local], UUID(), 0)
             local.sharedHash = initial.files.first?.location?.contentHash
             local.baselineTags = ["Original"]
             let remote = SyncPDFRecord(id: id, location: nil,
                                        tags: SyncPDFTags(editing: ["Original", "Remote"], previous: ["Original"], stamp(10)), deleted: nil)
             try store.publish(SyncIndex(files: [remote]))
-            let index = try store.prepareEnable([local], UUID(), 1)
+            let index = try SyncMigration(root: store.root).prepareEnable([local], UUID(), 1)
             XCTAssertEqual(Set(index.files[0].tags?.names ?? []), ["Original", "Remote"])
             XCTAssertEqual(index.files[0].location?.relativePath, initial.files[0].location?.relativePath)
         }
@@ -90,13 +90,13 @@ nonisolated final class SyncIndexStoreTests: XCTestCase {
             let store = SyncIndexStore(root: directory.appendingPathComponent("websnapshot"))
             let id = UUID()
             var local = SyncLocalPDF(id: id, url: source, addedAt: nil, tagNames: ["Original"], sharedHash: nil)
-            _ = try store.prepareEnable([local], UUID(), 0)
+            _ = try SyncMigration(root: store.root).prepareEnable([local], UUID(), 0)
             local.baselineTags = ["Original"]
             local.tagNames = ["Original", "Offline"]
             let remote = SyncPDFRecord(id: id, location: nil,
                                        tags: SyncPDFTags(editing: ["Original", "Remote"], previous: ["Original"], stamp(10)), deleted: nil)
             try store.publish(SyncIndex(files: [remote]))
-            let index = try store.prepareEnable([local], UUID(), 1)
+            let index = try SyncMigration(root: store.root).prepareEnable([local], UUID(), 1)
             XCTAssertEqual(Set(index.files[0].tags?.names ?? []), ["Original", "Remote", "Offline"])
         }
     }
@@ -107,10 +107,10 @@ nonisolated final class SyncIndexStoreTests: XCTestCase {
             try Data("fixture".utf8).write(to: source)
             let store = SyncIndexStore(root: directory.appendingPathComponent("websnapshot"))
             let id = UUID()
-            _ = try store.prepareEnable([SyncLocalPDF(id: id, url: source, addedAt: nil, tagNames: [], sharedHash: nil)], UUID(), 0)
-            let (index, urls) = try store.prepareDisable(SyncIndex(), directory.appendingPathComponent("local"))
+            _ = try SyncMigration(root: store.root).prepareEnable([SyncLocalPDF(id: id, url: source, addedAt: nil, tagNames: [], sharedHash: nil)], UUID(), 0)
+            let (index, urls) = try SyncMigration(root: store.root).prepareDisable(SyncIndex(), directory.appendingPathComponent("local"))
             let local = try XCTUnwrap(urls[id])
-            let cloud = try store.fileURL(XCTUnwrap(index.files[0].location).relativePath)
+            let cloud = try SyncFileStore(root: store.root).fileURL(XCTUnwrap(index.files[0].location).relativePath)
             XCTAssertNotEqual(local, cloud)
             XCTAssertEqual(try Data(contentsOf: local), try Data(contentsOf: cloud))
             XCTAssertTrue(FileManager.default.fileExists(atPath: cloud.path))
@@ -123,7 +123,7 @@ nonisolated final class SyncIndexStoreTests: XCTestCase {
             let index = SyncIndex(files: [record(UUID(), counter: 1)])
             try store.publish(index)
             try store.writeSnapshot(index)
-            XCTAssertThrowsError(try store.prepareDisable(SyncIndex(), directory.appendingPathComponent("local")))
+            XCTAssertThrowsError(try SyncMigration(root: store.root).prepareDisable(SyncIndex(), directory.appendingPathComponent("local")))
             XCTAssertEqual(try store.load(), index)
         }
     }
@@ -136,7 +136,7 @@ nonisolated final class SyncIndexStoreTests: XCTestCase {
             try store.publish(index)
             let destination = directory.appendingPathComponent("local")
 
-            XCTAssertThrowsError(try store.prepareDisable(SyncIndex(), destination)) {
+            XCTAssertThrowsError(try SyncMigration(root: store.root).prepareDisable(SyncIndex(), destination)) {
                 XCTAssertEqual($0 as? SyncStoreError, .invalidIndex)
             }
 
@@ -152,7 +152,7 @@ nonisolated final class SyncIndexStoreTests: XCTestCase {
             let index = SyncIndex(files: [deleted])
             try store.publish(index)
 
-            let (copied, urls) = try store.prepareDisable(SyncIndex(), directory.appendingPathComponent("local"))
+            let (copied, urls) = try SyncMigration(root: store.root).prepareDisable(SyncIndex(), directory.appendingPathComponent("local"))
 
             XCTAssertEqual(copied, index)
             XCTAssertTrue(urls.isEmpty)
@@ -169,14 +169,14 @@ nonisolated final class SyncIndexStoreTests: XCTestCase {
             let pdfs = (0..<2).map { _ in
                 SyncLocalPDF(id: UUID(), url: source, addedAt: nil, tagNames: [], sharedHash: nil)
             }
-            _ = try store.prepareEnable(pdfs, UUID(), 0)
+            _ = try SyncMigration(root: store.root).prepareEnable(pdfs, UUID(), 0)
             let destination = directory.appendingPathComponent("local", isDirectory: true)
             try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
             let existing = destination.appendingPathComponent("abcd.pdf")
             let original = Data("existing PDF".utf8)
             try original.write(to: existing)
 
-            let (_, urls) = try store.prepareDisable(SyncIndex(), destination)
+            let (_, urls) = try SyncMigration(root: store.root).prepareDisable(SyncIndex(), destination)
 
             XCTAssertEqual(Set(urls.values.map(\.lastPathComponent)), ["abcd 2.pdf", "abcd 3.pdf"])
             for url in urls.values {
@@ -185,7 +185,7 @@ nonisolated final class SyncIndexStoreTests: XCTestCase {
             }
             XCTAssertEqual(try Data(contentsOf: existing), original)
 
-            let (_, repeatedURLs) = try store.prepareDisable(SyncIndex(), destination)
+            let (_, repeatedURLs) = try SyncMigration(root: store.root).prepareDisable(SyncIndex(), destination)
             XCTAssertEqual(repeatedURLs, urls)
             XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: destination.path).sorted(), ["abcd 2.pdf", "abcd 3.pdf", "abcd.pdf"])
         }
@@ -198,15 +198,15 @@ nonisolated final class SyncIndexStoreTests: XCTestCase {
             try contents.write(to: source)
             let store = SyncIndexStore(root: directory.appendingPathComponent("websnapshot"))
             let pdf = SyncLocalPDF(id: UUID(), url: source, addedAt: nil, tagNames: ["Keep"], sharedHash: nil)
-            _ = try store.prepareEnable([pdf], UUID(), 0)
+            _ = try SyncMigration(root: store.root).prepareEnable([pdf], UUID(), 0)
 
-            let (index, urls) = try store.prepareDisable(SyncIndex(), directory)
+            let (index, urls) = try SyncMigration(root: store.root).prepareDisable(SyncIndex(), directory)
 
             XCTAssertEqual(urls[pdf.id], source)
             XCTAssertEqual(index.files.first?.tags?.names, ["Keep"])
             XCTAssertEqual(try Data(contentsOf: source), contents)
             XCTAssertFalse(FileManager.default.fileExists(atPath: directory.appendingPathComponent("abcd 2.pdf").path))
-            let cloud = try store.fileURL(XCTUnwrap(index.files.first?.location).relativePath)
+            let cloud = try SyncFileStore(root: store.root).fileURL(XCTUnwrap(index.files.first?.location).relativePath)
             XCTAssertEqual(try Data(contentsOf: cloud), contents)
         }
     }
@@ -217,11 +217,11 @@ nonisolated final class SyncIndexStoreTests: XCTestCase {
             try Data("synced PDF".utf8).write(to: source)
             let store = SyncIndexStore(root: directory.appendingPathComponent("websnapshot"))
             let pdf = SyncLocalPDF(id: UUID(), url: source, addedAt: nil, tagNames: [], sharedHash: nil)
-            _ = try store.prepareEnable([pdf], UUID(), 0)
+            _ = try SyncMigration(root: store.root).prepareEnable([pdf], UUID(), 0)
             try Data("local edit".utf8).write(to: source)
 
-            let (_, firstURLs) = try store.prepareDisable(SyncIndex(), directory)
-            let (_, secondURLs) = try store.prepareDisable(SyncIndex(), directory)
+            let (_, firstURLs) = try SyncMigration(root: store.root).prepareDisable(SyncIndex(), directory)
+            let (_, secondURLs) = try SyncMigration(root: store.root).prepareDisable(SyncIndex(), directory)
 
             XCTAssertEqual(firstURLs[pdf.id], directory.appendingPathComponent("abcd 2.pdf"))
             XCTAssertEqual(secondURLs, firstURLs)
@@ -240,16 +240,16 @@ nonisolated final class SyncIndexStoreTests: XCTestCase {
             let pdfs = (1...2).map {
                 SyncLocalPDF(id: UUID(uuidString: "00000000-0000-0000-0000-00000000000\($0)")!, url: source, addedAt: nil, tagNames: [], sharedHash: nil)
             }
-            let index = try store.prepareEnable(pdfs, UUID(), 0)
-            let missing = try store.fileURL(XCTUnwrap(index.files.last?.location).relativePath)
+            let index = try SyncMigration(root: store.root).prepareEnable(pdfs, UUID(), 0)
+            let missing = try SyncFileStore(root: store.root).fileURL(XCTUnwrap(index.files.last?.location).relativePath)
             try FileManager.default.removeItem(at: missing)
             let destination = directory.appendingPathComponent("local", isDirectory: true)
 
-            XCTAssertThrowsError(try store.prepareDisable(SyncIndex(), destination))
+            XCTAssertThrowsError(try SyncMigration(root: store.root).prepareDisable(SyncIndex(), destination))
             XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: destination.path), ["abcd.pdf"])
             try contents.write(to: missing)
 
-            let (_, urls) = try store.prepareDisable(SyncIndex(), destination)
+            let (_, urls) = try SyncMigration(root: store.root).prepareDisable(SyncIndex(), destination)
 
             XCTAssertEqual(urls[pdfs[0].id], destination.appendingPathComponent("abcd.pdf"))
             XCTAssertEqual(urls[pdfs[1].id], destination.appendingPathComponent("abcd 2.pdf"))
@@ -264,13 +264,13 @@ nonisolated final class SyncIndexStoreTests: XCTestCase {
             try contents.write(to: source)
             let store = SyncIndexStore(root: directory.appendingPathComponent("websnapshot"))
             var local = SyncLocalPDF(id: UUID(), url: source, addedAt: nil, tagNames: [], sharedHash: nil)
-            let initial = try store.prepareEnable([local], UUID(), 0)
+            let initial = try SyncMigration(root: store.root).prepareEnable([local], UUID(), 0)
             let location = try XCTUnwrap(initial.files.first?.location)
-            let cloudPDF = try store.fileURL(location.relativePath)
+            let cloudPDF = try SyncFileStore(root: store.root).fileURL(location.relativePath)
             local.sharedHash = location.contentHash
             try FileManager.default.removeItem(at: cloudPDF)
 
-            let restored = try store.prepareEnable([local], UUID(), initial.counter)
+            let restored = try SyncMigration(root: store.root).prepareEnable([local], UUID(), initial.counter)
 
             XCTAssertEqual(restored.files.first?.location, location)
             XCTAssertEqual(try Data(contentsOf: cloudPDF), contents)
@@ -283,18 +283,18 @@ nonisolated final class SyncIndexStoreTests: XCTestCase {
             try Data("original".utf8).write(to: source)
             let store = SyncIndexStore(root: directory.appendingPathComponent("websnapshot"))
             var local = SyncLocalPDF(id: UUID(), url: source, addedAt: nil, tagNames: [], sharedHash: nil)
-            let initial = try store.prepareEnable([local], UUID(), 0)
+            let initial = try SyncMigration(root: store.root).prepareEnable([local], UUID(), 0)
             local.sharedHash = initial.files.first?.location?.contentHash
             let remote = directory.appendingPathComponent("remote.pdf")
             try Data("remote edit".utf8).write(to: remote)
             let changed = SyncLocalPDF(id: local.id, url: remote, addedAt: nil, tagNames: [], sharedHash: nil)
-            let updated = try store.prepareEnable([changed], UUID(), initial.counter)
+            let updated = try SyncMigration(root: store.root).prepareEnable([changed], UUID(), initial.counter)
 
-            let restored = try store.prepareEnable([local], UUID(), initial.counter)
+            let restored = try SyncMigration(root: store.root).prepareEnable([local], UUID(), initial.counter)
 
             let location = try XCTUnwrap(restored.files.first?.location)
             XCTAssertEqual(location, updated.files.first?.location)
-            XCTAssertEqual(try Data(contentsOf: store.fileURL(location.relativePath)), Data("remote edit".utf8))
+            XCTAssertEqual(try Data(contentsOf: SyncFileStore(root: store.root).fileURL(location.relativePath)), Data("remote edit".utf8))
         }
     }
 
@@ -303,7 +303,7 @@ nonisolated final class SyncIndexStoreTests: XCTestCase {
             let url = directory.appendingPathComponent("index.json")
             let malformed = Data("{broken".utf8)
             try malformed.write(to: url)
-            XCTAssertThrowsError(try SyncIndexStore(root: directory).prepareEnable([], UUID(), 0))
+            XCTAssertThrowsError(try SyncMigration(root: directory).prepareEnable([], UUID(), 0))
             XCTAssertEqual(try Data(contentsOf: url), malformed)
         }
     }
@@ -320,7 +320,7 @@ nonisolated final class SyncIndexStoreTests: XCTestCase {
             let store = SyncIndexStore(root: directory)
             // A plain temporary directory cannot materialize an iCloud item.
             // It must fail safely instead of creating a replacement index.
-            XCTAssertThrowsError(try store.prepareEnable([], UUID(), 0))
+            XCTAssertThrowsError(try SyncMigration(root: store.root).prepareEnable([], UUID(), 0))
             XCTAssertFalse(FileManager.default.fileExists(atPath: directory.appendingPathComponent("index.json").path))
             XCTAssertEqual(try Data(contentsOf: placeholder), contents)
         }
@@ -341,21 +341,21 @@ nonisolated final class SyncIndexStoreTests: XCTestCase {
             try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
             let store = SyncIndexStore(root: root)
             for path in ["../outside.pdf", "/tmp/outside.pdf", "PDFs/../../outside.pdf", "PDFs//file.pdf", "index.json"] {
-                XCTAssertThrowsError(try store.fileURL(path))
+                XCTAssertThrowsError(try SyncFileStore(root: store.root).fileURL(path))
             }
             try FileManager.default.createSymbolicLink(at: root.appendingPathComponent("link"), withDestinationURL: directory)
-            XCTAssertThrowsError(try store.fileURL("link/outside.pdf"))
+            XCTAssertThrowsError(try SyncFileStore(root: store.root).fileURL("link/outside.pdf"))
         }
     }
 
     func testFolderMustBeLowercaseAndDirectlyInICloudDrive() throws {
         let drive = URL(fileURLWithPath: "/private/tmp/Mobile Documents/com~apple~CloudDocs", isDirectory: true)
         let expected = drive.appendingPathComponent("websnapshot", isDirectory: true)
-        XCTAssertEqual(try SyncIndexStore.cloudFolder(drive), expected)
-        XCTAssertEqual(try SyncIndexStore.cloudFolder(expected), expected)
-        XCTAssertThrowsError(try SyncIndexStore.cloudFolder(drive.appendingPathComponent("WebSnapshot")))
-        XCTAssertThrowsError(try SyncIndexStore.cloudFolder(drive.appendingPathComponent("Other/websnapshot")))
-        XCTAssertThrowsError(try SyncIndexStore.cloudFolder(URL(fileURLWithPath: "/tmp/websnapshot")))
+        XCTAssertEqual(try SyncFileStore.cloudFolder(drive), expected)
+        XCTAssertEqual(try SyncFileStore.cloudFolder(expected), expected)
+        XCTAssertThrowsError(try SyncFileStore.cloudFolder(drive.appendingPathComponent("WebSnapshot")))
+        XCTAssertThrowsError(try SyncFileStore.cloudFolder(drive.appendingPathComponent("Other/websnapshot")))
+        XCTAssertThrowsError(try SyncFileStore.cloudFolder(URL(fileURLWithPath: "/tmp/websnapshot")))
     }
 
     func testExistingFolderIsNormalizedToLowercaseWithoutLosingFiles() throws {
@@ -364,7 +364,7 @@ nonisolated final class SyncIndexStoreTests: XCTestCase {
             let uppercase = drive.appendingPathComponent("WebSnapshot", isDirectory: true)
             try FileManager.default.createDirectory(at: uppercase, withIntermediateDirectories: true)
             try Data("fixture".utf8).write(to: uppercase.appendingPathComponent("abcd.pdf"))
-            let folder = try SyncIndexStore.prepareCloudFolder(drive)
+            let folder = try SyncFileStore.prepareCloudFolder(drive)
             XCTAssertEqual(folder.lastPathComponent, "websnapshot")
             let names = try FileManager.default.contentsOfDirectory(atPath: drive.path)
             XCTAssertTrue(names.contains("websnapshot"))
@@ -375,10 +375,10 @@ nonisolated final class SyncIndexStoreTests: XCTestCase {
 
     func testDrivePermissionMustReferToRootInsteadOfLibraryFolder() throws {
         let drive = URL(fileURLWithPath: "/private/tmp/Mobile Documents/com~apple~CloudDocs", isDirectory: true)
-        XCTAssertEqual(try SyncIndexStore.cloudDrive(drive), drive)
-        XCTAssertThrowsError(try SyncIndexStore.cloudDrive(drive.appendingPathComponent("websnapshot")))
-        XCTAssertThrowsError(try SyncIndexStore.cloudDrive(drive.appendingPathComponent("Other")))
-        XCTAssertThrowsError(try SyncIndexStore.cloudDrive(URL(fileURLWithPath: "/tmp")))
+        XCTAssertEqual(try SyncFileStore.cloudDrive(drive), drive)
+        XCTAssertThrowsError(try SyncFileStore.cloudDrive(drive.appendingPathComponent("websnapshot")))
+        XCTAssertThrowsError(try SyncFileStore.cloudDrive(drive.appendingPathComponent("Other")))
+        XCTAssertThrowsError(try SyncFileStore.cloudDrive(URL(fileURLWithPath: "/tmp")))
     }
 
     func testReenableRecreatesRemovedLibraryFromDriveBookmarkAndLocalCopy() throws {
@@ -386,14 +386,14 @@ nonisolated final class SyncIndexStoreTests: XCTestCase {
             let drive = directory.appendingPathComponent("Mobile Documents/com~apple~CloudDocs", isDirectory: true)
             try FileManager.default.createDirectory(at: drive, withIntermediateDirectories: true)
             let bookmark = try drive.bookmarkData(options: [.withSecurityScope])
-            let cloud = try SyncIndexStore.prepareCloudFolder(drive)
+            let cloud = try SyncFileStore.prepareCloudFolder(drive)
             let source = directory.appendingPathComponent("abcd.pdf")
             try Data("fixture".utf8).write(to: source)
             let id = UUID()
             let pdf = SyncLocalPDF(id: id, url: source, addedAt: nil, tagNames: ["Keep"], sharedHash: nil)
             let store = SyncIndexStore(root: cloud)
-            _ = try store.prepareEnable([pdf], UUID(), 0)
-            let (index, local) = try store.prepareDisable(SyncIndex(), directory.appendingPathComponent("local"))
+            _ = try SyncMigration(root: store.root).prepareEnable([pdf], UUID(), 0)
+            let (index, local) = try SyncMigration(root: store.root).prepareDisable(SyncIndex(), directory.appendingPathComponent("local"))
             try FileManager.default.removeItem(at: cloud)
 
             var stale = false
@@ -401,17 +401,17 @@ nonisolated final class SyncIndexStoreTests: XCTestCase {
                                      bookmarkDataIsStale: &stale)
             let accessing = remembered.startAccessingSecurityScopedResource()
             defer { if accessing { remembered.stopAccessingSecurityScopedResource() } }
-            let recreated = try SyncIndexStore.prepareCloudFolder(SyncIndexStore.cloudDrive(remembered))
+            let recreated = try SyncFileStore.prepareCloudFolder(SyncFileStore.cloudDrive(remembered))
             let localPDF = SyncLocalPDF(id: id, url: try XCTUnwrap(local[id]), addedAt: nil, tagNames: ["Keep"],
                                        sharedHash: index.files.first?.location?.contentHash,
                                        baselineTags: ["Keep"])
-            let restored = try SyncIndexStore(root: recreated).prepareEnable([localPDF], UUID(), index.counter)
+            let restored = try SyncMigration(root: recreated).prepareEnable([localPDF], UUID(), index.counter)
 
             XCTAssertEqual(recreated.resolvingSymlinksInPath(), cloud.resolvingSymlinksInPath())
             XCTAssertEqual(restored.files.first?.id, id)
             XCTAssertEqual(restored.files.first?.tags?.names, ["Keep"])
             let path = try XCTUnwrap(restored.files.first?.location?.relativePath)
-            XCTAssertEqual(try Data(contentsOf: SyncIndexStore(root: recreated).fileURL(path)), Data("fixture".utf8))
+            XCTAssertEqual(try Data(contentsOf: SyncFileStore(root: recreated).fileURL(path)), Data("fixture".utf8))
             XCTAssertTrue(FileManager.default.fileExists(atPath: recreated.appendingPathComponent("index.json").path))
         }
     }
@@ -421,7 +421,7 @@ nonisolated final class SyncIndexStoreTests: XCTestCase {
             let drive = directory.appendingPathComponent("Mobile Documents/com~apple~CloudDocs", isDirectory: true)
             try FileManager.default.createDirectory(at: drive, withIntermediateDirectories: true)
             let bookmark = try drive.bookmarkData(options: [.withSecurityScope])
-            let cloud = try SyncIndexStore.prepareCloudFolder(drive)
+            let cloud = try SyncFileStore.prepareCloudFolder(drive)
             let contents = Data("fixture".utf8)
             try contents.write(to: cloud.appendingPathComponent("abcd.pdf"))
             let moved = directory.appendingPathComponent("moved/websnapshot")
@@ -433,7 +433,7 @@ nonisolated final class SyncIndexStoreTests: XCTestCase {
                                      bookmarkDataIsStale: &stale)
             let accessing = remembered.startAccessingSecurityScopedResource()
             defer { if accessing { remembered.stopAccessingSecurityScopedResource() } }
-            let recreated = try SyncIndexStore.prepareCloudFolder(SyncIndexStore.cloudDrive(remembered))
+            let recreated = try SyncFileStore.prepareCloudFolder(SyncFileStore.cloudDrive(remembered))
 
             XCTAssertEqual(recreated.resolvingSymlinksInPath(), cloud.resolvingSymlinksInPath())
             XCTAssertTrue(FileManager.default.fileExists(atPath: recreated.path))
@@ -452,13 +452,13 @@ nonisolated final class SyncIndexStoreTests: XCTestCase {
             let store = SyncIndexStore(root: directory.appendingPathComponent("websnapshot"))
             let first = SyncLocalPDF(id: UUID(), url: a, addedAt: nil, tagNames: [], sharedHash: nil)
             let second = SyncLocalPDF(id: UUID(), url: b, addedAt: nil, tagNames: [], sharedHash: nil)
-            _ = try store.prepareEnable([first], UUID(), 0)
-            let index = try store.prepareEnable([second], UUID(), 0)
+            _ = try SyncMigration(root: store.root).prepareEnable([first], UUID(), 0)
+            let index = try SyncMigration(root: store.root).prepareEnable([second], UUID(), 0)
             let firstPath = try XCTUnwrap(index.files.first { $0.id == first.id }?.location?.relativePath)
             let secondPath = try XCTUnwrap(index.files.first { $0.id == second.id }?.location?.relativePath)
             XCTAssertNotEqual(firstPath, secondPath)
-            XCTAssertEqual(try Data(contentsOf: store.fileURL(firstPath)), Data("first".utf8))
-            XCTAssertEqual(try Data(contentsOf: store.fileURL(secondPath)), Data("second".utf8))
+            XCTAssertEqual(try Data(contentsOf: SyncFileStore(root: store.root).fileURL(firstPath)), Data("first".utf8))
+            XCTAssertEqual(try Data(contentsOf: SyncFileStore(root: store.root).fileURL(secondPath)), Data("second".utf8))
         }
     }
 

@@ -42,7 +42,7 @@ final class LibrarySyncServiceTests: XCTestCase {
         let context = container.mainContext
         try await sync.setEnabled(true, context, drive: makeDrive(directory))
         let data = Data("fixture".utf8)
-        let original = try sync.savePDF(data, "Before.pdf", context)
+        let original = try XCTUnwrap(LibraryService.savePDF(data, "Before.pdf", context, [], sync: sync))
         let pdf = try XCTUnwrap(context.fetch(FetchDescriptor<PDFFile>()).first)
         let id = pdf.libraryID
         try LibraryService.replaceTags(["Keep"], pdf, context, sync: sync)
@@ -67,7 +67,7 @@ final class LibrarySyncServiceTests: XCTestCase {
         let container = try makeContainer()
         let context = container.mainContext
         try await sync.setEnabled(true, context, drive: makeDrive(directory))
-        let url = try sync.savePDF(Data("fixture".utf8), "Article.pdf", context)
+        let url = try XCTUnwrap(LibraryService.savePDF(Data("fixture".utf8), "Article.pdf", context, [], sync: sync))
         let pdf = try XCTUnwrap(context.fetch(FetchDescriptor<PDFFile>()).first)
         pdf.bookmarkData = nil
         try context.save()
@@ -140,7 +140,7 @@ final class LibrarySyncServiceTests: XCTestCase {
         let firstSync = LibrarySyncService()
         let secondSync = LibrarySyncService()
         try await firstSync.setEnabled(true, first.mainContext, drive: drive)
-        let url = try firstSync.savePDF(Data("fixture".utf8), "abcd.pdf", first.mainContext)
+        let url = try XCTUnwrap(LibraryService.savePDF(Data("fixture".utf8), "abcd.pdf", first.mainContext, [], sync: firstSync))
         await firstSync.refresh(first.mainContext)
         try await secondSync.setEnabled(true, second.mainContext, drive: drive)
         let a = try XCTUnwrap(first.mainContext.fetch(FetchDescriptor<PDFFile>()).first)
@@ -189,13 +189,13 @@ final class LibrarySyncServiceTests: XCTestCase {
         let context = container.mainContext
         try await sync.setEnabled(true, context, drive: makeDrive(directory))
         let data = Data("original".utf8)
-        let original = try sync.savePDF(data, "Original.pdf", context)
+        let original = try XCTUnwrap(LibraryService.savePDF(data, "Original.pdf", context, [], sync: sync))
         let setting = try XCTUnwrap(LibrarySyncService.settings(context))
         let pending = setting.pendingSyncChanges
         setting.syncCounter = Int64.max - 1
         try context.save()
 
-        XCTAssertThrowsError(try sync.savePDF(Data("replacement".utf8), "New.pdf", context))
+        XCTAssertThrowsError(try LibraryService.savePDF(Data("replacement".utf8), "New.pdf", context, [], sync: sync))
 
         let stored = ModelContext(container)
         XCTAssertEqual(try stored.fetchCount(FetchDescriptor<PDFFile>()), 1)
@@ -207,13 +207,39 @@ final class LibrarySyncServiceTests: XCTestCase {
         XCTAssertEqual(pdfs, [original])
     }
 
+    func testFailedTagChangePreservesTagsAndPendingChanges() async throws {
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let container = try makeContainer()
+        let context = container.mainContext
+        try await sync.setEnabled(true, context, drive: makeDrive(directory))
+        let url = try XCTUnwrap(LibraryService.savePDF(Data("fixture".utf8), "Article.pdf", context, [], sync: sync))
+        let pdf = try XCTUnwrap(context.fetch(FetchDescriptor<PDFFile>()).first)
+        try LibraryService.replaceTags(["Original"], pdf, context, sync: sync)
+        let setting = try XCTUnwrap(LibrarySyncService.settings(context))
+        let pending = setting.pendingSyncChanges
+        let baseline = pdf.syncBaselineTags
+        setting.syncCounter = Int64.max - 1
+        try context.save()
+
+        XCTAssertThrowsError(try LibraryService.replaceTags(["Replacement"], pdf, context, sync: sync))
+
+        let stored = ModelContext(container)
+        let savedPDF = try XCTUnwrap(stored.fetch(FetchDescriptor<PDFFile>()).first)
+        XCTAssertEqual(savedPDF.tags.map(\.name), ["Original"])
+        XCTAssertEqual(savedPDF.syncBaselineTags, baseline)
+        XCTAssertEqual(try LibrarySyncService.settings(stored)?.pendingSyncChanges, pending)
+        XCTAssertEqual(try LibrarySyncService.settings(stored)?.syncCounter, Int64.max - 1)
+        XCTAssertEqual(try Data(contentsOf: url), Data("fixture".utf8))
+    }
+
     func testDeletingDuplicateSyncedEntriesQueuesEveryDeletion() async throws {
         let directory = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let container = try makeContainer()
         let context = container.mainContext
         try await sync.setEnabled(true, context, drive: makeDrive(directory))
-        let url = try sync.savePDF(Data("fixture".utf8), "Article.pdf", context)
+        let url = try XCTUnwrap(LibraryService.savePDF(Data("fixture".utf8), "Article.pdf", context, [], sync: sync))
         let pdf = try XCTUnwrap(context.fetch(FetchDescriptor<PDFFile>()).first)
         try LibraryService.replaceTags(["Keep"], pdf, context, sync: sync)
         let duplicate = PDFFile(url)
@@ -241,7 +267,7 @@ final class LibrarySyncServiceTests: XCTestCase {
         let context = container.mainContext
         try await sync.setEnabled(true, context, drive: makeDrive(directory))
         let data = Data("fixture".utf8)
-        let url = try sync.savePDF(data, "Article.pdf", context)
+        let url = try XCTUnwrap(LibraryService.savePDF(data, "Article.pdf", context, [], sync: sync))
         let pdf = try XCTUnwrap(context.fetch(FetchDescriptor<PDFFile>()).first)
         try LibraryService.replaceTags(["Keep"], pdf, context, sync: sync)
         let duplicate = PDFFile(url)
@@ -271,7 +297,7 @@ final class LibrarySyncServiceTests: XCTestCase {
         let context = container.mainContext
         try StorageSettingsService.saveFixedStorage(context, directory, sync: sync)
         try await sync.setEnabled(true, context, drive: makeDrive(directory))
-        let cloudPDF = try sync.savePDF(Data("saved while syncing".utf8), "Saved.pdf", context)
+        let cloudPDF = try XCTUnwrap(LibraryService.savePDF(Data("saved while syncing".utf8), "Saved.pdf", context, [], sync: sync))
         let pdf = try XCTUnwrap(context.fetch(FetchDescriptor<PDFFile>()).first)
         try LibraryService.replaceTags(["Keep"], pdf, context, sync: sync)
         let state = SettingsViewState()
@@ -372,7 +398,7 @@ final class LibrarySyncServiceTests: XCTestCase {
         try StorageSettingsService.saveFixedStorage(context, fixed, sync: sync)
         try await sync.setEnabled(true, context, drive: makeDrive(directory))
         let data = try makePDFData()
-        let cloudPDF = try sync.savePDF(data, "Article.pdf", context)
+        let cloudPDF = try XCTUnwrap(LibraryService.savePDF(data, "Article.pdf", context, [], sync: sync))
         let pdf = try XCTUnwrap(context.fetch(FetchDescriptor<PDFFile>()).first)
         let id = pdf.libraryID
         try LibraryService.replaceTags(["Research"], pdf, context, sync: sync)
@@ -406,7 +432,7 @@ final class LibrarySyncServiceTests: XCTestCase {
         let data = try makePDFData()
         let unrelated = destination.appendingPathComponent("Unrelated.pdf")
         try data.write(to: unrelated)
-        _ = try sync.savePDF(data, "Synced.pdf", context)
+        _ = try XCTUnwrap(LibraryService.savePDF(data, "Synced.pdf", context, [], sync: sync))
 
         try await sync.setEnabled(false, context, localRoot: destination)
 
@@ -421,7 +447,7 @@ final class LibrarySyncServiceTests: XCTestCase {
         let container = try makeContainer()
         let context = container.mainContext
         try await sync.setEnabled(true, context, drive: makeDrive(directory))
-        let cloudPDF = try sync.savePDF(Data("fixture".utf8), "Saved.pdf", context)
+        let cloudPDF = try XCTUnwrap(LibraryService.savePDF(Data("fixture".utf8), "Saved.pdf", context, [], sync: sync))
         let state = SettingsViewState()
         let destination = directory.appendingPathComponent("selected", isDirectory: true)
         try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
@@ -468,7 +494,7 @@ final class LibrarySyncServiceTests: XCTestCase {
         let container = try makeContainer()
         let context = container.mainContext
         try await sync.setEnabled(true, context, drive: makeDrive(directory))
-        let cloudPDF = try sync.savePDF(Data("fixture".utf8), "Saved.pdf", context)
+        let cloudPDF = try XCTUnwrap(LibraryService.savePDF(Data("fixture".utf8), "Saved.pdf", context, [], sync: sync))
         let setting = try XCTUnwrap(LibrarySyncService.settings(context))
         let pending = setting.pendingSyncChanges
         let state = SettingsViewState()
@@ -492,7 +518,7 @@ final class LibrarySyncServiceTests: XCTestCase {
         let context = container.mainContext
         try StorageSettingsService.save(context, .fixed, sync: sync)
         try await sync.setEnabled(true, context, drive: makeDrive(directory))
-        _ = try sync.savePDF(Data("fixture".utf8), "Saved.pdf", context)
+        _ = try XCTUnwrap(LibraryService.savePDF(Data("fixture".utf8), "Saved.pdf", context, [], sync: sync))
         let state = SettingsViewState()
         var prompts = 0
 
@@ -516,7 +542,7 @@ final class LibrarySyncServiceTests: XCTestCase {
         let container = try makeContainer()
         let context = container.mainContext
         try await sync.setEnabled(true, context, drive: makeDrive(directory))
-        let cloudPDF = try sync.savePDF(Data("fixture".utf8), "Saved.pdf", context)
+        let cloudPDF = try XCTUnwrap(LibraryService.savePDF(Data("fixture".utf8), "Saved.pdf", context, [], sync: sync))
         let destination = directory.appendingPathComponent("not-a-folder")
         try Data("existing file".utf8).write(to: destination)
         let state = SettingsViewState()
@@ -560,7 +586,7 @@ final class LibrarySyncServiceTests: XCTestCase {
         let drive = try makeDrive(directory)
         let cloud = drive.appendingPathComponent("websnapshot")
         try await sync.setEnabled(true, context, drive: drive)
-        let url = try sync.savePDF(Data("fixture".utf8), "abcd.pdf", context)
+        let url = try XCTUnwrap(LibraryService.savePDF(Data("fixture".utf8), "abcd.pdf", context, [], sync: sync))
         await sync.refresh(context)
         try FileManager.default.removeItem(at: url)
         let pdf = try XCTUnwrap(context.fetch(FetchDescriptor<PDFFile>()).first)
@@ -584,7 +610,7 @@ final class LibrarySyncServiceTests: XCTestCase {
         let context = container.mainContext
         let drive = try makeDrive(directory)
         try await sync.setEnabled(true, context, drive: drive)
-        let cloudPDF = try sync.savePDF(Data("fixture".utf8), "abcd.pdf", context)
+        let cloudPDF = try XCTUnwrap(LibraryService.savePDF(Data("fixture".utf8), "abcd.pdf", context, [], sync: sync))
         let pdf = try XCTUnwrap(context.fetch(FetchDescriptor<PDFFile>()).first)
         let setting = try XCTUnwrap(LibrarySyncService.settings(context))
         let pending = try SyncIndex.decode(XCTUnwrap(setting.pendingSyncChanges))
@@ -646,7 +672,7 @@ final class LibrarySyncServiceTests: XCTestCase {
         let drive = try makeDrive(directory)
         let cloud = drive.appendingPathComponent("websnapshot")
         try await sync.setEnabled(true, context, drive: drive)
-        _ = try sync.savePDF(Data("fixture".utf8), "abcd.pdf", context)
+        _ = try XCTUnwrap(LibraryService.savePDF(Data("fixture".utf8), "abcd.pdf", context, [], sync: sync))
         let pdf = try XCTUnwrap(context.fetch(FetchDescriptor<PDFFile>()).first)
         let id = pdf.libraryID
         try LibraryService.replaceTags(["Keep"], pdf, context, sync: sync)
@@ -676,7 +702,7 @@ final class LibrarySyncServiceTests: XCTestCase {
         let drive = try makeDrive(directory)
         let cloud = drive.appendingPathComponent("websnapshot")
         try await sync.setEnabled(true, context, drive: drive)
-        _ = try sync.savePDF(Data("fixture".utf8), "abcd.pdf", context)
+        _ = try XCTUnwrap(LibraryService.savePDF(Data("fixture".utf8), "abcd.pdf", context, [], sync: sync))
         try await sync.setEnabled(false, context, localRoot: directory.appendingPathComponent("local"))
         let moved = directory.appendingPathComponent("moved/websnapshot")
         try FileManager.default.createDirectory(at: moved.deletingLastPathComponent(), withIntermediateDirectories: true)

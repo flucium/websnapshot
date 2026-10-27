@@ -80,6 +80,63 @@ final class LibrarySyncRepositoryTests: XCTestCase {
         XCTAssertEqual(tags.first?.pdfFiles.count, 1)
     }
 
+    func testRefreshPreservesTagChangesQueuedAfterSending() throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let initial = record(["Original"])
+        let setting = StorageSettings(.fixed)
+        setting.syncEnabled = true
+        setting.syncCounter = 1
+        context.insert(setting)
+        try LibrarySyncRepository.apply(SyncIndex(files: [initial]), context, root)
+        try context.save()
+        let pdf = try XCTUnwrap(context.fetch(FetchDescriptor<PDFFile>()).first)
+        let sync = LibrarySyncService()
+
+        try LibraryService.replaceTags(["Original", "Sent"], pdf, context, sync: sync)
+        let sentData = try XCTUnwrap(setting.pendingSyncChanges)
+        let sentIndex = try SyncIndex(files: [initial]).merging(SyncIndex.decode(sentData))
+
+        try LibraryService.replaceTags(["Original", "Sent", "Later"], pdf, context, sync: sync)
+        let pendingData = try XCTUnwrap(setting.pendingSyncChanges)
+
+        try LibrarySyncRepository.applyRefresh(sentIndex, context, root, setting, sentData)
+
+        XCTAssertEqual(Set(pdf.tags.map(\.name)), ["Original", "Sent", "Later"])
+        XCTAssertEqual(setting.pendingSyncChanges, pendingData)
+        let nextIndex = try sentIndex.merging(LibrarySyncRepository.pendingChanges(setting))
+        XCTAssertEqual(Set(nextIndex.files.first?.tags?.names ?? []), ["Original", "Sent", "Later"])
+    }
+
+    func testRefreshAcknowledgesSentChangesWithoutCommittingContext() throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let initial = record(["Original"])
+        let setting = StorageSettings(.fixed)
+        setting.syncEnabled = true
+        setting.syncCounter = 1
+        context.insert(setting)
+        try LibrarySyncRepository.apply(SyncIndex(files: [initial]), context, root)
+        try context.save()
+        let pdf = try XCTUnwrap(context.fetch(FetchDescriptor<PDFFile>()).first)
+
+        try LibraryService.replaceTags(["Sent"], pdf, context, sync: LibrarySyncService())
+        let sentData = try XCTUnwrap(setting.pendingSyncChanges)
+        let sentIndex = try SyncIndex(files: [initial]).merging(SyncIndex.decode(sentData))
+
+        try LibrarySyncRepository.applyRefresh(sentIndex, context, root, setting, sentData)
+
+        XCTAssertNil(setting.pendingSyncChanges)
+        XCTAssertEqual(pdf.tags.map(\.name), ["Sent"])
+        XCTAssertEqual(try LibrarySyncService.settings(ModelContext(container))?.pendingSyncChanges, sentData)
+
+        try context.save()
+
+        XCTAssertNil(try LibrarySyncService.settings(ModelContext(container))?.pendingSyncChanges)
+    }
+
     private func record(_ names: [String]) -> SyncPDFRecord {
         let id = UUID()
         let stamp = SyncStamp(counter: 1, deviceID: UUID(), operationID: UUID())
@@ -90,7 +147,7 @@ final class LibrarySyncRepositoryTests: XCTestCase {
     }
 
     private func makeContainer() throws -> ModelContainer {
-        let container = try ModelContainer(for: PDFFile.self, PDFTag.self,
+        let container = try ModelContainer(for: StorageSettings.self, PDFFile.self, PDFTag.self,
                                            configurations: ModelConfiguration(isStoredInMemoryOnly: true, cloudKitDatabase: .none))
         container.mainContext.autosaveEnabled = false
         return container

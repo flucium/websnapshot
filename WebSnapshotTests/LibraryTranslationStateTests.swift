@@ -5,16 +5,15 @@ import XCTest
 
 @MainActor
 final class LibraryTranslationStateTests: XCTestCase {
-    func testSharedStatePublishesChangesToLibraryView() {
+    func testLibraryViewStatePublishesChanges() {
         let state = LibraryViewState()
-        let sharedState: LibraryState = state
         var changed = false
         let observation = state.objectWillChange.sink {
             changed = true
         }
         defer { observation.cancel() }
 
-        sharedState.currentPageIndex = 3
+        state.currentPageIndex = 3
         XCTAssertTrue(changed)
         XCTAssertEqual(state.currentPageIndex, 3)
 
@@ -23,12 +22,12 @@ final class LibraryTranslationStateTests: XCTestCase {
         XCTAssertTrue(changed)
 
         let error = AppError.error("The PDF could not be opened.")
-        LibraryPDFView.Coordinator(sharedState).present(error)
+        LibraryPDFView.Coordinator(state).present(error)
         XCTAssertEqual(state.errorTitle, "PDF Could Not Be Opened")
         XCTAssertEqual(state.appError?.userMessage, error.userMessage)
     }
 
-    func testChangingPDFResetsSharedPageAndTranslation() {
+    func testChangingPDFResetsPageAndTranslation() {
         let state = LibraryViewState()
         let first = PDFFile(URL(fileURLWithPath: "/tmp/first.pdf"))
         state.selectedPDFFile = first
