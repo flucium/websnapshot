@@ -1,5 +1,3 @@
-import Combine
-import CryptoKit
 import Foundation
 import PDFKit
 import SwiftData
@@ -11,7 +9,7 @@ enum LibraryService {
         try sync.requireReady()
         
         if LibrarySyncService.isEnabled(context) {
-            return try sync.savePDF(data, fileName, context)
+            return try saveSyncedPDF(data, fileName, context)
         }
 
         switch StorageSettingsService.storage(settings) {
@@ -56,7 +54,7 @@ enum LibraryService {
         try update(context, "The PDF could not be added to the library.") {
             
             if LibrarySyncService.isEnabled(context) {
-                try sync.registerPDF(url, context)
+                try registerSyncedPDF(url, context)
             } else {
                 try PDFFileService.register(context, url)
             }
@@ -90,12 +88,12 @@ enum LibraryService {
         }
         
         if LibrarySyncService.isEnabled(context) {
-            let data = try SyncIndexStore.coordinatedRead(source) {
+            let data = try SyncFileStore.coordinatedRead(source) {
                 try Data(contentsOf: $0)
             }
             
             
-            return try sync.savePDF(data, source.lastPathComponent, context)
+            return try saveSyncedPDF(data, source.lastPathComponent, context)
         }
         
         if source.deletingLastPathComponent().resolvingSymlinksInPath().standardizedFileURL == directory.resolvingSymlinksInPath().standardizedFileURL
@@ -149,7 +147,7 @@ enum LibraryService {
         try sync.requireReady()
         
         if LibrarySyncService.isEnabled(context) {
-            try sync.deletePDF(url, context)
+            try removeSyncedPDFRecords(context, url, sync: sync)
             return
         }
         
@@ -177,7 +175,9 @@ enum LibraryService {
         
             try PDFTagService.replaceTags(names, pdf, context)
             
-            try sync.queueTags(PDFTagService.tagNames(pdf.tags), previous: previous, pdf, context)
+            if let setting = try LibrarySyncSettings.settings(context), setting.syncEnabled {
+                try LibrarySyncRepository.queueTags(PDFTagService.tagNames(pdf.tags), previous: previous, pdf, setting)
+            }
             
             return true
         }
@@ -206,7 +206,85 @@ enum LibraryService {
         }
     }
 
-    static func update(_ context: ModelContext, _ message: String,_ operation: () throws -> Bool) throws {
+    private static func saveSyncedPDF(_ data: Data, _ fileName: String, _ context: ModelContext) throws -> URL {
+        guard let setting = try LibrarySyncSettings.settings(context), setting.syncEnabled else {
+            throw AppError.error("Sync is not enabled.")
+        }
+
+        let root = try LibrarySyncSettings.folderURL(setting)
+        let id = UUID()
+
+        return try SyncFileStore(root: root).write(data, fileName, id) { url, hash in
+            try update(context, "The PDF could not be added to the library.") {
+                try registerSyncedPDF(url, context, id: id, hash: hash)
+                return true
+            }
+        }
+    }
+
+    private static func registerSyncedPDF(_ url: URL, _ context: ModelContext, id: UUID? = nil, hash: String? = nil) throws {
+        guard let setting = try LibrarySyncSettings.settings(context), setting.syncEnabled else {
+            return
+        }
+
+        let root = try LibrarySyncSettings.folderURL(setting)
+        let accessing = root.startAccessingSecurityScopedResource()
+
+        defer {
+            if accessing {
+                root.stopAccessingSecurityScopedResource()
+            }
+        }
+
+        let path = try SyncFileStore(root: root).relativePath(url)
+        let contentHash = try hash ?? SyncFileStore.contentHash(url)
+
+        try LibrarySyncRepository.registerPDF(url, context, setting, path, contentHash, id: id)
+    }
+
+    private static func removeSyncedPDFRecords(_ context: ModelContext, _ url: URL, sync: LibrarySyncService) throws {
+        guard let setting = try LibrarySyncSettings.settings(context), setting.syncEnabled else {
+            return
+        }
+
+        let root = try LibrarySyncSettings.folderURL(setting)
+        let files = SyncFileStore(root: root)
+        var sources: Set<URL> = []
+
+        try update(context, "The PDF could not be removed from the library.") {
+            let pdfs = try PDFFileService.entries(context, matching: url).filter {
+                $0.libraryID != nil
+            }
+
+            for pdf in pdfs {
+                if let path = pdf.syncRelativePath, let source = try? files.fileURL(path) {
+                    sources.insert(source)
+                }
+            }
+
+            try LibrarySyncRepository.remove(pdfs, context, setting)
+
+            return !pdfs.isEmpty
+        }
+
+        let accessing = root.startAccessingSecurityScopedResource()
+
+        defer {
+            if accessing {
+                root.stopAccessingSecurityScopedResource()
+            }
+        }
+
+        for source in sources {
+            do {
+                try SyncFileStore.remove(source)
+            } catch {
+                sync.reportError(error)
+            }
+        }
+    }
+
+    private static func update(_ context: ModelContext, _ message: String,_ operation: () throws -> Bool) throws {
         
         do {
             
@@ -227,173 +305,9 @@ enum LibraryService {
 }
 
 @MainActor
-final class LibrarySyncService: ObservableObject {
-
-    @Published private(set) var state = LibrarySyncState()
-    
-    private var isRefreshing = false
-    
-    private var modeGeneration: UInt64 = 0
-    
-    static func settings(_ context: ModelContext) throws -> StorageSettings? {
-    
-        guard context.container.schema.entities.contains(where: {
-            $0.name == "StorageSettings"
-        }) else {
-            return nil
-        }
-    
-        return try context.fetch(FetchDescriptor<StorageSettings>()).first
-    }
-
-    static func isEnabled(_ context: ModelContext) -> Bool {
-        ( try? settings(context) )?.syncEnabled == true
-    }
-
-    func requireReady() throws {
-        if state.isSwitching {
-            throw AppError.error("Wait for the library migration to finish before making changes.")
-        }
-    }
-
-    static func localStorageURL(_ setting: StorageSettings) throws -> URL? {
-        
-        guard setting.previousStorageRawValue == StorageSettings.Storage.fixed.rawValue, let bookmark = setting.previousFixedStorageBookmarkData else {
-            
-            return nil
-            
-        }
-        
-        return try resolveBookmarkedURL(bookmark)
-    }
-
-    func setEnabled(_ enabled: Bool, _ context: ModelContext, drive: URL? = nil, localRoot: URL? = nil) async throws {
-        try requireReady()
-        
-        guard Self.isEnabled(context) != enabled else {
-            return
-        }
-        
-        modeGeneration &+= 1
-        
-        state.isSwitching = true
-        
-        state.lastError = nil
-        
-        defer {
-            state.isSwitching = false
-        }
-        
-        do {
-            try context.save()
-            
-            if enabled {
-                try await enable(context, drive)
-            }
-            
-            else {
-                try await disable(context,  localRoot)
-            }
-            
-        } catch {
-            context.rollback()
-            
-            state.lastError = AppError(error)
-            
-            throw error
-        }
-    }
-
-    func reconnect(_ selected: URL, _ context: ModelContext) throws {
-        let accessing = selected.startAccessingSecurityScopedResource()
-
-        defer {
-
-            if accessing {
-                selected.stopAccessingSecurityScopedResource()
-            }
-        }
-
-        do {
-            try requireReady()
-
-            guard let setting = try Self.settings(context) else {
-                return
-            }
-
-            let drive = try SyncIndexStore.cloudDrive(selected)
-
-            let folder = try SyncIndexStore.cloudFolder(drive)
-
-            if let savedPath = setting.syncDrivePath, URL(fileURLWithPath: savedPath, isDirectory: true).resolvingSymlinksInPath().standardizedFileURL != drive.resolvingSymlinksInPath().standardizedFileURL {
-
-                throw SyncStoreError.wrongDrive
-
-            }
-
-            setting.syncDriveBookmarkData = try URL.securityScopedBookmarkData(drive)
-
-            setting.syncDrivePath = drive.path
-
-            if FileManager.default.fileExists(atPath: folder.path) {
-                let bookmark = try URL.securityScopedBookmarkData(folder)
-
-                setting.syncFolderBookmarkData = bookmark
-
-                if setting.syncEnabled { setting.fixedStorageBookmarkData = bookmark }
-            }
-
-            try context.save()
-
-        } catch {
-            context.rollback()
-            throw error
-        }
-    }
-
-    private func enable(_ context: ModelContext, _ selectedDrive: URL?) async throws {
-        
-        let setting = try Self.settings(context) ?? StorageSettings(.flexibility)
-        
-        if setting.modelContext == nil {
-            context.insert(setting)
-        }
-        
-        let drive = try selectedDrive.map(SyncIndexStore.cloudDrive) ?? driveURL(setting)
-        let accessing = drive.startAccessingSecurityScopedResource()
-        
-        defer {
-            
-            if accessing {
-                
-                drive.stopAccessingSecurityScopedResource()
-            
-            }
-        
-        }
-        
-        let root = try SyncIndexStore.prepareCloudFolder(drive)
-        
-        setting.syncDriveBookmarkData = try URL.securityScopedBookmarkData(drive)
-        
-        setting.syncDrivePath = drive.path
-        
-        let bookmark = try URL.securityScopedBookmarkData(root)
-        
-        let pdfs = try context.fetch(FetchDescriptor<PDFFile>())
-        
-        for pdf in pdfs where pdf.libraryID == nil {
-            pdf.libraryID = UUID()
-        }
-        
-        if setting.syncDeviceID == nil {
-            setting.syncDeviceID = UUID()
-        }
-        
-        
-        try context.save()
-        
-        let local = try pdfs.map {
+enum LibrarySyncRepository {
+    static func localPDFs(_ pdfs: [PDFFile]) throws -> [SyncLocalPDF] {
+        try pdfs.map {
             pdf in
             
             SyncLocalPDF(id: pdf.libraryID!, url: try pdf.resolveURL(), addedAt: pdf.addedAt, tagNames: PDFTagService.tagNames(pdf.tags), sharedHash: pdf.syncBaselineContentHash, baselineTags: try pdf.syncBaselineTags.map {
@@ -401,332 +315,9 @@ final class LibrarySyncService: ObservableObject {
             })
             
         }
-        
-        let deviceID = setting.syncDeviceID!
-        
-        let counter = setting.syncCounter
-        
-        let index = try await Task.detached(priority: .userInitiated) {
-        
-            try SyncIndexStore(root: root).prepareEnable(local, deviceID, counter)
-        
-        }.value
-        
-        try Task.checkCancellation()
-        
-        try LibrarySyncRepository.apply(index, context, root)
-        
-        setting.previousStorageRawValue = setting.storage.rawValue
-        
-        setting.previousFixedStoragePath = setting.fixedStoragePath
-        
-        setting.previousFixedStorageBookmarkData = setting.fixedStorageBookmarkData
-        
-        setting.syncFolderBookmarkData = bookmark
-        
-        setting.syncFolderPath = root.path
-        
-        setting.fixedStoragePath = root.path
-        
-        setting.fixedStorageBookmarkData = bookmark
-        
-        setting.storage = .fixed
-        
-        setting.syncCounter = max(setting.syncCounter, index.counter)
-        
-        setting.syncEnabled = true
-        
-        setting.pendingSyncChanges = nil
-        
-        try context.save()
     }
 
-    private func disable(_ context: ModelContext, _ localRoot: URL?) async throws {
-        
-        guard let setting = try Self.settings(context) else {
-            return
-        }
-        
-        let root = try folderURL(setting)
-        
-        let accessing = root.startAccessingSecurityScopedResource()
-        
-        defer {
-        
-            if accessing {
-                root.stopAccessingSecurityScopedResource()
-            }
-            
-        }
-        
-        let pending = try pendingChanges(setting)
-        
-        guard let destination = try localRoot ?? Self.localStorageURL(setting) else {
-            throw AppError.error("Choose a storage folder before turning Sync off.")
-        }
-        
-        let accessingDestination = destination.startAccessingSecurityScopedResource()
-        
-        defer {
-            if accessingDestination {
-                destination.stopAccessingSecurityScopedResource()
-            }
-        }
-        
-        let storage = StorageSettings.Storage(rawValue: setting.previousStorageRawValue ?? "") ?? .flexibility
-        
-        let destinationBookmark = try storage == .fixed ? URL.securityScopedBookmarkData(destination) : nil
-        
-        let (index, urls) = try await Task.detached(priority: .userInitiated) {
-            
-            try SyncIndexStore(root: root).prepareDisable(pending,  destination)
-            
-        }.value
-        
-        try Task.checkCancellation()
-        
-        let knownIDs = Set(index.files.map(\.id))
-        
-        let cached = try context.fetch(FetchDescriptor<PDFFile>())
-        
-        guard cached.allSatisfy({
-            $0.syncRelativePath == nil || $0.libraryID.map(knownIDs.contains) == true
-        }) else {
-            throw SyncStoreError.invalidIndex
-        }
-        
-        try LibrarySyncRepository.apply(index, context,  root, urls)
-        
-        if storage == .fixed {
-            try importFixedStorage(context, destination)
-        }
-        
-        setting.storage = storage
-        
-        setting.fixedStoragePath = storage == .fixed ? destination.path : setting.previousFixedStoragePath
-        
-        setting.fixedStorageBookmarkData = destinationBookmark ?? setting.previousFixedStorageBookmarkData
-        
-        setting.previousStorageRawValue = nil
-        
-        setting.previousFixedStoragePath = nil
-        
-        setting.previousFixedStorageBookmarkData = nil
-        
-        setting.pendingSyncChanges = nil
-        
-        setting.syncEnabled = false
-        
-        setting.syncCounter = max(setting.syncCounter, index.counter)
-        
-        try context.save()
-    }
-
-    private func importFixedStorage(_ context: ModelContext, _ directory: URL) throws {
-        let urls = try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: [.isRegularFileKey, .isSymbolicLinkKey], options: [.skipsHiddenFiles])
-        
-        for url in urls where url.pathExtension.lowercased() == "pdf" {
-            let values = try url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
-            
-            guard values.isRegularFile == true, values.isSymbolicLink != true else {
-                continue
-            }
-            
-            guard try PDFFileService.entries(context, matching: url).isEmpty else {
-                continue
-            }
-            
-            guard let document = PDFDocument(url: url), document.pageCount > 0 || document.isLocked else {
-                continue
-            }
-            
-            try PDFFileService.register(context, url)
-        }
-    }
-
-    func refresh(_ context: ModelContext) async {
-        
-        guard Self.isEnabled(context), !state.isSwitching, !isRefreshing else {
-            return
-        }
-        
-        let generation = modeGeneration
-        
-        isRefreshing = true
-        
-        defer {
-            isRefreshing = false
-        }
-        
-        do {
-            
-            guard let setting = try Self.settings(context) else {
-                return
-            }
-        
-            let root = try folderURL(setting)
-            
-            let accessing = root.startAccessingSecurityScopedResource()
-            
-            defer {
-                
-                if accessing {
-                    
-                    root.stopAccessingSecurityScopedResource()
-                
-                }
-            
-            }
-            
-            let sentData = setting.pendingSyncChanges
-            
-            let pending = try pendingChanges(setting)
-            
-            let index = try await Task.detached(priority: .utility) {
-                
-                let store = SyncIndexStore(root: root)
-                
-                try store.publish(pending)
-                
-                let index = try store.load().merging(pending)
-                
-                try store.writeSnapshot(index)
-            
-                return index
-            }.value
-            
-            
-            
-            guard generation == modeGeneration, !state.isSwitching, Self.isEnabled(context), !Task.isCancelled else {
-                return
-            }
-            
-            
-            
-            let merged = index.merging( try pendingChanges(setting) )
-            
-            try LibrarySyncRepository.apply(merged, context, root)
-            
-            setting.syncCounter = max(setting.syncCounter, merged.counter)
-            
-            if setting.pendingSyncChanges == sentData {
-                setting.pendingSyncChanges = nil
-            }
-            
-            if context.hasChanges {
-                try context.save()
-            }
-            
-            state.lastError = nil
-            
-        } catch {
-            
-            guard generation == modeGeneration, !state.isSwitching, Self.isEnabled(context) else {
-                return
-            }
-            
-            context.rollback()
-            
-            let error = AppError(error)
-            
-            if state.lastError?.diagnosticMessage != error.diagnosticMessage {
-                AppLogger.record(error, "Sync iCloud Drive library")
-            }
-            
-            state.lastError = error
-            
-        }
-        
-    }
-
-    func savePDF(_ data: Data, _ fileName: String, _ context: ModelContext) throws -> URL {
-        
-        try requireReady()
-        
-        guard let setting = try Self.settings(context), setting.syncEnabled else {
-            throw AppError.error("Sync is not enabled.")
-        }
-        
-        let root = try folderURL(setting)
-        
-        let accessing = root.startAccessingSecurityScopedResource()
-        
-        defer {
-            
-            if accessing {
-                root.stopAccessingSecurityScopedResource()
-            }
-        }
-        
-        let id = UUID()
-        
-        let hash = SHA256.hash( data: data).map {
-            
-            String(format: "%02x", $0)
-        
-        }.joined()
-        
-        let path = "PDFs/\(id.uuidString)/\(hash)/\(URL(fileURLWithPath: fileName).lastPathComponent)"
-        
-        let destination = try SyncIndexStore(root: root).fileURL(path)
-        
-        try FileManager.default.createDirectory( at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
-        
-        try SyncIndexStore.coordinatedWrite(destination) {
-            try data.write( to: $0,  options: .atomic)
-        }
-        
-        do {
-            try LibraryService.update(context, "The PDF could not be added to the library.") {
-                try registerPDF(destination, context, id: id, hash: hash)
-                
-                return true
-            }
-        }catch {
-            
-            try? SyncIndexStore.coordinatedWrite(destination) {
-                try FileManager.default.removeItem( at: $0)
-            }
-            
-            throw error
-        }
-        
-        return destination
-    }
-
-    func registerPDF(_ url: URL, _ context: ModelContext, id: UUID? = nil, hash: String? = nil) throws {
-        try requireReady()
-        
-        guard let setting = try Self.settings(context), setting.syncEnabled else {
-            return
-        }
-        
-        let root = try folderURL(setting)
-        
-        let accessing = root.startAccessingSecurityScopedResource()
-        
-        defer {
-            
-            if accessing {
-            
-                root.stopAccessingSecurityScopedResource()
-            
-            }
-        
-        }
-        
-        
-        let base = root.standardizedFileURL.path + "/"
-        
-        guard url.standardizedFileURL.path.hasPrefix(base) else {
-            throw SyncStoreError.unsafePath
-        }
-        
-        
-        let path = String(url.standardizedFileURL.path.dropFirst(base.count))
-        
-        _ = try SyncIndexStore(root: root).fileURL(path)
-        
+    static func registerPDF(_ url: URL, _ context: ModelContext, _ setting: StorageSettings, _ path: String, _ hash: String, id: UUID? = nil) throws {
         let entries = try context.fetch( FetchDescriptor<PDFFile>() )
         
         
@@ -749,7 +340,7 @@ final class LibrarySyncService: ObservableObject {
         
         pdf.syncRelativePath = path
         
-        pdf.syncContentHash = try hash ?? SyncIndexStore.contentHash(url)
+        pdf.syncContentHash = hash
         
         pdf.syncBaselineContentHash = pdf.syncContentHash
         
@@ -767,206 +358,29 @@ final class LibrarySyncService: ObservableObject {
         
     }
 
-    func queueTags(_ names: [String], previous: [String], _ pdf: PDFFile, _ context: ModelContext) throws {
-       
-        try requireReady()
-        
-        guard let setting = try Self.settings(context), setting.syncEnabled, let id = pdf.libraryID else {
+    static func queueTags(_ names: [String], previous: [String], _ pdf: PDFFile, _ setting: StorageSettings) throws {
+        guard let id = pdf.libraryID else {
             return
         }
-        
+
         try enqueue( SyncPDFRecord( id: id, location: nil, tags: SyncPDFTags(editing: names, previous: previous, try nextStamp(setting) ), deleted: nil ), setting)
         
         pdf.syncBaselineTags = try JSONEncoder().encode(names)
         
     }
 
-    func deletePDF(_ url: URL, _ context: ModelContext) throws {
-        
-        try requireReady()
-        
-        guard let setting = try Self.settings(context), setting.syncEnabled else {
-            return
-        }
-        
-        let root = try folderURL(setting)
-        
-        var sources: Set<URL> = []
-        
-        try LibraryService.update(context, "The PDF could not be removed from the library.") {
-            let pdfs = try PDFFileService.entries(context, matching: url).filter {
-                $0.libraryID != nil
+    static func remove(_ pdfs: [PDFFile], _ context: ModelContext, _ setting: StorageSettings) throws {
+        for pdf in pdfs {
+            guard let id = pdf.libraryID else {
+                continue
             }
-            
-            for pdf in pdfs {
-                if let path = pdf.syncRelativePath, let source = try? SyncIndexStore(root: root).fileURL(path) {
-                    sources.insert(source)
-                }
-                
-                try enqueue(SyncPDFRecord(id: pdf.libraryID!, location: nil, tags: nil, deleted: try nextStamp(setting)), setting)
-            }
-            
-            PDFFileService.remove(pdfs, context)
-            
-            return !pdfs.isEmpty
+
+            try enqueue(SyncPDFRecord(id: id, location: nil, tags: nil, deleted: try nextStamp(setting)), setting)
         }
-        
-        let accessing = root.startAccessingSecurityScopedResource()
-        
-        defer {
-            if accessing {
-                root.stopAccessingSecurityScopedResource()
-            }
-        }
-        
-        for source in sources {
-            do {
-                
-                try SyncIndexStore.coordinatedWrite(source) {
-                
-                    if FileManager.default.fileExists(atPath: $0.path) {
-                        
-                        try FileManager.default.removeItem( at: $0)
-                        
-                    }
-                
-                }
-                
-            } catch {
-                state.lastError = AppError(error)
-            }
-            
-        }
-        
+
+        PDFFileService.remove(pdfs, context)
     }
 
-    func download(_ pdf: PDFFile, _ context: ModelContext) async throws {
-        
-        try requireReady()
-        
-        guard let setting = try Self.settings(context), setting.syncEnabled else {
-            return
-        }
-        
-        let generation = modeGeneration
-        
-        let root = try folderURL(setting)
-        
-        let accessing = root.startAccessingSecurityScopedResource()
-        
-        defer {
-            
-            if accessing {
-                
-                root.stopAccessingSecurityScopedResource()
-            
-            }
-        
-        }
-        
-        let storedURL = pdf.url
-
-        let url = try pdf.resolveURL()
-
-        let accessingFile = url.startAccessingSecurityScopedResource()
-
-        defer {
-            if accessingFile {
-                url.stopAccessingSecurityScopedResource()
-            }
-        }
-        
-        try await Task.detached(priority: .userInitiated) {
-            
-            _ = try SyncIndexStore.coordinatedRead(url) {
-                
-                try FileHandle(forReadingFrom: $0).close()
-            
-            }
-            
-        }.value
-        
-        
-        guard generation == modeGeneration, pdf.modelContext != nil, !pdf.isDeleted, pdf.url == storedURL, !state.isSwitching, Self.isEnabled(context), try pdf.resolveURL() == url else {
-            
-            throw AppError.error("The library changed during the download. Open the PDF again.")
-            
-        }
-        
-        pdf.bookmarkData = try URL.securityScopedBookmarkData(url)
-        
-        try context.save()
-    }
-
-    func folderURL(_ setting: StorageSettings) throws -> URL {
-        
-        guard let bookmark = setting.syncFolderBookmarkData else {
-        
-            throw AppError.permissionDenied("Reconnect the websnapshot folder in Settings to resume Sync.")
-        
-        }
-        
-        
-        var stale = false
-        
-        let root = try URL.resolveSecurityScopedBookmarkData(bookmark, &stale)
-        
-        guard root.lastPathComponent == "websnapshot", let savedPath = setting.syncFolderPath, root.resolvingSymlinksInPath().standardizedFileURL == URL(fileURLWithPath: savedPath, isDirectory: true).resolvingSymlinksInPath().standardizedFileURL else {
-            
-            throw AppError.permissionDenied("Reconnect iCloud Drive/websnapshot in Settings to resume Sync.")
-            
-        }
-        
-        return root
-    }
-
-    private func driveURL(_ setting: StorageSettings) throws -> URL {
-        guard let bookmark = setting.syncDriveBookmarkData, let savedPath = setting.syncDrivePath else {
-            throw AppError.permissionDenied("Allow access to iCloud Drive in Settings to turn on Sync.")
-        }
-        
-        var stale = false
-        
-        let drive = try URL.resolveSecurityScopedBookmarkData(bookmark, &stale)
-        
-        _ = try SyncIndexStore.cloudDrive(drive)
-        
-        guard drive.resolvingSymlinksInPath().standardizedFileURL == URL(fileURLWithPath: savedPath, isDirectory: true).resolvingSymlinksInPath().standardizedFileURL else {
-            
-            throw AppError.permissionDenied("Reconnect iCloud Drive in Settings to turn on Sync.")
-            
-        }
-        
-        return drive
-    }
-
-    private func pendingChanges(_ setting: StorageSettings) throws -> SyncIndex {
-        try setting.pendingSyncChanges.map(SyncIndex.decode) ?? SyncIndex()
-    }
-
-    private func enqueue(_ record: SyncPDFRecord, _ setting: StorageSettings) throws {
-        setting.pendingSyncChanges = try pendingChanges(setting).merging( SyncIndex( files: [record] ) ).encoded()
-    }
-
-    private func nextStamp(_ setting: StorageSettings) throws -> SyncStamp {
-        
-        guard setting.syncCounter < Int64.max - 1 else {
-            throw SyncStoreError.invalidIndex
-        }
-        
-        if setting.syncDeviceID == nil {
-            setting.syncDeviceID = UUID()
-        }
-        
-        setting.syncCounter += 1
-        
-        return SyncStamp( counter: setting.syncCounter, deviceID: setting.syncDeviceID!, operationID: UUID() )
-    }
-
-}
-
-@MainActor
-enum LibrarySyncRepository {
     static func apply(_ index: SyncIndex, _ context: ModelContext, _ root: URL, _ localURLs: [UUID: URL]? = nil) throws
     {
 
@@ -1004,7 +418,7 @@ enum LibrarySyncRepository {
             !$0.value.isDeleted
         }
 
-        let store = SyncIndexStore(root: root)
+        let store = SyncFileStore(root: root)
 
         for record in index.files where !record.isDeleted {
 
@@ -1068,324 +482,38 @@ enum LibrarySyncRepository {
 
     }
 
-}
+    static func applyRefresh(_ index: SyncIndex, _ context: ModelContext, _ root: URL, _ setting: StorageSettings, _ sentData: Data?) throws {
+        let merged = index.merging(try pendingChanges(setting))
 
-@MainActor
-final class LibraryContentService: ObservableObject {
+        try apply(merged, context, root)
 
-    @Published private(set) var state = LibraryContentState()
+        setting.syncCounter = max(setting.syncCounter, merged.counter)
 
-    private let sync: LibrarySyncService
-
-    private var indexTask: Task<Void, Never>?
-
-    private(set) var cacheRefreshTask: Task<Void, Error>?
-
-    private let extract: @Sendable (URL) async throws -> String
-
-    private var failedSources: [PersistentIdentifier: String] = [:] {
-        didSet {
-            if state.failedCount != failedSources.count {
-                state.failedCount = failedSources.count
-            }
+        if setting.pendingSyncChanges == sentData {
+            setting.pendingSyncChanges = nil
         }
     }
 
-    
-    init(sync: LibrarySyncService, _ extract: @escaping @Sendable (URL) async throws -> String = {
-        try await PDFContentService().text($0)
-    }) {
-        self.sync = sync
-        self.extract = extract
+    static func pendingChanges(_ setting: StorageSettings) throws -> SyncIndex {
+        try setting.pendingSyncChanges.map(SyncIndex.decode) ?? SyncIndex()
     }
 
-    func retry() {
-        failedSources.removeAll()
+    private static func enqueue(_ record: SyncPDFRecord, _ setting: StorageSettings) throws {
+        setting.pendingSyncChanges = try pendingChanges(setting).merging( SyncIndex( files: [record] ) ).encoded()
     }
 
-    func index(_ pdfFiles: [PDFFile], _ modelContext: ModelContext) async {
-        guard !Task.isCancelled, !state.isRefreshingCache, !sync.state.isSwitching else {
-            return
+    private static func nextStamp(_ setting: StorageSettings) throws -> SyncStamp {
+        
+        guard setting.syncCounter < Int64.max - 1 else {
+            throw SyncStoreError.invalidIndex
         }
-
-        if let indexTask {
-            await indexTask.value
-            return
+        
+        if setting.syncDeviceID == nil {
+            setting.syncDeviceID = UUID()
         }
-
-        let task = Task(priority: .utility) { @MainActor in
-            defer {
-                self.indexTask = nil
-            }
-
-            await self.indexContent(pdfFiles, modelContext)
-        }
-
-        indexTask = task
-
-        await task.value
+        
+        setting.syncCounter += 1
+        
+        return SyncStamp( counter: setting.syncCounter, deviceID: setting.syncDeviceID!, operationID: UUID() )
     }
-
-    @discardableResult
-    func refreshContentCache(_ modelContext: ModelContext) -> Task<Void, Error>? {
-        guard !state.isRefreshingCache, !sync.state.isSwitching else {
-            return nil
-        }
-
-        state.isRefreshingCache = true
-
-        state.cacheRefreshResult = nil
-
-        let task = Task(priority: .utility) { @MainActor in
-            defer {
-                self.state.isRefreshingCache = false
-                self.cacheRefreshTask = nil
-            }
-
-            try Task.checkCancellation()
-
-            if let indexTask = self.indexTask {
-                indexTask.cancel()
-                await indexTask.value
-            }
-
-            try Task.checkCancellation()
-
-            try sync.requireReady()
-
-            let removedCount = try self.invalidateContentCache(modelContext)
-
-            let pdfFiles = try modelContext.fetch(FetchDescriptor<PDFFile>())
-
-            self.retry()
-
-            await self.indexContent(pdfFiles, modelContext)
-
-            try Task.checkCancellation()
-
-            try sync.requireReady()
-
-            let afterIndexing = try modelContext.fetch(FetchDescriptor<PDFFile>())
-
-            try LibraryService.deleteMissingFiles(modelContext, afterIndexing, sync: sync)
-
-            let remaining = try modelContext.fetch(FetchDescriptor<PDFFile>())
-
-            let refreshedCount = remaining.filter {
-                $0.searchableText != nil
-            }.count
-
-            self.state.cacheRefreshResult = LibraryContentState.CacheRefreshResult(refreshedCount: refreshedCount, removedCount: removedCount + afterIndexing.count - remaining.count, unavailableCount: remaining.count - refreshedCount)
-        }
-
-        cacheRefreshTask = task
-
-        return task
-    }
-
-    private func invalidateContentCache(_ modelContext: ModelContext) throws -> Int {
-        do {
-            let pdfFiles = try modelContext.fetch(FetchDescriptor<PDFFile>())
-
-            try LibraryService.deleteMissingFiles(modelContext, pdfFiles, sync: sync)
-
-            let remaining = try modelContext.fetch(FetchDescriptor<PDFFile>())
-
-            for pdfFile in remaining {
-                pdfFile.searchableText = nil
-                pdfFile.contentFingerprint = nil
-            }
-
-            if modelContext.hasChanges {
-                try modelContext.save()
-            }
-
-            return pdfFiles.count - remaining.count
-        } catch {
-            modelContext.rollback()
-            throw error
-        }
-    }
-
-    private func indexContent(_ pdfFiles: [PDFFile], _ modelContext: ModelContext) async {
-
-        guard state.isIndexing == false, !sync.state.isSwitching else {
-            return
-        }
-
-        state.isIndexing = true
-
-        defer {
-
-            if state.pendingCount != 0 {
-                state.pendingCount = 0
-            }
-
-            state.isIndexing = false
-        }
-
-        let liveIDs = Set(pdfFiles.map(\.persistentModelID))
-
-        let retainedFailures = failedSources.filter {
-            liveIDs.contains($0.key)
-        }
-
-        if retainedFailures != failedSources {
-            failedSources = retainedFailures
-        }
-
-        var requests: [(id: PersistentIdentifier, url: URL, fingerprint: String, source: String)] = []
-
-        var invalidated = false
-
-        for pdfFile in pdfFiles {
-
-            if Task.isCancelled || sync.state.isSwitching {
-                return
-            }
-
-            if pdfFile.syncRelativePath != nil, pdfFile.availability != .available {
-                continue
-            }
-
-            do {
-
-                let url = try pdfFile.resolveURL()
-
-                guard FileIO.availability(url) == .available else {
-                    continue
-                }
-
-                let fingerprint = try PDFContentService.fingerprint(url)
-
-                if pdfFile.searchableText != nil, pdfFile.contentFingerprint == fingerprint {
-
-                    failedSources[pdfFile.persistentModelID] = nil
-
-                    continue
-                }
-
-                if pdfFile.searchableText != nil || pdfFile.contentFingerprint != nil {
-
-                    pdfFile.searchableText = nil
-
-                    pdfFile.contentFingerprint = nil
-
-                    invalidated = true
-
-                }
-
-                let source = "\(url.standardizedFileURL.path):\(fingerprint)"
-
-                guard failedSources[pdfFile.persistentModelID] != source else {
-                    continue
-                }
-
-                requests.append( ( pdfFile.persistentModelID, url, fingerprint, source) )
-
-            } catch {
-
-                let source = pdfFile.url.absoluteString
-
-                if failedSources[pdfFile.persistentModelID] != source {
-
-                    AppLogger.record(AppError(error), "Prepare PDF content search", pdfFile.url)
-
-                    failedSources[pdfFile.persistentModelID] = source
-                }
-
-            }
-
-        }
-
-        if invalidated {
-
-            do {
-
-                try modelContext.save()
-
-            } catch {
-
-                AppLogger.record(AppError(error), "Clear outdated PDF content search")
-
-                return
-
-            }
-
-        }
-
-        guard requests.isEmpty == false else {
-            return
-        }
-
-        state.pendingCount = requests.count
-
-        for request in requests {
-
-            defer {
-                state.pendingCount -= 1
-            }
-
-            do {
-
-                try Task.checkCancellation()
-
-                let text = try await extract(request.url)
-
-                if sync.state.isSwitching {
-                    return
-                }
-
-                try Task.checkCancellation()
-
-                guard let pdfFile = try modelContext.fetch(FetchDescriptor<PDFFile>()).first(where: {
-
-                    $0.persistentModelID == request.id
-
-                }), try PDFContentService.fingerprint(pdfFile.resolveURL()) == request.fingerprint else {
-
-                    continue
-
-                }
-
-                pdfFile.searchableText = text
-
-                pdfFile.contentFingerprint = request.fingerprint
-
-                do {
-
-                    try modelContext.save()
-
-                } catch {
-
-                    pdfFile.searchableText = nil
-
-                    pdfFile.contentFingerprint = nil
-
-                    throw error
-
-                }
-
-                failedSources[request.id] = nil
-
-            } catch is CancellationError {
-
-                return
-
-            } catch {
-
-                if Task.isCancelled {
-                    return
-                }
-
-                failedSources[request.id] = request.source
-
-                AppLogger.record(AppError(error), "Prepare PDF content search", request.url)
-
-            }
-
-        }
-
-    }
-
 }
