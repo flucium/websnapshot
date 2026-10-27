@@ -18,7 +18,154 @@ nonisolated enum SyncStoreError: Error, LocalizedError {
 }
 
 nonisolated struct SyncIndexStore: Sendable {
-    
+    var root: URL
+
+    func load() throws -> SyncIndex {
+        
+        var index = SyncIndex()
+        
+        let indexURL = root.appendingPathComponent("index.json")
+        
+        if try SyncFileStore.isPresent(indexURL) {
+            
+            index = try SyncIndex.decode( read(indexURL) )
+        
+            for version in NSFileVersion.unresolvedConflictVersionsOfItem(at: indexURL) ?? [] {
+        
+                index = index.merging( try SyncIndex.decode( read(version.url) ) )
+            
+            }
+        
+        }
+        
+        let changes = root.appendingPathComponent("changes", isDirectory: true)
+        
+        
+        if try SyncFileStore.isPresent(changes) {
+            
+            let urls = try SyncFileStore.coordinatedRead(changes) {
+            
+                directory in
+                
+                try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
+            
+            }
+            
+            
+            let metadata = Set(urls.compactMap(Self.metadataURL)).sorted {
+                
+                $0.path < $1.path
+            
+            }
+            
+            for url in metadata {
+                index = index.merging(try SyncIndex.decode( read(url)) )
+            }
+        
+        }
+        
+        for record in index.files {
+        
+            if let path = record.location?.relativePath {
+                _ = try SyncFileStore(root: root).fileURL(path)
+            }
+        
+        }
+        
+        return index
+    }
+
+    func publish(_ changes: SyncIndex) throws {
+        
+        guard !changes.files.isEmpty else {
+            return
+        }
+        
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        
+        let directory = root.appendingPathComponent("changes", isDirectory: true)
+        
+        try FileManager.default.createDirectory( at: directory, withIntermediateDirectories: true)
+        
+        
+        let stamps = changes.files.flatMap {
+            [$0.location?.stamp, $0.tags?.stamp, $0.deleted]
+        }.compactMap {
+            $0
+        }
+        
+        
+        guard let stamp = stamps.max() else {
+            throw SyncStoreError.invalidIndex
+        }
+        
+        
+        let url = directory.appendingPathComponent("\(stamp.deviceID.uuidString)-\(stamp.operationID.uuidString).json")
+        
+        
+        let data = try changes.encoded()
+        
+        try SyncFileStore.coordinatedWrite(url) {
+            
+            destination in
+            
+            if FileManager.default.fileExists( atPath: destination.path) {
+                
+                guard try Data( contentsOf: destination) == data else {
+                    
+                    throw SyncStoreError.invalidIndex
+                
+                }
+                
+                
+            } else {
+                
+                try data.write(to: destination, options: .atomic)
+                
+            }
+            
+        }
+        
+    }
+
+    func writeSnapshot(_ index: SyncIndex) throws {
+        
+        let url = root.appendingPathComponent("index.json")
+        
+        let data = try index.encoded()
+        
+        if try SyncFileStore.isPresent(url), try read(url) == data {
+            return
+        }
+        
+        try SyncFileStore.coordinatedWrite(url) {
+            try data.write( to: $0, options: .atomic)
+        }
+    }
+
+    private static func metadataURL(_ url: URL) -> URL? {
+        
+        if url.pathExtension == "json" {
+            return url
+        }
+        
+        let name = url.lastPathComponent
+        
+        guard name.hasPrefix("."), name.hasSuffix(".json.icloud") else {
+            return nil
+        }
+        
+        return url.deletingLastPathComponent().appendingPathComponent(String(name.dropFirst().dropLast(".icloud".count)))
+    }
+
+    private func read(_ url: URL) throws -> Data {
+        try SyncFileStore.coordinatedRead(url) {
+            try Data( contentsOf: $0)
+        }
+    }
+}
+
+nonisolated struct SyncFileStore: Sendable {
     var root: URL
 
     static var defaultCloudDriveURL: URL {
@@ -172,271 +319,75 @@ nonisolated struct SyncIndexStore: Sendable {
         
     }
 
-    func load() throws -> SyncIndex {
-        
-        var index = SyncIndex()
-        
-        let indexURL = root.appendingPathComponent("index.json")
-        
-        if try isPresent(indexURL) {
-            
-            index = try SyncIndex.decode( read(indexURL) )
-        
-            for version in NSFileVersion.unresolvedConflictVersionsOfItem(at: indexURL) ?? [] {
-        
-                index = index.merging( try SyncIndex.decode( read(version.url) ) )
-            
-            }
-        
-        }
-        
-        let changes = root.appendingPathComponent("changes", isDirectory: true)
-        
-        
-        if try isPresent(changes) {
-            
-            let urls = try coordinatedRead(changes) {
-            
-                directory in
-                
-                try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
-            
-            }
-            
-            
-            let metadata = Set(urls.compactMap(Self.metadataURL)).sorted {
-                
-                $0.path < $1.path
-            
-            }
-            
-            for url in metadata {
-                index = index.merging(try SyncIndex.decode( read(url)) )
-            }
-        
-        }
-        
-        for record in index.files {
-        
-            if let path = record.location?.relativePath {
-                _ = try fileURL(path)
-            }
-        
-        }
-        
-        return index
+    static func relativePath(_ id: UUID, _ hash: String, _ fileName: String) -> String {
+        "PDFs/\(id.uuidString)/\(hash)/\(URL(fileURLWithPath: fileName).lastPathComponent)"
     }
 
-    func publish(_ changes: SyncIndex) throws {
-        
-        guard !changes.files.isEmpty else {
-            return
+    func relativePath(_ url: URL) throws -> String {
+        let base = root.standardizedFileURL.path + "/"
+
+        guard url.standardizedFileURL.path.hasPrefix(base) else {
+            throw SyncStoreError.unsafePath
         }
-        
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        
-        let directory = root.appendingPathComponent("changes", isDirectory: true)
-        
-        try FileManager.default.createDirectory( at: directory, withIntermediateDirectories: true)
-        
-        
-        let stamps = changes.files.flatMap {
-            [$0.location?.stamp, $0.tags?.stamp, $0.deleted]
-        }.compactMap {
-            $0
+
+        let path = String(url.standardizedFileURL.path.dropFirst(base.count))
+
+        _ = try fileURL(path)
+
+        return path
+    }
+
+    func write(_ data: Data, _ fileName: String, _ id: UUID, register: (URL, String) throws -> Void) throws -> URL {
+        let accessing = root.startAccessingSecurityScopedResource()
+
+        defer {
+            if accessing {
+                root.stopAccessingSecurityScopedResource()
+            }
         }
-        
-        
-        guard let stamp = stamps.max() else {
-            throw SyncStoreError.invalidIndex
+
+        let hash = SHA256.hash(data: data).map {
+            String(format: "%02x", $0)
+        }.joined()
+
+        let destination = try fileURL(Self.relativePath(id, hash, fileName))
+
+        try FileManager.default.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
+
+        try Self.coordinatedWrite(destination) {
+            try data.write(to: $0, options: .atomic)
         }
-        
-        
-        let url = directory.appendingPathComponent("\(stamp.deviceID.uuidString)-\(stamp.operationID.uuidString).json")
-        
-        
-        let data = try changes.encoded()
-        
+
+        do {
+            try register(destination, hash)
+        } catch {
+            try? Self.remove(destination)
+            throw error
+        }
+
+        return destination
+    }
+
+    static func remove(_ url: URL) throws {
         try coordinatedWrite(url) {
-            
-            destination in
-            
-            if FileManager.default.fileExists( atPath: destination.path) {
-                
-                guard try Data( contentsOf: destination) == data else {
-                    
-                    throw SyncStoreError.invalidIndex
-                
-                }
-                
-                
-            } else {
-                
-                try data.write(to: destination, options: .atomic)
-                
+            if FileManager.default.fileExists(atPath: $0.path) {
+                try FileManager.default.removeItem(at: $0)
             }
-            
-        }
-        
-    }
-    
-
-    func writeSnapshot(_ index: SyncIndex) throws {
-        
-        let url = root.appendingPathComponent("index.json")
-        
-        let data = try index.encoded()
-        
-        if try isPresent(url), try read(url) == data {
-            return
-        }
-        
-        try coordinatedWrite(url) {
-            try data.write( to: $0, options: .atomic)
         }
     }
 
-    func prepareEnable(_ pdfs: [SyncLocalPDF], _ deviceID: UUID,  _ counter: Int64) throws -> SyncIndex {
-        
-        try FileManager.default.createDirectory( at: root, withIntermediateDirectories: true)
-        
-        var index = try load()
-        
-        var next = max(counter, index.counter)
-        
-        var changes = SyncIndex()
-        
-        for pdf in pdfs {
-            
-            let existing = index.files.first {
-            
-                $0.id == pdf.id
-            
+    static func download(_ url: URL) throws {
+        let accessing = url.startAccessingSecurityScopedResource()
+
+        defer {
+            if accessing {
+                url.stopAccessingSecurityScopedResource()
             }
-            
-            if existing?.isDeleted == true {
-                
-                continue
-            
-            }
-            
-            let hash = try Self.contentHash(pdf.url)
-            
-            guard next < Int64.max - 1 else {
-                
-                throw SyncStoreError.invalidIndex
-            
-            }
-            
-            next += 1
-            
-            let stamp = SyncStamp( counter: next, deviceID: deviceID, operationID: UUID() )
-            
-            
-            var location: SyncPDFLocation
-            
-            if let current = existing?.location, current.contentHash == hash || pdf.sharedHash == hash {
-            
-                location = current
-                
-                if current.contentHash == hash {
-                    try Self.copy(pdf.url, to: fileURL(current.relativePath), expectedHash: hash)
-                }
-                
-            } else {
-                
-                let path = "PDFs/\(pdf.id.uuidString)/\(hash)/\(pdf.url.lastPathComponent)"
-                
-                let destination = try fileURL(path)
-                
-                try Self.copy(pdf.url, to: destination, expectedHash: hash)
-                
-                location = SyncPDFLocation( relativePath: path, contentHash: hash, addedAt: pdf.addedAt, stamp: stamp)
-                
-            }
-            
-            
-            var tags: SyncPDFTags
-            
-            if let current = existing?.tags, let baseline = pdf.baselineTags {
-                
-                tags = pdf.tagNames == baseline ? current : SyncPDFTags( editing: pdf.tagNames, previous: baseline, stamp)
-                
-            } else {
-                
-                tags = SyncPDFTags( pdf.tagNames,  stamp)
-                
-            }
-            
-            
-            tags.stamp = stamp
-            
-            let record = SyncPDFRecord( id: pdf.id, location: location, tags: tags, deleted: nil)
-            
-            changes.files.append(record)
-            
-            index = index.merging( SyncIndex( files: [record] ) )
-            
         }
-        
-        
-        try publish(changes)
-        
-        try writeSnapshot(index)
-        
-        return index
-    }
 
-    func prepareDisable(_ pending: SyncIndex, _ localRoot: URL) throws -> (SyncIndex, [UUID: URL]) {
-        
-        try publish(pending)
-        
-        var index = try load().merging(pending)
-        
-        var destinations: [UUID: URL] = [:]
-
-        var usedDestinations: Set<URL> = []
-        
-        for (offset, record) in index.files.enumerated() where !record.isDeleted {
-        
-            guard var location = record.location else {
-                throw SyncStoreError.invalidIndex
-            }
-            
-            let source = try fileURL(location.relativePath)
-            
-            location.contentHash = try Self.contentHash(source)
-            
-            index.files[offset].location = location
-            
-            var destination = localRoot.appendingPathComponent(source.lastPathComponent)
-            
-            var suffix = 2
-            
-            while try isPresent(destination) {
-                let canonical = destination.resolvingSymlinksInPath().standardizedFileURL
-
-                let values = try destination.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
-
-                if !usedDestinations.contains(canonical), values.isRegularFile == true, values.isSymbolicLink != true,
-                   try Self.contentHash(destination) == location.contentHash {
-                    break
-                }
-
-                destination = localRoot.appendingPathComponent(URL.pdfFileName(source.lastPathComponent, nil, " \(suffix)"))
-                suffix += 1
-            }
-            
-            try Self.copy(source, to: destination, expectedHash: location.contentHash)
-            
-            destinations[record.id] = destination
-
-            usedDestinations.insert(destination.resolvingSymlinksInPath().standardizedFileURL)
-            
+        _ = try coordinatedRead(url) {
+            try FileHandle(forReadingFrom: $0).close()
         }
-        
-        return (index, destinations)
-        
     }
 
     static func copy(_ source: URL, to destination: URL, expectedHash: String) throws {
@@ -535,7 +486,7 @@ nonisolated struct SyncIndexStore: Sendable {
         
     }
 
-    private func isPresent(_ url: URL) throws -> Bool {
+    static func isPresent(_ url: URL) throws -> Bool {
         
         
         do {
@@ -564,28 +515,6 @@ nonisolated struct SyncIndexStore: Sendable {
             
         }
         
-    }
-    
-
-    private static func metadataURL(_ url: URL) -> URL? {
-        
-        if url.pathExtension == "json" {
-            return url
-        }
-        
-        let name = url.lastPathComponent
-        
-        guard name.hasPrefix("."), name.hasSuffix(".json.icloud") else {
-            return nil
-        }
-        
-        return url.deletingLastPathComponent().appendingPathComponent(String(name.dropFirst().dropLast(".icloud".count)))
-    }
-
-    private func read(_ url: URL) throws -> Data {
-        try coordinatedRead(url) {
-            try Data( contentsOf: $0)
-        }
     }
 
     static func coordinatedRead<T>(_ url: URL, _ body: (URL) throws -> T) throws -> T {
@@ -638,13 +567,5 @@ nonisolated struct SyncIndexStore: Sendable {
         }
         
         return try result.get()
-    }
-
-    private func coordinatedRead<T>(_ url: URL, _ body: (URL) throws -> T) throws -> T {
-        try Self.coordinatedRead(url, body)
-    }
-
-    private func coordinatedWrite<T>(_ url: URL, _ body: (URL) throws -> T) throws -> T {
-        try Self.coordinatedWrite(url, body)
     }
 }
