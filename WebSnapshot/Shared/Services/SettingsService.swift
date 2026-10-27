@@ -271,3 +271,114 @@ enum StorageSettingsService {
         try modelContext.fetch(FetchDescriptor<StorageSettings>())
     }
 }
+
+@MainActor
+enum LibrarySyncSettings {
+    static func settings(_ context: ModelContext) throws -> StorageSettings? {
+    
+        guard context.container.schema.entities.contains(where: {
+            $0.name == "StorageSettings"
+        }) else {
+            return nil
+        }
+    
+        return try context.fetch(FetchDescriptor<StorageSettings>()).first
+    }
+
+    static func isEnabled(_ context: ModelContext) -> Bool {
+        ( try? settings(context) )?.syncEnabled == true
+    }
+
+    static func localStorageURL(_ setting: StorageSettings) throws -> URL? {
+        
+        guard setting.previousStorageRawValue == StorageSettings.Storage.fixed.rawValue, let bookmark = setting.previousFixedStorageBookmarkData else {
+            
+            return nil
+            
+        }
+        
+        return try resolveBookmarkedURL(bookmark)
+    }
+
+    static func folderURL(_ setting: StorageSettings) throws -> URL {
+        
+        guard let bookmark = setting.syncFolderBookmarkData else {
+        
+            throw AppError.permissionDenied("Reconnect the websnapshot folder in Settings to resume Sync.")
+        
+        }
+        
+        
+        var stale = false
+        
+        let root = try URL.resolveSecurityScopedBookmarkData(bookmark, &stale)
+        
+        guard root.lastPathComponent == "websnapshot", let savedPath = setting.syncFolderPath, root.resolvingSymlinksInPath().standardizedFileURL == URL(fileURLWithPath: savedPath, isDirectory: true).resolvingSymlinksInPath().standardizedFileURL else {
+            
+            throw AppError.permissionDenied("Reconnect iCloud Drive/websnapshot in Settings to resume Sync.")
+            
+        }
+        
+        return root
+    }
+
+    static func driveURL(_ setting: StorageSettings) throws -> URL {
+        guard let bookmark = setting.syncDriveBookmarkData, let savedPath = setting.syncDrivePath else {
+            throw AppError.permissionDenied("Allow access to iCloud Drive in Settings to turn on Sync.")
+        }
+        
+        var stale = false
+        
+        let drive = try URL.resolveSecurityScopedBookmarkData(bookmark, &stale)
+        
+        _ = try SyncFileStore.cloudDrive(drive)
+        
+        guard drive.resolvingSymlinksInPath().standardizedFileURL == URL(fileURLWithPath: savedPath, isDirectory: true).resolvingSymlinksInPath().standardizedFileURL else {
+            
+            throw AppError.permissionDenied("Reconnect iCloud Drive in Settings to turn on Sync.")
+            
+        }
+        
+        return drive
+    }
+
+    static func reconnect(_ selected: URL, _ context: ModelContext) throws {
+        let accessing = selected.startAccessingSecurityScopedResource()
+
+        defer {
+
+            if accessing {
+                selected.stopAccessingSecurityScopedResource()
+            }
+        }
+
+        guard let setting = try Self.settings(context) else {
+            return
+        }
+
+        let drive = try SyncFileStore.cloudDrive(selected)
+
+        let folder = try SyncFileStore.cloudFolder(drive)
+
+        if let savedPath = setting.syncDrivePath, URL(fileURLWithPath: savedPath, isDirectory: true).resolvingSymlinksInPath().standardizedFileURL != drive.resolvingSymlinksInPath().standardizedFileURL {
+
+            throw SyncStoreError.wrongDrive
+
+        }
+
+        setting.syncDriveBookmarkData = try URL.securityScopedBookmarkData(drive)
+
+        setting.syncDrivePath = drive.path
+
+        if FileManager.default.fileExists(atPath: folder.path) {
+            let bookmark = try URL.securityScopedBookmarkData(folder)
+
+            setting.syncFolderBookmarkData = bookmark
+
+            if setting.syncEnabled { setting.fixedStorageBookmarkData = bookmark }
+        }
+
+        try context.save()
+
+    }
+}
