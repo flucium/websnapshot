@@ -52,6 +52,8 @@ final class StorageSettings {
     
     var pendingSyncChanges: Data? = nil
 
+    var pendingSyncDeletions: Data? = nil
+
     init(_ storage: Storage) {
         self.storage = storage
         self.fixedStoragePath = nil
