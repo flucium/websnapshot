@@ -253,4 +253,6 @@ nonisolated struct SyncLocalPDF: Sendable {
     var sharedHash: String?
     
     var baselineTags: [String]? = nil
+
+    var relativePath: String? = nil
 }
