@@ -33,6 +33,8 @@ struct LibraryView:View {
         }
         .onDisappear {
             pdfFileMonitor.stop()
+
+            libraryViewState.cancelOpeningPDF()
             
             libraryViewState.cancelTranslation()
         }
@@ -47,26 +49,31 @@ struct LibraryView:View {
             }
         }
         .task(id: monitoredPDFFilePaths) {
-            await LibraryViewService.synchronizeLibraryFilesAfterViewUpdate(libraryViewState, modelContext, pdfFileMonitor, sync: sync)
-
             while Task.isCancelled == false {
+                await LibraryViewService.synchronizeLibraryFilesAfterViewUpdate(libraryViewState, modelContext, pdfFileMonitor, sync: sync, contentService: contentService)
+
+                if !contentState.isIndexing {
+                    Task(priority: .utility) {
+                        await contentService.index(pdfFiles, modelContext)
+                    }
+                }
+
                 do {
-                    try await Task.sleep(nanoseconds: 1_000_000_000)
+                    try await Task.sleep(for: .seconds(30))
                 } catch {
                     break
                 }
-
-                await LibraryViewService.synchronizeLibraryFilesAfterViewUpdate(libraryViewState, modelContext, pdfFileMonitor, sync: sync)
             }
         }
         .background {
             translationTaskView
         }
-        .task(priority: .utility) {
-            while Task.isCancelled == false {
-                await contentService.index(pdfFiles, modelContext)
+        .task(id: libraryViewState.selectedPDFFile?.persistentModelID) {
+            while libraryViewState.selectedPDFFile != nil, Task.isCancelled == false {
+                LibraryViewService.refreshDisplayedPDF(libraryViewState)
+
                 do {
-                    try await Task.sleep(nanoseconds: 1_000_000_000)
+                    try await Task.sleep(for: .seconds(1))
                 } catch {
                     break
                 }
@@ -106,7 +113,13 @@ struct LibraryView:View {
                     HStack {
                         Text("Content search is unavailable for some PDFs.")
                             .font(.caption)
-                        Button("Retry", action: contentService.retry)
+                        Button("Retry") {
+                            contentService.retry()
+
+                            Task {
+                                await contentService.index(pdfFiles, modelContext)
+                            }
+                        }
                         Spacer()
                     }
                     .padding(.horizontal)
@@ -389,7 +402,7 @@ struct LibraryView:View {
                             LibraryViewService.startTranslation(libraryViewState,.english)
                         }
                     }
-                    .disabled(libraryViewState.isTranslating)
+                    .disabled(libraryViewState.isTranslating || libraryViewState.displayedPDFData == nil)
                     
                     Text(selectedPDFFile.resolvedURL.lastPathComponent )
                         .lineLimit(1)
