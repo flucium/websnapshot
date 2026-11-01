@@ -87,7 +87,7 @@ struct AppError: Error, Equatable, Identifiable, LocalizedError, @unchecked Send
 
         if let cocoaError = error as? CocoaError {
             switch cocoaError.code {
-            case .fileNoSuchFile:
+            case .fileNoSuchFile, .fileReadNoSuchFile:
                 self = .notFound("The requested file could not be found.",cocoaError.localizedDescription,cocoaError)
                 
             case .fileReadNoPermission, .fileWriteNoPermission:
