@@ -14,9 +14,15 @@ enum WebPDFService {
 
         let source = try await WebExportSource(webPage)
 
-        do{
-            try await waitUntilPageStopsLoading(webPage,wait)
+        let originalMediaType = webPage.mediaType
 
+        webPage.mediaType = .screen
+
+        defer {
+            webPage.mediaType = originalMediaType
+        }
+
+        do{
             try await preparePageForPDFExport(webPage)
 
             try await waitUntilPageResourcesAreReady(webPage,wait)
@@ -33,14 +39,6 @@ enum WebPDFService {
 
 
         try await source.validate(webPage)
-
-        let originalMediaType = webPage.mediaType
-
-        webPage.mediaType = .screen
-
-        defer {
-            webPage.mediaType = originalMediaType
-        }
 
         let data:Data
 
@@ -59,22 +57,45 @@ enum WebPDFService {
         return PDFFileDocument(data)
     }
 
-    static private func waitUntilPageStopsLoading(_ webPage:WebPage,_ timeout: TimeInterval) async throws {
+    static func preparePageForPDFExport(_ webPage:WebPage, maximumScrolls: Int = 60) async throws {
 
-        let deadline = Date().addingTimeInterval(timeout)
+        let clock = ContinuousClock()
+        var previousHeight: Double?
+        var stableSince: ContinuousClock.Instant?
+        var reachedBottom = false
 
-        while webPage.isLoading {
+        for _ in 0..<maximumScrolls {
+            try Task.checkCancellation()
 
-            guard Date() < deadline else {
-                throw AppError.timeout("Timed out waiting for the page to finish loading.")
-            }
+            try await scrollTowardBottomForPDF(webPage)
 
             try await Task.sleep(nanoseconds: 150_000_000)
+
+            let position = try await pageScrollPosition(webPage)
+
+            if position.remaining <= 1, position.height == previousHeight {
+                let since = stableSince ?? clock.now
+                stableSince = since
+
+                if clock.now - since >= .seconds(1) {
+                    reachedBottom = true
+                    break
+                }
+            } else {
+                stableSince = nil
+            }
+
+            previousHeight = position.height
+        }
+
+        _ = try await webPage.callJavaScript("window.scrollTo(0, 0); return true;")
+
+        guard reachedBottom else {
+            throw AppError.timeout("The webpage kept adding content or was too long to prepare. Wait for it to finish loading and try again.")
         }
     }
 
-
-    static private func preparePageForPDFExport(_ webPage:WebPage) async throws {
+    static private func scrollTowardBottomForPDF(_ webPage:WebPage) async throws {
 
         _ = try await webPage
             .callJavaScript(
@@ -99,33 +120,6 @@ enum WebPDFService {
                 frame.setAttribute('loading', 'eager');
             });
 
-            return true;
-            """
-            )
-
-        for _ in 0..<60 {
-            let hasMoreContent = try await scrollTowardBottomForPDF(webPage)
-
-            try await Task.sleep(nanoseconds: 150_000_000)
-
-            if hasMoreContent == false{
-                break
-            }
-
-        }
-
-        _ = try await webPage
-            .callJavaScript(
-            """
-            window.scrollTo(0, 0);
-            return true;
-            """
-            )
-    }
-
-    static private func scrollTowardBottomForPDF(_ webPage:WebPage) async throws -> Bool {
-        let result = try await webPage.callJavaScript(
-            """
             const viewportHeight = Math.max(window.innerHeight || 0, 1);
             const scrollHeight = Math.max(
                 document.body ? document.body.scrollHeight : 0,
@@ -134,10 +128,6 @@ enum WebPDFService {
 
             const maxScrollY = Math.max(scrollHeight - viewportHeight, 0);
 
-            if (maxScrollY <= 0) {
-                return false;
-            }
-
             const nextScrollY = Math.min(
                 window.scrollY + Math.max(viewportHeight * 0.85, 320),
                 maxScrollY
@@ -145,11 +135,29 @@ enum WebPDFService {
 
             window.scrollTo(0, nextScrollY);
 
-            return nextScrollY < maxScrollY;
+            return true;
             """
         )
+    }
 
-        return result as? Bool ?? false
+    static private func pageScrollPosition(_ webPage: WebPage) async throws -> (height: Double, remaining: Double) {
+        let result = try await webPage.callJavaScript(
+            """
+            const viewportHeight = Math.max(window.innerHeight || 0, 1);
+            const scrollHeight = Math.max(
+                document.body ? document.body.scrollHeight : 0,
+                document.documentElement ? document.documentElement.scrollHeight : 0
+            );
+
+            return { height: scrollHeight, remaining: Math.max(scrollHeight - viewportHeight - window.scrollY, 0) };
+            """
+        ) as? [String: Double]
+
+        guard let height = result?["height"], let remaining = result?["remaining"] else {
+            throw AppError.invalidLoad("The webpage's scroll position could not be determined.")
+        }
+
+        return (height, remaining)
     }
 
 
