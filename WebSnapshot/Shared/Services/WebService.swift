@@ -31,25 +31,55 @@ enum WebService{
         }
     }
 
-    static func waitForNavigation<Events: AsyncSequence>(_ events: Events) async throws where Events.Element == WebPage.NavigationEvent {
-        do {
-            for try await event in events {
-                
-                try Task.checkCancellation()
-                
-                if event == .finished {
+    static func waitForNavigation<Events: AsyncSequence>(_ events: Events, timeout: Duration = .seconds(30)) async throws where Events.Element == WebPage.NavigationEvent {
+        try Task.checkCancellation()
+
+        let completion = AsyncThrowingStream<Void, Error> { continuation in
+            let navigationTask = Task { @MainActor in
+                do {
+                    for try await event in events {
+                        try Task.checkCancellation()
+
+                        if event == .finished {
+                            continuation.yield(())
+                            continuation.finish()
+                            return
+                        }
+                    }
+
+                    try Task.checkCancellation()
+
+                    continuation.finish(throwing: AppError.invalidLoad("The webpage stopped loading before it finished."))
+                } catch WebPage.NavigationError.failedProvisionalNavigation(let error) {
+                    continuation.finish(throwing: AppError(error))
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+
+            let timeoutTask = Task { @MainActor in
+                do {
+                    try await Task.sleep(for: timeout)
+
+                    continuation.finish(throwing: AppError.timeout("Timed out waiting for the webpage to finish loading."))
+                } catch {
                     return
                 }
-                
             }
-            
-            try Task.checkCancellation()
-            
-            throw AppError.invalidLoad("The webpage stopped loading before it finished.")
-            
-        } catch WebPage.NavigationError.failedProvisionalNavigation(let error) {
-            
-            throw AppError(error)
+
+            continuation.onTermination = { _ in
+                navigationTask.cancel()
+                timeoutTask.cancel()
+            }
         }
+
+        for try await _ in completion {
+            try Task.checkCancellation()
+            return
+        }
+
+        try Task.checkCancellation()
+
+        throw AppError.invalidLoad("The webpage stopped loading before it finished.")
     }
 }
