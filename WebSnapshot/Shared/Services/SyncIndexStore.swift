@@ -20,25 +20,70 @@ nonisolated enum SyncStoreError: Error, LocalizedError {
 nonisolated struct SyncIndexStore: Sendable {
     var root: URL
 
+    struct Cache: Sendable {
+        fileprivate var root: URL?
+
+        fileprivate var metadata: [URL: SyncIndex] = [:]
+
+        fileprivate var fingerprints: [URL: String] = [:]
+
+        fileprivate var index = SyncIndex()
+
+        fileprivate var contents: [URL: (fingerprint: String, hash: String)] = [:]
+
+        mutating func contentHash(_ url: URL) throws -> String {
+            let fingerprint = try Self.fingerprint(url)
+
+            if let cached = contents[url], cached.fingerprint == fingerprint {
+                return cached.hash
+            }
+
+            let hash = try SyncFileStore.contentHash(url)
+
+            if try Self.fingerprint(url) == fingerprint {
+                contents[url] = (fingerprint, hash)
+            }
+
+            return hash
+        }
+
+        fileprivate static func fingerprint(_ url: URL) throws -> String {
+            let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
+
+            guard let date = attributes[.modificationDate] as? Date,
+                  let size = attributes[.size] as? NSNumber,
+                  let inode = attributes[.systemFileNumber] as? NSNumber else {
+                throw SyncStoreError.unavailableFile
+            }
+
+            return "\(date.timeIntervalSince1970):\(size):\(inode)"
+        }
+    }
+
     func load() throws -> SyncIndex {
-        
-        var index = SyncIndex()
-        
-        let indexURL = root.appendingPathComponent("index.json")
+        var cache = Cache()
+
+        return try load(&cache)
+    }
+
+    func load(_ cache: inout Cache) throws -> SyncIndex {
+        if cache.root != root.standardizedFileURL {
+            cache = Cache(root: root.standardizedFileURL)
+        }
+
+        var sources: [URL] = []
+
+        let files = SyncFileStore(root: root)
+
+        let indexURL = try files.containedURL("index.json")
         
         if try SyncFileStore.isPresent(indexURL) {
-            
-            index = try SyncIndex.decode( read(indexURL) )
-        
-            for version in NSFileVersion.unresolvedConflictVersionsOfItem(at: indexURL) ?? [] {
-        
-                index = index.merging( try SyncIndex.decode( read(version.url) ) )
-            
-            }
-        
+            sources.append(indexURL)
+
+            sources.append(contentsOf: (NSFileVersion.unresolvedConflictVersionsOfItem(at: indexURL) ?? []).map(\.url))
         }
         
-        let changes = root.appendingPathComponent("changes", isDirectory: true)
+        let changes = try files.containedURL("changes")
         
         
         if try SyncFileStore.isPresent(changes) {
@@ -52,17 +97,36 @@ nonisolated struct SyncIndexStore: Sendable {
             }
             
             
-            let metadata = Set(urls.compactMap(Self.metadataURL)).sorted {
-                
-                $0.path < $1.path
-            
-            }
-            
-            for url in metadata {
-                index = index.merging(try SyncIndex.decode( read(url)) )
-            }
-        
+            sources.append(contentsOf: try urls.compactMap(Self.metadataURL).map {
+                try files.containedURL("changes/\($0.lastPathComponent)")
+            })
         }
+
+        let sourceURLs = Set(sources)
+
+        var changed = Set(cache.metadata.keys) != sourceURLs
+
+        var metadata = cache.metadata.filter { sourceURLs.contains($0.key) }
+
+        var fingerprints = cache.fingerprints.filter { sourceURLs.contains($0.key) }
+
+        for url in sourceURLs.sorted(by: { $0.path < $1.path }) {
+            let fingerprint = try? Cache.fingerprint(url)
+
+            if let fingerprint, fingerprints[url] == fingerprint, metadata[url] != nil {
+                continue
+            }
+
+            metadata[url] = try SyncIndex.decode(read(url))
+
+            let currentFingerprint = try? Cache.fingerprint(url)
+
+            fingerprints[url] = currentFingerprint == fingerprint ? currentFingerprint : nil
+
+            changed = true
+        }
+
+        let index = changed ? SyncIndex(files: metadata.values.flatMap(\.files)).merging(SyncIndex()) : cache.index
         
         for record in index.files {
         
@@ -71,6 +135,12 @@ nonisolated struct SyncIndexStore: Sendable {
             }
         
         }
+
+        cache.metadata = metadata
+
+        cache.fingerprints = fingerprints
+
+        cache.index = index
         
         return index
     }
@@ -83,7 +153,9 @@ nonisolated struct SyncIndexStore: Sendable {
         
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         
-        let directory = root.appendingPathComponent("changes", isDirectory: true)
+        let files = SyncFileStore(root: root)
+
+        let directory = try files.containedURL("changes")
         
         try FileManager.default.createDirectory( at: directory, withIntermediateDirectories: true)
         
@@ -100,7 +172,7 @@ nonisolated struct SyncIndexStore: Sendable {
         }
         
         
-        let url = directory.appendingPathComponent("\(stamp.deviceID.uuidString)-\(stamp.operationID.uuidString).json")
+        let url = try files.containedURL("changes/\(stamp.deviceID.uuidString)-\(stamp.operationID.uuidString).json")
         
         
         let data = try changes.encoded()
@@ -130,7 +202,7 @@ nonisolated struct SyncIndexStore: Sendable {
 
     func writeSnapshot(_ index: SyncIndex) throws {
         
-        let url = root.appendingPathComponent("index.json")
+        let url = try SyncFileStore(root: root).containedURL("index.json")
         
         let data = try index.encoded()
         
@@ -141,6 +213,27 @@ nonisolated struct SyncIndexStore: Sendable {
         try SyncFileStore.coordinatedWrite(url) {
             try data.write( to: $0, options: .atomic)
         }
+    }
+
+    func writeSnapshot(_ index: SyncIndex, _ cache: inout Cache) throws {
+        let url = try SyncFileStore(root: root).containedURL("index.json")
+
+        if cache.root != root.standardizedFileURL {
+            cache = Cache(root: root.standardizedFileURL)
+        }
+
+        if cache.root == root.standardizedFileURL, cache.metadata[url] == index,
+           let fingerprint = try? Cache.fingerprint(url), cache.fingerprints[url] == fingerprint {
+            return
+        }
+
+        try writeSnapshot(index)
+
+        cache.metadata[url] = index
+
+        cache.fingerprints[url] = nil
+
+        cache.index = SyncIndex(files: cache.metadata.values.flatMap(\.files)).merging(SyncIndex())
     }
 
     private static func metadataURL(_ url: URL) -> URL? {
@@ -275,6 +368,15 @@ nonisolated struct SyncFileStore: Sendable {
     }
 
     func fileURL(_ relativePath: String) throws -> URL {
+
+        guard relativePath.lowercased().hasSuffix(".pdf") else {
+            throw SyncStoreError.unsafePath
+        }
+
+        return try containedURL(relativePath)
+    }
+
+    func containedURL(_ relativePath: String) throws -> URL {
         
         let components = relativePath.split(separator: "/", omittingEmptySubsequences: false)
         
@@ -283,7 +385,7 @@ nonisolated struct SyncFileStore: Sendable {
             
             !$0.isEmpty && $0 != "." && $0 != ".."
             
-        }), relativePath.lowercased().hasSuffix(".pdf") else {
+        }) else {
         
             throw SyncStoreError.unsafePath
         
@@ -335,6 +437,55 @@ nonisolated struct SyncFileStore: Sendable {
         _ = try fileURL(path)
 
         return path
+    }
+
+    func currentLocation(_ location: SyncPDFLocation, preferredURL: URL? = nil, cache: inout SyncIndexStore.Cache) throws -> SyncPDFLocation? {
+        let expected = try fileURL(location.relativePath)
+
+        var source = expected
+
+        if let preferredURL, (try? relativePath(preferredURL)) != nil, Self.isLocallyAvailable(preferredURL) {
+            source = preferredURL
+        } else if !Self.isLocallyAvailable(expected) {
+            return nil
+        }
+
+        var current = location
+
+        current.relativePath = try relativePath(source)
+        current.contentHash = try cache.contentHash(source)
+
+        return current
+    }
+
+    func versionedURL(_ id: UUID, _ source: URL, _ hash: String) throws -> URL {
+        let path = Self.relativePath(id, hash, source.lastPathComponent)
+
+        var destination = try fileURL(path)
+
+        var suffix = 2
+
+        while try Self.isPresent(destination) {
+            if try Self.contentHash(destination) == hash {
+                return destination
+            }
+
+            destination = try fileURL(Self.relativePath(id, hash, URL.pdfFileName(source.lastPathComponent, nil, " \(suffix)")))
+            suffix += 1
+        }
+
+        try Self.copy(source, to: destination, expectedHash: hash)
+
+        return destination
+    }
+
+    private static func isLocallyAvailable(_ url: URL) -> Bool {
+        guard let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .ubiquitousItemDownloadingStatusKey]),
+              values.isRegularFile == true, values.ubiquitousItemDownloadingStatus != .notDownloaded else {
+            return false
+        }
+
+        return FileManager.default.fileExists(atPath: url.path)
     }
 
     func write(_ data: Data, _ fileName: String, _ id: UUID, register: (URL, String) throws -> Void) throws -> URL {
