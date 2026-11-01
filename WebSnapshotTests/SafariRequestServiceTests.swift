@@ -38,10 +38,9 @@ final class SafariRequestServiceTests: XCTestCase {
     func testRequestsRunSeriallyAndFailurePausesQueueUntilRetry() async throws {
         let container = try makeContainer()
         var attempts: [URL] = []
-        var shouldFail = true
         let service = SafariRequestService { url, _, _ in
             attempts.append(url)
-            if shouldFail { throw AppError.invalidNetwork("Offline") }
+            if attempts.count == 1 { throw AppError.invalidNetwork("Offline") }
             return URL(fileURLWithPath: "/tmp/result.pdf")
         }
         let first = try makeRequest("https://example.com/first")
@@ -54,7 +53,6 @@ final class SafariRequestServiceTests: XCTestCase {
         XCTAssertEqual(service.state.pending, [second])
         XCTAssertTrue(service.canRetry)
 
-        shouldFail = false
         service.retry(container.mainContext)
         try await waitUntil { service.state.pending.isEmpty && service.state.current == nil }
         XCTAssertEqual(attempts, [first.url, first.url, second.url])

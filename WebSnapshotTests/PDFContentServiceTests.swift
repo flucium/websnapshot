@@ -66,6 +66,22 @@ final class PDFContentServiceTests: XCTestCase {
         XCTAssertEqual(text, "Second page")
     }
 
+    func testPageExtractionUsesTheDisplayedSnapshotAfterFileReplacement() async throws {
+        let fixture = try ContentSearchFixture(["Displayed page"])
+        defer { fixture.remove() }
+        let displayedData = try Data(contentsOf: fixture.url)
+        try ContentSearchFixture.data(["Replacement page"]).write(to: fixture.url, options: .atomic)
+        let service = PDFContentService({ _ in
+            throw AppError.error("Embedded text should not trigger OCR")
+        })
+
+        let displayedText = try await service.text(displayedData, pageIndex: 0)
+        let currentText = try await service.text(fixture.url, pageIndex: 0)
+
+        XCTAssertEqual(displayedText, "Displayed page")
+        XCTAssertEqual(currentText, "Replacement page")
+    }
+
     func testPageExtractionUsesTheSameOCRFallbackAsContentSearch() async throws {
         let fixture = try ContentSearchFixture(["Scanned page"], imagePages: [0])
         defer { fixture.remove() }

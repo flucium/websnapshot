@@ -7,6 +7,25 @@ import XCTest
 final class PDFFileStoreTests: XCTestCase {
     private enum Failure: Error { case registration }
 
+    func testImportCreatesMissingDestinationAndPreservesSource() throws {
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let destination = directory.appendingPathComponent("Missing/Imported", isDirectory: true)
+        let source = directory.appendingPathComponent("Source.pdf")
+        let data = Data("original".utf8)
+        try data.write(to: source)
+        var registered: URL?
+
+        let imported = try PDFFileStore.copy(source, to: destination) {
+            registered = $0
+        }
+
+        XCTAssertEqual(registered, imported)
+        XCTAssertEqual(imported.deletingLastPathComponent(), destination)
+        XCTAssertEqual(try Data(contentsOf: imported), data)
+        XCTAssertEqual(try Data(contentsOf: source), data)
+    }
+
     func testFailedRegistrationRemovesOnlyTheNewFile() throws {
         let directory = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }

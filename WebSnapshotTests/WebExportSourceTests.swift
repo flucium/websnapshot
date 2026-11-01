@@ -40,6 +40,7 @@ final class WebExportSourceTests: XCTestCase {
 
     func testExportRejectsNavigationTriggeredDuringPagePreparation() async throws {
         let page = WebPage()
+        page.mediaType = .print
         try await load(page, "https://example.com/article")
         _ = try await page.callJavaScript("""
             window.scrollTo = function() { history.replaceState({}, '', '/other'); };
@@ -51,6 +52,7 @@ final class WebExportSourceTests: XCTestCase {
         } catch {
             XCTAssertEqual((error as? AppError)?.kind, .invalidLoad)
         }
+        XCTAssertEqual(page.mediaType, .print)
     }
 
     func testExportUsesScreenStylesAndRestoresOriginalMediaType() async throws {
@@ -76,6 +78,87 @@ final class WebExportSourceTests: XCTestCase {
         XCTAssertTrue(text.contains("ScreenContent"))
         XCTAssertFalse(text.contains("PrintContent"))
         XCTAssertEqual(page.mediaType, .print)
+    }
+
+    func testPreparationVisitsContentAddedAfterReachingTheBottom() async throws {
+        let page = WebPage()
+        try await load(page, "https://example.com/article")
+        _ = try await page.callJavaScript("""
+            window.testHeight = 1000;
+            window.testPosition = 0;
+            window.testExpanded = false;
+            window.testVisitedExpansion = false;
+            let scheduled = false;
+            Object.defineProperty(window, 'innerHeight', { value: 500 });
+            Object.defineProperty(window, 'scrollY', { get: () => window.testPosition });
+            Object.defineProperty(document.body, 'scrollHeight', { get: () => window.testHeight });
+            Object.defineProperty(document.documentElement, 'scrollHeight', { get: () => window.testHeight });
+            window.scrollTo = function(x, y) {
+                window.testPosition = Math.min(y, window.testHeight - window.innerHeight);
+                if (window.testPosition >= window.testHeight - window.innerHeight) {
+                    if (window.testExpanded) window.testVisitedExpansion = true;
+                    if (!scheduled) {
+                        scheduled = true;
+                        setTimeout(() => {
+                            window.testHeight += 1000;
+                            window.testExpanded = true;
+                        }, 400);
+                    }
+                }
+            };
+            return true;
+            """)
+
+        try await WebPDFService.preparePageForPDFExport(page)
+
+        let visited = try await page.callJavaScript("return window.testVisitedExpansion;") as? Bool
+        XCTAssertEqual(visited, true)
+    }
+
+    func testExportPreparesResourcesUsingScreenStyles() async throws {
+        let page = WebPage()
+        page.mediaType = .print
+        try await load(page, "https://example.com/article")
+        _ = try await page.callJavaScript("""
+            window.testPreparedForPrint = false;
+            const scroll = window.scrollTo.bind(window);
+            window.scrollTo = function(x, y) {
+                window.testPreparedForPrint ||= window.matchMedia('print').matches;
+                scroll(x, y);
+            };
+            return true;
+            """)
+
+        _ = try await WebPDFService.export(page)
+
+        let preparedForPrint = try await page.callJavaScript("return window.testPreparedForPrint;") as? Bool
+        XCTAssertEqual(preparedForPrint, false)
+        XCTAssertEqual(page.mediaType, .print)
+    }
+
+    func testPreparationRejectsContentThatKeepsGrowingAtTheScrollLimit() async throws {
+        let page = WebPage()
+        try await load(page, "https://example.com/article")
+        _ = try await page.callJavaScript("""
+            window.testHeight = 1000;
+            window.testPosition = 0;
+            Object.defineProperty(window, 'innerHeight', { value: 500 });
+            Object.defineProperty(window, 'scrollY', { get: () => window.testPosition });
+            Object.defineProperty(document.body, 'scrollHeight', { get: () => window.testHeight });
+            Object.defineProperty(document.documentElement, 'scrollHeight', { get: () => window.testHeight });
+            window.scrollTo = function(x, y) {
+                window.testPosition = y;
+                window.testHeight += 1000;
+            };
+            return true;
+            """)
+
+        do {
+            try await WebPDFService.preparePageForPDFExport(page, maximumScrolls: 4)
+            XCTFail("An incomplete scroll must not be treated as a prepared page")
+        } catch {
+            XCTAssertEqual((error as? AppError)?.kind, .timeout)
+        }
     }
 
     private func load(_ page: WebPage, _ address: String) async throws {

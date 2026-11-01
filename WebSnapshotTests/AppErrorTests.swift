@@ -38,6 +38,15 @@ final class AppErrorTests: XCTestCase {
         XCTAssertNil(AppError.presentable(CancellationError()))
     }
 
+    func testMissingFileErrorsHaveTheSameClassification() {
+        for code in [CocoaError.Code.fileNoSuchFile, .fileReadNoSuchFile] {
+            let error = AppError(CocoaError(code))
+
+            XCTAssertEqual(error.kind, .notFound)
+            XCTAssertFalse(error.isRetryable)
+        }
+    }
+
     func testUnderlyingErrorIsKeptForDiagnostics() {
         let underlying = NSError(domain: "TestDomain", code: 42)
         let error = AppError.invalidIO(

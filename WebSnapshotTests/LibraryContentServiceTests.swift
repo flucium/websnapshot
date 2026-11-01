@@ -136,6 +136,29 @@ final class LibraryContentServiceTests: XCTestCase {
         XCTAssertEqual(try context.fetchCount(FetchDescriptor<PDFFile>()), 0)
     }
 
+    func testCancellingIndexRequestDoesNotSaveItsExtraction() async throws {
+        let fixture = try ContentSearchFixture(["Original content"])
+        defer { fixture.remove() }
+        let container = try makeContainer()
+        let entry = PDFFile(fixture.url)
+        container.mainContext.insert(entry)
+        try container.mainContext.save()
+        let started = expectation(description: "Extraction started")
+        let gate = ExtractionGate(started)
+        let service = LibraryContentService(sync: sync, { _ in await gate.read() })
+        let task = Task { await service.index([entry], container.mainContext) }
+        await fulfillment(of: [started], timeout: 3)
+
+        task.cancel()
+        await gate.finish()
+        await task.value
+
+        XCTAssertNil(entry.searchableText)
+        XCTAssertNil(entry.contentFingerprint)
+        XCTAssertEqual(service.state.failedCount, 0)
+        XCTAssertFalse(service.state.isIndexing)
+    }
+
     func testFailureIsSkippedUntilRetryAndDoesNotBlockOtherPDFs() async throws {
         let fixture = try ContentSearchFixture(["Valid content"])
         defer { fixture.remove() }
@@ -183,6 +206,28 @@ final class LibraryContentServiceTests: XCTestCase {
         let reads = await probe.reads
         XCTAssertEqual(reads, 1)
         XCTAssertEqual(entry.searchableText, "")
+    }
+
+    func testTargetedIndexKeepsFailuresForOtherPDFs() async throws {
+        let fixture = try ContentSearchFixture(["Valid content"])
+        defer { fixture.remove() }
+        let invalidURL = fixture.directory.appendingPathComponent("Invalid.pdf")
+        try Data("Invalid PDF".utf8).write(to: invalidURL)
+        let container = try makeContainer()
+        let invalid = PDFFile(invalidURL)
+        let valid = PDFFile(fixture.url)
+        container.mainContext.insert(invalid)
+        container.mainContext.insert(valid)
+        try container.mainContext.save()
+        let service = LibraryContentService(sync: sync)
+        await service.index([invalid, valid], container.mainContext)
+        XCTAssertEqual(service.state.failedCount, 1)
+
+        try ContentSearchFixture.data(["Updated content"]).write(to: fixture.url, options: .atomic)
+        await service.index([valid], container.mainContext, pruneFailures: false)
+
+        XCTAssertEqual(service.state.failedCount, 1)
+        XCTAssertTrue(valid.searchableText?.contains("Updated content") ?? false)
     }
 
     private func makeContainer() throws -> ModelContainer {

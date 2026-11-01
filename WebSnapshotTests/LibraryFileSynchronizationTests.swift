@@ -222,6 +222,34 @@ final class LibraryFileSynchronizationTests: XCTestCase {
         XCTAssertEqual(try context.fetchCount(FetchDescriptor<PDFTag>()), 1)
     }
 
+    func testMonitorReportsContentChangesWithoutDeletion() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("document.pdf")
+        try Data("original".utf8).write(to: url)
+        let container = try makeContainer()
+        let entry = PDFFile(url)
+        container.mainContext.insert(entry)
+        try container.mainContext.save()
+        let monitor = LibraryPDFFileMonitor()
+        defer { monitor.stop() }
+        let modified = expectation(description: "Content changes are reported")
+        var reported = false
+        monitor.sync([entry]) { change in
+            guard change.wasModified, !reported else { return }
+            reported = true
+            XCTAssertFalse(change.wasDeleted)
+            XCTAssertEqual(change.fileID, entry.persistentModelID)
+            modified.fulfill()
+        }
+
+        try Data("updated content".utf8).write(to: url)
+
+        await fulfillment(of: [modified], timeout: 3)
+        XCTAssertEqual(try container.mainContext.fetchCount(FetchDescriptor<PDFFile>()), 1)
+    }
+
     func testMissingParentIsUnavailableRatherThanDeleted() {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString)

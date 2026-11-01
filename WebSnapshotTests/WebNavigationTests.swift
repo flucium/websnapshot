@@ -45,6 +45,42 @@ final class WebNavigationTests: XCTestCase {
         }
     }
 
+    func testUnfinishedNavigationTimesOutAndCancelsItsReader() async {
+        let cancelled = expectation(description: "The navigation reader is cancelled")
+        let events = AsyncThrowingStream<WebPage.NavigationEvent, Error> { continuation in
+            continuation.yield(.startedProvisionalNavigation)
+            continuation.onTermination = { _ in
+                cancelled.fulfill()
+            }
+        }
+
+        do {
+            try await WebService.waitForNavigation(events, timeout: .milliseconds(20))
+            XCTFail("A navigation that never finishes must time out")
+        } catch {
+            XCTAssertEqual((error as? AppError)?.kind, .timeout)
+        }
+
+        await fulfillment(of: [cancelled], timeout: 1)
+    }
+
+    func testCancellingAnUnfinishedNavigationDoesNotWaitForItsDeadline() async {
+        let events = AsyncThrowingStream<WebPage.NavigationEvent, Error> { _ in }
+        let task = Task {
+            try await WebService.waitForNavigation(events)
+        }
+
+        await Task.yield()
+        task.cancel()
+
+        do {
+            try await task.value
+            XCTFail("Cancellation must stop waiting for navigation")
+        } catch {
+            XCTAssertNil(AppError.presentable(error))
+        }
+    }
+
     func testClearAndNewLoadsInvalidatePreviousRequests() {
         let state = FetchViewState()
         let first = state.beginLoad()

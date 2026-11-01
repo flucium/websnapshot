@@ -462,6 +462,139 @@ nonisolated final class SyncIndexStoreTests: XCTestCase {
         }
     }
 
+    func testCachedLoadMatchesFreshLoadAfterSnapshotReplacementAndHistoryChanges() throws {
+        try withDirectory { directory in
+            let store = SyncIndexStore(root: directory)
+            var cache = SyncIndexStore.Cache()
+            let first = SyncIndex(files: [record(UUID(), tags: ["First"], counter: 1)])
+            let second = SyncIndex(files: [record(UUID(), tags: ["Second"], counter: 2)])
+            try store.publish(first)
+            try store.writeSnapshot(first)
+            XCTAssertEqual(try store.load(&cache), try store.load())
+
+            try store.publish(second)
+            XCTAssertEqual(try store.load(&cache), try store.load())
+            try store.writeSnapshot(second, &cache)
+            XCTAssertEqual(try store.load(&cache), try store.load())
+            XCTAssertEqual(try store.load(&cache).files.count, 2)
+
+            try first.encoded().write(to: directory.appendingPathComponent("index.json"), options: .atomic)
+            XCTAssertEqual(try store.load(&cache), try store.load())
+            try FileManager.default.removeItem(at: directory.appendingPathComponent("changes"))
+            XCTAssertEqual(try store.load(&cache), first)
+
+            let otherRoot = directory.appendingPathComponent("Other")
+            try FileManager.default.createDirectory(at: otherRoot, withIntermediateDirectories: true)
+            let other = SyncIndexStore(root: otherRoot)
+            try other.writeSnapshot(second)
+            XCTAssertEqual(try other.load(&cache), second)
+        }
+    }
+
+    func testCachedLoadRejectsReplacedMalformedMetadataAndRecoversAfterRepair() throws {
+        try withDirectory { directory in
+            let store = SyncIndexStore(root: directory)
+            var cache = SyncIndexStore.Cache()
+            let index = SyncIndex(files: [record(UUID(), counter: 1)])
+            try store.writeSnapshot(index)
+            XCTAssertEqual(try store.load(&cache), index)
+            let url = directory.appendingPathComponent("index.json")
+            try Data("invalid metadata".utf8).write(to: url, options: .atomic)
+
+            XCTAssertThrowsError(try store.load(&cache))
+
+            try index.encoded().write(to: url, options: .atomic)
+            XCTAssertEqual(try store.load(&cache), index)
+        }
+    }
+
+    func testMetadataSymlinksCannotEscapeTheLibrary() throws {
+        try withDirectory { directory in
+            let root = directory.appendingPathComponent("Library")
+            let outside = directory.appendingPathComponent("Outside")
+            for folder in [root, outside] {
+                try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            }
+            let store = SyncIndexStore(root: root)
+            let index = SyncIndex(files: [record(UUID(), counter: 1)])
+            let outsideIndex = outside.appendingPathComponent("index.json")
+            let data = try index.encoded()
+            try data.write(to: outsideIndex)
+            let indexLink = root.appendingPathComponent("index.json")
+            try FileManager.default.createSymbolicLink(at: indexLink, withDestinationURL: outsideIndex)
+
+            XCTAssertThrowsError(try store.load())
+            XCTAssertThrowsError(try store.writeSnapshot(SyncIndex()))
+            XCTAssertEqual(try Data(contentsOf: outsideIndex), data)
+
+            try FileManager.default.removeItem(at: indexLink)
+            try FileManager.default.createSymbolicLink(at: root.appendingPathComponent("changes"), withDestinationURL: outside)
+
+            XCTAssertThrowsError(try store.load())
+            XCTAssertThrowsError(try store.publish(index))
+            XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: outside.path), ["index.json"])
+
+            try FileManager.default.removeItem(at: root.appendingPathComponent("changes"))
+            let changes = root.appendingPathComponent("changes")
+            try FileManager.default.createDirectory(at: changes, withIntermediateDirectories: true)
+            try FileManager.default.createSymbolicLink(at: changes.appendingPathComponent("linked.json"), withDestinationURL: outsideIndex)
+
+            XCTAssertThrowsError(try store.load())
+            XCTAssertEqual(try Data(contentsOf: outsideIndex), data)
+        }
+    }
+
+    func testExternalContentChangesUseNewPathsAndRemoteMetadataCanArriveFirst() throws {
+        try withDirectory { directory in
+            let source = directory.appendingPathComponent("Article.pdf")
+            try Data("original".utf8).write(to: source)
+            let root = directory.appendingPathComponent("First")
+            let migration = SyncMigration(root: root)
+            let local = SyncLocalPDF(id: UUID(), url: source, addedAt: nil, tagNames: [], sharedHash: nil)
+            let initial = try migration.prepareEnable([local], UUID(), 0)
+            let oldLocation = try XCTUnwrap(initial.files.first?.location)
+            let oldURL = try SyncFileStore(root: root).fileURL(oldLocation.relativePath)
+            let edited = Data("external edit".utf8)
+            try edited.write(to: oldURL, options: .atomic)
+            var cache = SyncIndexStore.Cache()
+
+            let changes = try migration.reconcile(initial, [], UUID(), initial.counter, &cache)
+            let updated = initial.merging(changes)
+            let location = try XCTUnwrap(updated.files.first?.location)
+
+            XCTAssertNotEqual(location.relativePath, oldLocation.relativePath)
+            XCTAssertEqual(try Data(contentsOf: SyncFileStore(root: root).fileURL(location.relativePath)), edited)
+            XCTAssertEqual(try Data(contentsOf: oldURL), edited)
+
+            let secondRoot = directory.appendingPathComponent("Second")
+            let secondStore = SyncFileStore(root: secondRoot)
+            let secondOldURL = try secondStore.fileURL(oldLocation.relativePath)
+            try FileManager.default.createDirectory(at: secondOldURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try Data("original".utf8).write(to: secondOldURL)
+            let second = SyncMigration(root: secondRoot)
+            let known = SyncLocalPDF(id: local.id, url: secondOldURL, addedAt: nil, tagNames: [],
+                                     sharedHash: oldLocation.contentHash, relativePath: oldLocation.relativePath)
+            var secondCache = SyncIndexStore.Cache()
+
+            XCTAssertTrue(try second.reconcile(updated, [known], UUID(), updated.counter, &secondCache).files.isEmpty)
+
+            let received = SyncLocalPDF(id: local.id, url: try secondStore.fileURL(location.relativePath), addedAt: nil, tagNames: [],
+                                        sharedHash: location.contentHash, relativePath: location.relativePath)
+            XCTAssertTrue(try second.reconcile(updated, [received], UUID(), updated.counter, &secondCache).files.isEmpty)
+
+            var renamed = initial
+            renamed.files[0].location?.relativePath = oldLocation.relativePath.replacingOccurrences(of: "Article.pdf", with: "Renamed.pdf")
+            renamed.files[0].location?.stamp = stamp(updated.counter + 1)
+            let renamedLocation = try XCTUnwrap(renamed.files.first?.location)
+            let renamedPDF = SyncLocalPDF(id: local.id, url: try secondStore.fileURL(renamedLocation.relativePath), addedAt: nil, tagNames: [],
+                                          sharedHash: renamedLocation.contentHash, relativePath: renamedLocation.relativePath)
+
+            XCTAssertTrue(try second.reconcile(renamed, [known], UUID(), renamed.counter, &secondCache).files.isEmpty)
+            XCTAssertTrue(try second.reconcile(renamed, [renamedPDF], UUID(), renamed.counter, &secondCache).files.isEmpty)
+            XCTAssertEqual(try Data(contentsOf: secondOldURL), Data("original".utf8))
+        }
+    }
+
     private func record(_ id: UUID, tags: [String] = [], counter: Int64) -> SyncPDFRecord {
         let stamp = stamp(counter)
         return SyncPDFRecord(id: id,
@@ -481,6 +614,9 @@ nonisolated final class SyncIndexStoreTests: XCTestCase {
     }
 
     static let standaloneTests = [
+        ("cached metadata updates", testCachedLoadMatchesFreshLoadAfterSnapshotReplacementAndHistoryChanges),
+        ("cached malformed metadata", testCachedLoadRejectsReplacedMalformedMetadataAndRecoversAfterRepair),
+        ("external edits and metadata ordering", testExternalContentChangesUseNewPathsAndRemoteMetadataCanArriveFirst),
         ("concurrent tag changes", testConcurrentTagAdditionsAndRemovalMergeWithoutLosingOtherTags),
         ("deletion tombstones", testDeletionSurvivesDelayedMetadataAndTagUpdates),
         ("overwritten snapshot recovery", testImmutableChangesRecoverBothDevicesAfterSnapshotOverwrite),
