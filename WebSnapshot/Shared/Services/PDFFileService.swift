@@ -149,6 +149,15 @@ enum PDFFileStore {
     }
 
     static func copy(_ source: URL, to directory: URL,register: (URL) throws -> Void) throws -> URL {
+        let accessing = directory.startAccessingSecurityScopedResource()
+        
+        defer {
+            if accessing {
+                directory.stopAccessingSecurityScopedResource()
+            }
+        }
+        
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         
         let destination = availableURL(directory, source.lastPathComponent)
         
@@ -416,9 +425,13 @@ actor PDFContentService {
         } catch {
             throw AppError(error)
         }
+        return try await text(data, pageIndex: pageIndex)
+    }
+
+    func text(_ data: Data, pageIndex: Int) async throws -> String {
+        try Task.checkCancellation()
         
-        
-        guard let document = PDFDocument(data: data), let page = document.page(at: pageIndex) else {
+        guard let document = PDFDocument(data: data), !document.isLocked, let page = document.page(at: pageIndex) else {
             throw AppError.notFound("The displayed PDF page was not found.")
         }
         
@@ -469,11 +482,35 @@ actor PDFContentService {
 
         let swapsDimensions = rotation == 90 || rotation == 270
 
-        let scale = dpi / 72
+        let pageWidth = swapsDimensions ? pageBounds.height : pageBounds.width
 
-        let width = Int(ceil((swapsDimensions ? pageBounds.height : pageBounds.width) * scale))
+        let pageHeight = swapsDimensions ? pageBounds.width : pageBounds.height
 
-        let height = Int(ceil((swapsDimensions ? pageBounds.width : pageBounds.height) * scale))
+        guard pageWidth.isFinite, pageHeight.isFinite, pageWidth > 0, pageHeight > 0, dpi.isFinite, dpi > 0 else {
+            throw AppError.textRecognitionFailed("The PDF page has an invalid image size.")
+        }
+
+        let maximumDimension: CGFloat = 8_192
+
+        let maximumPixels: CGFloat = 16_000_000
+
+        var scale = min(dpi / 72, maximumDimension / max(pageWidth, pageHeight))
+
+        let pixels = (pageWidth * scale) * (pageHeight * scale)
+
+        if pixels > maximumPixels {
+            scale *= sqrt(maximumPixels / pixels)
+        }
+
+        guard scale.isFinite, scale > 0 else {
+            throw AppError.textRecognitionFailed("The PDF page has an invalid image size.")
+        }
+
+        let width = max(1, Int(floor(pageWidth * scale)))
+
+        let height = max(1, Int(floor(pageHeight * scale)))
+
+        scale = min(CGFloat(width) / pageWidth, CGFloat(height) / pageHeight)
 
         guard width > 0, height > 0, let colorSpace = CGColorSpace(name: CGColorSpace.sRGB), let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0, space: colorSpace, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue )else {
             
