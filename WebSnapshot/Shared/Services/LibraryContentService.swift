@@ -35,14 +35,17 @@ final class LibraryContentService: ObservableObject {
         failedSources.removeAll()
     }
 
-    func index(_ pdfFiles: [PDFFile], _ modelContext: ModelContext) async {
+    func index(_ pdfFiles: [PDFFile], _ modelContext: ModelContext, pruneFailures: Bool = true) async {
         guard !Task.isCancelled, !state.isRefreshingCache, !sync.state.isSwitching else {
             return
         }
 
-        if let indexTask {
+        while let indexTask {
             await indexTask.value
-            return
+
+            guard !Task.isCancelled, !state.isRefreshingCache, !sync.state.isSwitching else {
+                return
+            }
         }
 
         let task = Task(priority: .utility) { @MainActor in
@@ -50,12 +53,16 @@ final class LibraryContentService: ObservableObject {
                 self.indexTask = nil
             }
 
-            await self.indexContent(pdfFiles, modelContext)
+            await self.indexContent(pdfFiles, modelContext, pruneFailures: pruneFailures)
         }
 
         indexTask = task
 
-        await task.value
+        await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            task.cancel()
+        }
     }
 
     @discardableResult
@@ -139,7 +146,7 @@ final class LibraryContentService: ObservableObject {
         }
     }
 
-    private func indexContent(_ pdfFiles: [PDFFile], _ modelContext: ModelContext) async {
+    private func indexContent(_ pdfFiles: [PDFFile], _ modelContext: ModelContext, pruneFailures: Bool = true) async {
 
         guard state.isIndexing == false, !sync.state.isSwitching else {
             return
@@ -162,11 +169,11 @@ final class LibraryContentService: ObservableObject {
             liveIDs.contains($0.key)
         }
 
-        if retainedFailures != failedSources {
+        if pruneFailures, retainedFailures != failedSources {
             failedSources = retainedFailures
         }
 
-        var requests: [(id: PersistentIdentifier, url: URL, fingerprint: String, source: String)] = []
+        var requests: [(pdfFile: PDFFile, id: PersistentIdentifier, url: URL, fingerprint: String, source: String)] = []
 
         var invalidated = false
 
@@ -174,6 +181,10 @@ final class LibraryContentService: ObservableObject {
 
             if Task.isCancelled || sync.state.isSwitching {
                 return
+            }
+
+            guard pdfFile.modelContext != nil, !pdfFile.isDeleted else {
+                continue
             }
 
             if pdfFile.syncRelativePath != nil, pdfFile.availability != .available {
@@ -213,7 +224,7 @@ final class LibraryContentService: ObservableObject {
                     continue
                 }
 
-                requests.append( ( pdfFile.persistentModelID, url, fingerprint, source) )
+                requests.append( ( pdfFile, pdfFile.persistentModelID, url, fingerprint, source) )
 
             } catch {
 
@@ -270,11 +281,9 @@ final class LibraryContentService: ObservableObject {
 
                 try Task.checkCancellation()
 
-                guard let pdfFile = try modelContext.fetch(FetchDescriptor<PDFFile>()).first(where: {
+                let pdfFile = request.pdfFile
 
-                    $0.persistentModelID == request.id
-
-                }), try PDFContentService.fingerprint(pdfFile.resolveURL()) == request.fingerprint else {
+                guard pdfFile.modelContext != nil, !pdfFile.isDeleted, try PDFContentService.fingerprint(pdfFile.resolveURL()) == request.fingerprint else {
 
                     continue
 
