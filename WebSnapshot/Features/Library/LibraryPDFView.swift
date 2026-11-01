@@ -29,22 +29,31 @@ struct LibraryPDFView: NSViewRepresentable {
     }
 
     func updateNSView(_ view: PDFView, context: Context) {
-        guard context.coordinator.loadedURL != url else {
+        guard let data = libraryState.displayedPDFData, libraryState.displayedPDFURL == url else {
+            view.document = nil
             return
         }
 
-        context.coordinator.loadedURL = url
+        let version = libraryState.displayedPDFVersion
 
-        let isAccessing = url.startAccessingSecurityScopedResource()
-
-        defer {
-            if isAccessing {
-                url.stopAccessingSecurityScopedResource()
-            }
+        guard context.coordinator.loadedVersion != version else {
+            return
         }
 
+        context.coordinator.loadedVersion = version
+
+        context.coordinator.lastPageIndex = nil
+
+        let pageIndex = libraryState.currentPageIndex
+
         do {
-            view.document = try Self.document(Data(contentsOf: url))
+            let document = try Self.document(data)
+
+            view.document = document
+
+            if let page = document.page(at: min(pageIndex, max(0, document.pageCount - 1))) {
+                view.go(to: page)
+            }
         } catch {
             view.document = nil
 
@@ -53,6 +62,10 @@ struct LibraryPDFView: NSViewRepresentable {
             AppLogger.record(appError, "Open PDF", url)
 
             DispatchQueue.main.async {
+                guard context.coordinator.loadedVersion == version, libraryState.displayedPDFVersion == version else {
+                    return
+                }
+
                 context.coordinator.present(appError)
             }
         }
@@ -75,7 +88,7 @@ struct LibraryPDFView: NSViewRepresentable {
     final class Coordinator: NSObject {
         weak var libraryState: LibraryViewState?
         
-        var loadedURL: URL?
+        var loadedVersion: UUID?
         
         var lastPageIndex: Int?
 
@@ -105,8 +118,10 @@ struct LibraryPDFView: NSViewRepresentable {
 
             lastPageIndex = pageIndex
 
+            let version = loadedVersion
+
             DispatchQueue.main.async { [weak self] in
-                guard let self else {
+                guard let self, loadedVersion == version, libraryState?.displayedPDFVersion == version else {
                     return
                 }
 
