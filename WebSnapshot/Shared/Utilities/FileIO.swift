@@ -2,7 +2,7 @@ import Foundation
 import Darwin
 
 final class FileIO{
-    enum Availability: Equatable {
+    nonisolated enum Availability: Equatable {
         case available
         case missing
         case unavailable
