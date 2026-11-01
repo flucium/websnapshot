@@ -27,6 +27,18 @@ final class LibraryViewState:ObservableObject{
     @Published var selectedPDFRowID: PersistentIdentifier?
 
     @Published var downloadingPDFs: Set<PersistentIdentifier> = []
+
+    @Published private(set) var displayedPDFData: Data?
+
+    @Published private(set) var displayedPDFVersion = UUID()
+
+    private(set) var displayedPDFURL: URL?
+
+    private(set) var displayedPDFFingerprint: String?
+
+    private var openRequestID: UUID?
+
+    var openPDFTask: Task<Void, Never>?
     
     @Published var tagEditorPDFFile: PDFFile?
     
@@ -42,8 +54,13 @@ final class LibraryViewState:ObservableObject{
     @Published var selectedPDFFile: PDFFile? {
         didSet {
             if oldValue?.persistentModelID != selectedPDFFile?.persistentModelID {
+                cancelOpeningPDF()
                 cancelTranslation()
                 currentPageIndex = 0
+                displayedPDFData = nil
+                displayedPDFURL = nil
+                displayedPDFFingerprint = nil
+                displayedPDFVersion = UUID()
             }
         }
     }
@@ -58,6 +75,8 @@ final class LibraryViewState:ObservableObject{
         let pdfFileID: PersistentIdentifier
         let url: URL
         let pageIndex: Int
+        let data: Data?
+        let version: UUID
         let configuration: TranslationSession.Configuration
         var text: String?
     }
@@ -67,7 +86,7 @@ final class LibraryViewState:ObservableObject{
     func beginTranslation(_ pdfFile: PDFFile, _ language: TranslationLanguage) -> TranslationRequest {
         cancelTranslation()
         
-        let request = TranslationRequest( pdfFileID: pdfFile.persistentModelID, url: pdfFile.resolvedURL, pageIndex: currentPageIndex, configuration: TranslationSession.Configuration(source: language.opposite.localeLanguage, target: language.localeLanguage, preferredStrategy: .lowLatency ) )
+        let request = TranslationRequest( pdfFileID: pdfFile.persistentModelID, url: pdfFile.resolvedURL, pageIndex: currentPageIndex, data: displayedPDFData, version: displayedPDFVersion, configuration: TranslationSession.Configuration(source: language.opposite.localeLanguage, target: language.localeLanguage, preferredStrategy: .lowLatency ) )
         
         translationRequest = request
         
@@ -78,7 +97,7 @@ final class LibraryViewState:ObservableObject{
 
     func isCurrentTranslation(_ request: TranslationRequest) -> Bool {
         
-        translationRequest?.id == request.id && selectedPDFFile?.persistentModelID == request.pdfFileID
+        translationRequest?.id == request.id && selectedPDFFile?.persistentModelID == request.pdfFileID && displayedPDFVersion == request.version
         
     }
 
@@ -134,6 +153,74 @@ final class LibraryViewState:ObservableObject{
         isTranslationPresented = false
         
         translatedText = String()
+    }
+
+    func beginOpeningPDF() -> UUID {
+        cancelOpeningPDF()
+
+        let request = UUID()
+
+        openRequestID = request
+
+        return request
+    }
+
+    func isCurrentOpenRequest(_ request: UUID) -> Bool {
+        openRequestID == request
+    }
+
+    func completeOpeningPDF(_ pdfFile: PDFFile, for request: UUID) {
+        guard isCurrentOpenRequest(request) else {
+            return
+        }
+
+        finishOpeningPDF(request)
+
+        selectedPDFRowID = pdfFile.persistentModelID
+
+        selectedPDFFile = pdfFile
+    }
+
+    func finishOpeningPDF(_ request: UUID) {
+        guard isCurrentOpenRequest(request) else {
+            return
+        }
+
+        openRequestID = nil
+
+        openPDFTask = nil
+
+        downloadingPDFs.removeAll()
+    }
+
+    func cancelOpeningPDF() {
+        openRequestID = nil
+
+        openPDFTask?.cancel()
+
+        openPDFTask = nil
+
+        downloadingPDFs.removeAll()
+    }
+
+    func displayPDF(_ data: Data, _ url: URL, _ fingerprint: String) {
+        guard selectedPDFFile?.resolvedURL == url else {
+            return
+        }
+
+        guard displayedPDFURL != url || displayedPDFFingerprint != fingerprint else {
+            return
+        }
+
+        cancelTranslation()
+
+        displayedPDFURL = url
+
+        displayedPDFFingerprint = fingerprint
+
+        displayedPDFData = data
+
+        displayedPDFVersion = UUID()
     }
 
     func presentTagEditor(_ pdfFile: PDFFile) {
