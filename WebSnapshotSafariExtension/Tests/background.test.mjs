@@ -34,6 +34,8 @@ test("one click delivers the current URL without claiming PDF completion", async
     assert.equal(h.messages[0].message.type, "save-page");
     assert.equal(h.badges.at(-1).text, "");
     assert.match(h.titles.at(-1).title, /Sent to WebSnapshot/);
+    assert.match(h.titles.at(-1).title, /reload the URL/);
+    assert.match(h.titles.at(-1).title, /Safari sign-in and form entries are not included/);
 });
 
 test("unsupported and credential-bearing pages never reach the native app", async () => {
