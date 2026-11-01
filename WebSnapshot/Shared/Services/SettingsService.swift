@@ -297,7 +297,23 @@ enum LibrarySyncSettings {
             
         }
         
-        return try resolveBookmarkedURL(bookmark)
+        guard let url = try? resolveBookmarkedURL(bookmark), !FileIO.isInTrash(url) else {
+            return nil
+        }
+
+        let accessing = url.startAccessingSecurityScopedResource()
+
+        defer {
+            if accessing {
+                url.stopAccessingSecurityScopedResource()
+            }
+        }
+
+        guard let values = try? url.resourceValues(forKeys: [.isDirectoryKey]), values.isDirectory == true else {
+            return nil
+        }
+
+        return url
     }
 
     static func folderURL(_ setting: StorageSettings) throws -> URL {
