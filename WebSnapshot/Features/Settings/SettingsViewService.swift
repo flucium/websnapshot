@@ -150,6 +150,23 @@ final class SettingsViewService {
         }
     }
 
+    @discardableResult
+    static func deleteLibrary(_ state: SettingsViewState, _ context: ModelContext, sync: LibrarySyncService, contentService: LibraryContentService) -> Bool {
+        guard !contentService.state.isRefreshingCache else {
+            return false
+        }
+
+        do {
+            try LibraryService.deleteAll(context, sync: sync)
+            contentService.libraryDidClear()
+            clearError(state)
+            return true
+        } catch {
+            handle(error, "Library Could Not Be Deleted", "Delete all library files and tags", state)
+            return false
+        }
+    }
+
     private static func clearError(_ state: SettingsViewState) {
         if state.appError != nil {
             state.appError = nil
