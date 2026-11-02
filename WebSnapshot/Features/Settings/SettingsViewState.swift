@@ -8,5 +8,5 @@ final class SettingsViewState:ObservableObject{
     @Published var selectedAppearance: AppearanceSettings.Appearance = .system
     @Published var selectedStorage: StorageSettings.Storage = .flexibility
     @Published var selectedSync = false
-    
+    @Published var showDeleteLibraryConfirmation = false
 }
