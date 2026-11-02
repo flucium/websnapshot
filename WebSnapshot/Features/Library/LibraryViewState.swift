@@ -28,6 +28,28 @@ final class LibraryViewState:ObservableObject{
 
     @Published var downloadingPDFs: Set<PersistentIdentifier> = []
 
+    @Published private(set) var fileLocations: [PersistentIdentifier: FileLocation] = [:]
+
+    struct FileSource: Equatable {
+        let id: PersistentIdentifier
+        let url: URL
+        let bookmarkData: Data?
+        let syncRelativePath: String?
+
+        init(_ pdfFile: PDFFile) {
+            id = pdfFile.persistentModelID
+            url = pdfFile.url
+            bookmarkData = pdfFile.bookmarkData
+            syncRelativePath = pdfFile.syncRelativePath
+        }
+    }
+
+    struct FileLocation: Equatable {
+        let source: FileSource
+        let url: URL
+        let availability: FileIO.Availability
+    }
+
     @Published private(set) var displayedPDFData: Data?
 
     @Published private(set) var displayedPDFVersion = UUID()
@@ -228,6 +250,28 @@ final class LibraryViewState:ObservableObject{
         libraryTagEditorViewState.prepare(pdfFile)
         
         tagEditorPDFFile = pdfFile
+    }
+
+    func updateFileLocations(_ locations: [PersistentIdentifier: FileLocation]) {
+        if fileLocations != locations {
+            fileLocations = locations
+        }
+    }
+
+    func fileURL(_ pdfFile: PDFFile) -> URL {
+        fileLocation(pdfFile)?.url ?? pdfFile.url
+    }
+
+    func fileAvailability(_ pdfFile: PDFFile) -> FileIO.Availability {
+        fileLocation(pdfFile)?.availability ?? .unavailable
+    }
+
+    private func fileLocation(_ pdfFile: PDFFile) -> FileLocation? {
+        guard let location = fileLocations[pdfFile.persistentModelID], location.source == FileSource(pdfFile) else {
+            return nil
+        }
+
+        return location
     }
     
 

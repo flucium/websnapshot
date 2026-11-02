@@ -246,50 +246,56 @@ final class LibraryViewService {
 
     static func synchronizeLibraryFiles(_ state: LibraryViewState,_ modelContext: ModelContext,_ monitor: LibraryPDFFileMonitor, sync: LibrarySyncService, _ change: LibraryPDFFileMonitor.Change? = nil, contentService: LibraryContentService? = nil) {
 
-        if sync.state.isSwitching || LibrarySyncService.isEnabled(modelContext) {
-
-            monitor.stop()
-
-            if let selected = state.selectedPDFFile, selected.isDeleted || selected.modelContext == nil {
-                closeMissingPDF(state)
-            }
-
-            return
-        }
-
-        if let change, change.wasModified, FileIO.exists(change.url), let pdfFile = modelContext.model(for: change.fileID) as? PDFFile, pdfFile.modelContext != nil, !pdfFile.isDeleted {
-            refreshDisplayedPDF(state)
-
-            if let contentService {
-                Task {
-                    await contentService.index([pdfFile], modelContext, pruneFailures: false)
-                }
-            }
-
-            return
-        }
-
-        let confirmedDeletedFileIDs: Set<PersistentIdentifier>
-
-        if let change {
-            confirmedDeletedFileIDs = change.wasDeleted && FileIO.exists(change.url) == false ? [change.fileID] : []
-
-            if let selectedPDFFile = state.selectedPDFFile, selectedPDFFile.persistentModelID == change.fileID, selectedPDFFile.availability == .missing || confirmedDeletedFileIDs.contains(change.fileID) {
-
-                closeMissingPDF(state)
-
-            }
-
-        } else {
-            confirmedDeletedFileIDs = []
-
-            if state.selectedPDFFile?.availability == .missing {
-                closeMissingPDF(state)
-            }
-        }
-
         do {
             let pdfFiles = try modelContext.fetch(FetchDescriptor<PDFFile>())
+
+            defer {
+                refreshFileLocations(state, pdfFiles.filter {
+                    !$0.isDeleted && $0.modelContext != nil
+                })
+            }
+
+            if sync.state.isSwitching || LibrarySyncService.isEnabled(modelContext) {
+
+                monitor.stop()
+
+                if let selected = state.selectedPDFFile, selected.isDeleted || selected.modelContext == nil {
+                    closeMissingPDF(state)
+                }
+
+                return
+            }
+
+            if let change, change.wasModified, FileIO.exists(change.url), let pdfFile = modelContext.model(for: change.fileID) as? PDFFile, pdfFile.modelContext != nil, !pdfFile.isDeleted {
+                refreshDisplayedPDF(state)
+
+                if let contentService {
+                    Task {
+                        await contentService.index([pdfFile], modelContext, pruneFailures: false)
+                    }
+                }
+
+                return
+            }
+
+            let confirmedDeletedFileIDs: Set<PersistentIdentifier>
+
+            if let change {
+                confirmedDeletedFileIDs = change.wasDeleted && FileIO.exists(change.url) == false ? [change.fileID] : []
+
+                if let selectedPDFFile = state.selectedPDFFile, selectedPDFFile.persistentModelID == change.fileID, selectedPDFFile.availability == .missing || confirmedDeletedFileIDs.contains(change.fileID) {
+
+                    closeMissingPDF(state)
+
+                }
+
+            } else {
+                confirmedDeletedFileIDs = []
+
+                if state.selectedPDFFile?.availability == .missing {
+                    closeMissingPDF(state)
+                }
+            }
 
             try LibraryService.deleteMissingFiles(modelContext, pdfFiles, sync: sync, confirmedDeletedFileIDs)
 
@@ -309,6 +315,18 @@ final class LibraryViewService {
         } catch {
             handle(error, "Library Could Not Be Synchronized", "Synchronize PDF library", state, change?.url)
         }
+    }
+
+    private static func refreshFileLocations(_ state: LibraryViewState, _ pdfFiles: [PDFFile]) {
+        let locations = Dictionary(pdfFiles.map {
+            pdfFile in
+
+            (pdfFile.persistentModelID, LibraryViewState.FileLocation(source: LibraryViewState.FileSource(pdfFile), url: pdfFile.resolvedURL, availability: pdfFile.availability))
+        }, uniquingKeysWith: {
+            first, _ in first
+        })
+
+        state.updateFileLocations(locations)
     }
 
     static func openPDF(_ state: LibraryViewState, _ modelContext: ModelContext, _ pdfFile: PDFFile, sync: LibrarySyncService) {

@@ -48,7 +48,7 @@ struct LibraryView:View {
                 libraryViewState.selectedPDFRowID = nil
             }
         }
-        .task(id: monitoredPDFFilePaths) {
+        .task(id: monitoredPDFFiles) {
             while Task.isCancelled == false {
                 await LibraryViewService.synchronizeLibraryFilesAfterViewUpdate(libraryViewState, modelContext, pdfFileMonitor, sync: sync, contentService: contentService)
 
@@ -163,16 +163,16 @@ struct LibraryView:View {
         }
     }
 
-    private var monitoredPDFFilePaths: [String] {
+    private var monitoredPDFFiles: [LibraryViewState.FileSource] {
         pdfFiles.map {
-            $0.resolvedURL.standardizedFileURL.path
+            LibraryViewState.FileSource($0)
         }
-        .sorted()
+        .sorted { $0.url.absoluteString < $1.url.absoluteString }
     }
 
     private var existingPDFFiles: [PDFFile] {
         pdfFiles.filter {
-            $0.availability != .missing
+            libraryViewState.fileAvailability($0) != .missing
         }
     }
 
@@ -202,7 +202,7 @@ struct LibraryView:View {
                 pdfFile.tags.contains { $0.normalizedName == name }
             }
 
-            return matchesSelectedTag && LibrarySearch.matches(pdfFile,libraryViewState.searchText,libraryViewState.selectedSearchMode)
+            return matchesSelectedTag && LibrarySearch.matches(pdfFile,libraryViewState.searchText,libraryViewState.selectedSearchMode, title: libraryViewState.fileURL(pdfFile).lastPathComponent)
         }
     }
 
@@ -272,7 +272,7 @@ struct LibraryView:View {
     }
 
     private func pdfMetadataView(_ pdfFile: PDFFile) -> some View {
-        let path = pdfFile.resolvedURL.path
+        let path = libraryViewState.fileURL(pdfFile).path
 
         return VStack(alignment: .leading, spacing: 10) {
             HStack {
@@ -322,13 +322,13 @@ struct LibraryView:View {
 
     private func pdfRow(_ pdfFile: PDFFile) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(pdfFile.resolvedURL.lastPathComponent)
+            Text(libraryViewState.fileURL(pdfFile).lastPathComponent)
 
             if libraryViewState.downloadingPDFs.contains(pdfFile.persistentModelID) {
                 
                 Text("Downloading from iCloud…").font(.caption).foregroundStyle(.secondary)
                 
-            } else if pdfFile.syncRelativePath != nil, pdfFile.availability != .available {
+            } else if pdfFile.syncRelativePath != nil, libraryViewState.fileAvailability(pdfFile) != .available {
                 
                 Text("In iCloud — open to download").font(.caption).foregroundStyle(.secondary)
                 
