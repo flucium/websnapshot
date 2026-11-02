@@ -9,8 +9,12 @@ final class LibraryTagEditorViewState:ObservableObject{
 
     @Published var appError: AppError?
 
+    private(set) var originalTagNames: [String] = []
+
     func prepare(_ pdfFile: PDFFile) {
         tagNames = PDFTagService.tagNames(pdfFile.tags)
+
+        originalTagNames = tagNames
 
         newTagName = String()
 
@@ -19,6 +23,8 @@ final class LibraryTagEditorViewState:ObservableObject{
 
     func clear() {
         tagNames = []
+
+        originalTagNames = []
 
         newTagName = String()
 
