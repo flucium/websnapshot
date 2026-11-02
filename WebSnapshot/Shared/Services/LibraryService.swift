@@ -143,6 +143,32 @@ enum LibraryService {
         }
     }
 
+    static func deleteAll(_ context: ModelContext, sync: LibrarySyncService, _ removeFile: ((URL) throws -> Void)? = nil) throws {
+        try sync.requireReady()
+
+        let pdfs = try context.fetch(FetchDescriptor<PDFFile>())
+
+        if LibrarySyncService.isEnabled(context) {
+            try removeSyncedPDFRecords(context, pdfs, sync: sync, removeFile)
+        } else {
+            for pdf in pdfs where pdf.modelContext != nil && !pdf.isDeleted {
+                if pdf.availability == .missing {
+                    try removePDFRecords(context, pdf.url, sync: sync)
+                } else {
+                    try delete(context, pdf.url, pdf.resolveURL(), sync: sync, removeFile)
+                }
+            }
+        }
+
+        try update(context, "The library's tags could not be deleted.") {
+            let tags = try context.fetch(FetchDescriptor<PDFTag>())
+            for tag in tags {
+                context.delete(tag)
+            }
+            return !tags.isEmpty
+        }
+    }
+
     static func removePDFRecords(_ context: ModelContext, _ url: URL, sync: LibrarySyncService, _ removeFile: ((URL) throws -> Void)? = nil) throws {
         try sync.requireReady()
         
@@ -243,6 +269,13 @@ enum LibraryService {
     }
 
     private static func removeSyncedPDFRecords(_ context: ModelContext, _ url: URL, sync: LibrarySyncService, _ removeFile: ((URL) throws -> Void)?) throws {
+        let pdfs = try PDFFileService.entries(context, matching: url).filter {
+            $0.libraryID != nil
+        }
+        try removeSyncedPDFRecords(context, pdfs, sync: sync, removeFile)
+    }
+
+    private static func removeSyncedPDFRecords(_ context: ModelContext, _ pdfs: [PDFFile], sync: LibrarySyncService, _ removeFile: ((URL) throws -> Void)?) throws {
         guard let setting = try LibrarySyncSettings.settings(context), setting.syncEnabled else {
             return
         }
@@ -254,10 +287,6 @@ enum LibraryService {
         } ?? [])
 
         try update(context, "The PDF could not be removed from the library.") {
-            let pdfs = try PDFFileService.entries(context, matching: url).filter {
-                $0.libraryID != nil
-            }
-
             for pdf in pdfs {
                 let path = try files.relativePath((try? pdf.resolveURL()) ?? pdf.url)
 
