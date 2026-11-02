@@ -613,7 +613,23 @@ nonisolated final class SyncIndexStoreTests: XCTestCase {
         try body(directory)
     }
 
+    func testDeletionSurvivesNewerLocationUpdatesInEitherMergeOrder() throws {
+        let id = UUID()
+        let original = record(id, tags: ["Keep"], counter: 1)
+        let deleted = SyncPDFRecord(id: id, location: nil, tags: nil, deleted: stamp(2))
+        var updated = original
+        updated.location?.stamp = stamp(100)
+
+        let left = SyncIndex(files: [original, deleted]).merging(SyncIndex(files: [updated]))
+        let right = SyncIndex(files: [updated]).merging(SyncIndex(files: [deleted, original]))
+
+        XCTAssertEqual(left, right)
+        XCTAssertTrue(try XCTUnwrap(left.files.first).isDeleted)
+        XCTAssertTrue(try XCTUnwrap(SyncIndex.decode(left.encoded()).files.first).isDeleted)
+    }
+
     static let standaloneTests = [
+        ("deletion after newer location", testDeletionSurvivesNewerLocationUpdatesInEitherMergeOrder),
         ("cached metadata updates", testCachedLoadMatchesFreshLoadAfterSnapshotReplacementAndHistoryChanges),
         ("cached malformed metadata", testCachedLoadRejectsReplacedMalformedMetadataAndRecoversAfterRepair),
         ("external edits and metadata ordering", testExternalContentChangesUseNewPathsAndRemoteMetadataCanArriveFirst),

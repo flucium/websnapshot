@@ -137,6 +137,36 @@ final class LibrarySyncRepositoryTests: XCTestCase {
         XCTAssertNil(try LibrarySyncService.settings(ModelContext(container))?.pendingSyncChanges)
     }
 
+    func testRefreshDoesNotRestorePDFDeletedAfterSending() throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let initial = record(["Original"])
+        let setting = StorageSettings(.fixed)
+        setting.syncEnabled = true
+        setting.syncCounter = 1
+        context.insert(setting)
+        try LibrarySyncRepository.apply(SyncIndex(files: [initial]), context, root)
+        try context.save()
+        let pdf = try XCTUnwrap(context.fetch(FetchDescriptor<PDFFile>()).first)
+        let sentData = setting.pendingSyncChanges
+
+        try LibrarySyncRepository.remove([pdf], context, setting)
+        try context.save()
+
+        var updated = initial
+        updated.location?.stamp.counter = 100
+        let incoming = SyncIndex(files: [updated])
+
+        try LibrarySyncRepository.applyRefresh(incoming, context, root, setting, sentData)
+        try context.save()
+
+        XCTAssertEqual(try context.fetchCount(FetchDescriptor<PDFFile>()), 0)
+        XCTAssertEqual(try context.fetchCount(FetchDescriptor<PDFTag>()), 0)
+        let merged = try incoming.merging(LibrarySyncRepository.pendingChanges(setting))
+        XCTAssertTrue(try XCTUnwrap(merged.files.first).isDeleted)
+    }
+
     private func record(_ names: [String]) -> SyncPDFRecord {
         let id = UUID()
         let stamp = SyncStamp(counter: 1, deviceID: UUID(), operationID: UUID())

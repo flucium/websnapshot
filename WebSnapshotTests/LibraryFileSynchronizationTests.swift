@@ -257,6 +257,37 @@ final class LibraryFileSynchronizationTests: XCTestCase {
         XCTAssertEqual(FileIO.availability(url), .unavailable)
     }
 
+    func testDisplayLocationsFollowRenamesAndRemoveDeletedEntries() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let original = directory.appendingPathComponent("Original.pdf")
+        let renamed = directory.appendingPathComponent("Renamed.pdf")
+        try Data("fixture".utf8).write(to: original)
+        let container = try makeContainer()
+        let context = container.mainContext
+        try LibraryService.registerPDF(context, original, sync: sync)
+        let pdf = try XCTUnwrap(context.fetch(FetchDescriptor<PDFFile>()).first)
+        let id = pdf.persistentModelID
+        let state = LibraryViewState()
+        let monitor = LibraryPDFFileMonitor()
+        defer { monitor.stop() }
+
+        LibraryViewService.synchronizeLibraryFiles(state, context, monitor, sync: sync)
+        XCTAssertEqual(state.fileURL(pdf).standardizedFileURL, original.standardizedFileURL)
+        XCTAssertEqual(state.fileAvailability(pdf), .available)
+
+        try FileManager.default.moveItem(at: original, to: renamed)
+        LibraryViewService.synchronizeLibraryFiles(state, context, monitor, sync: sync)
+        XCTAssertEqual(state.fileURL(pdf).standardizedFileURL, renamed.standardizedFileURL)
+        XCTAssertTrue(LibrarySearch.matches(pdf, "Renamed", .title, title: state.fileURL(pdf).lastPathComponent))
+
+        try FileManager.default.removeItem(at: renamed)
+        LibraryViewService.synchronizeLibraryFiles(state, context, monitor, sync: sync)
+        XCTAssertNil(state.fileLocations[id])
+        XCTAssertEqual(try context.fetchCount(FetchDescriptor<PDFFile>()), 0)
+    }
+
     private func makeContainer() throws -> ModelContainer {
         try ModelContainer(
             for: PDFFile.self, PDFTag.self,
