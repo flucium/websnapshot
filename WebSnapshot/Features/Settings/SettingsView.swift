@@ -48,6 +48,9 @@ struct SettingsView: View {
                     
                     refreshCacheView()
 
+                    deleteView()
+                    
+
                 }
                 .frame(maxWidth: 720)
                 
@@ -128,6 +131,16 @@ struct SettingsView: View {
         .alert(item: $settingsViewState.appError) {
             appError in
             AlertModal.show(settingsViewState.errorTitle, appError)
+        }
+        .confirmationDialog("Delete All Library Files and Tags?", isPresented: $settingsViewState.showDeleteLibraryConfirmation, titleVisibility: .visible) {
+            Button("Delete All", role: .destructive) {
+                SettingsViewService.deleteLibrary(settingsViewState, modelContext, sync: sync, contentService: contentService)
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(savedSync
+                 ? "All PDFs in the Library and all tags will be permanently deleted. This deletion will also sync to your other devices. This cannot be undone."
+                 : "All PDFs in the Library will be permanently deleted from their saved locations, along with all tags. This cannot be undone.")
         }
     }
     
@@ -327,14 +340,40 @@ struct SettingsView: View {
             }
         }
     }
+
+    private func deleteView() -> some View{
+        HStack{
+            deleteLibraryView()
+        }
+    }
+    
+    private func deleteLibraryView() -> some View {
+        SettingsSection("trash", isDestructive: true) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Delete Library")
+                    .font(.headline)
+                Text("Permanently delete all PDFs in the Library and all tags.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+
+            Button("Delete All Files and Tags…", role: .destructive) {
+                
+                settingsViewState.showDeleteLibraryConfirmation = true
+            }
+            .disabled(contentState.isRefreshingCache)
+        }
+    }
 }
 
 private struct SettingsSection<Content: View>: View {
     let systemImage: String
+    let isDestructive: Bool
     let content: Content
 
-    init(_ systemImage: String, @ViewBuilder content: () -> Content) {
+    init(_ systemImage: String, isDestructive: Bool = false, @ViewBuilder content: () -> Content) {
         self.systemImage = systemImage
+        self.isDestructive = isDestructive
         self.content = content()
     }
 
@@ -342,9 +381,9 @@ private struct SettingsSection<Content: View>: View {
         HStack(alignment: .top, spacing: 16) {
             Image(systemName: systemImage)
                 .font(.system(size: 18, weight: .semibold))
-                .foregroundStyle(.tint)
+                .foregroundStyle(isDestructive ? Color.red : Color.accentColor)
                 .frame(width: 34, height: 34)
-                .background(Color.accentColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
+                .background((isDestructive ? Color.red : Color.accentColor).opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
 
             VStack(alignment: .leading, spacing: 14) {
                 content
@@ -352,10 +391,11 @@ private struct SettingsSection<Content: View>: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(18)
+        .background(isDestructive ? Color.red.opacity(0.10) : Color.clear, in: RoundedRectangle(cornerRadius: 10))
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
         .overlay {
             RoundedRectangle(cornerRadius: 10)
-                .stroke(Color(nsColor: .separatorColor).opacity(0.5), lineWidth: 1)
+                .stroke(isDestructive ? Color.red.opacity(0.35) : Color(nsColor: .separatorColor).opacity(0.5), lineWidth: 1)
         }
     }
 }
