@@ -71,6 +71,12 @@ struct AppError: Error, Equatable, Identifiable, LocalizedError, @unchecked Send
             return
         }
 
+        if let syncError = error as? SyncStoreError {
+            self = .error(syncError.localizedDescription, nil, syncError)
+
+            return
+        }
+
         if let urlError = error as? URLError {
             switch urlError.code {
                 
