@@ -122,13 +122,7 @@ nonisolated struct SyncPDFRecord: Codable, Equatable, Sendable {
     var deleted: SyncStamp?
 
     var isDeleted: Bool {
-        guard let deleted else {
-            return false
-        }
-
-        return location.map {
-            deleted >= $0.stamp
-        } ?? true
+        deleted != nil
     }
 
     func merging(_ other: Self) -> Self {
