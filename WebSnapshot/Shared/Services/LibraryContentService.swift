@@ -35,6 +35,12 @@ final class LibraryContentService: ObservableObject {
         failedSources.removeAll()
     }
 
+    func libraryDidClear() {
+        indexTask?.cancel()
+        retry()
+        state.cacheRefreshResult = nil
+    }
+
     func index(_ pdfFiles: [PDFFile], _ modelContext: ModelContext, pruneFailures: Bool = true) async {
         guard !Task.isCancelled, !state.isRefreshingCache, !sync.state.isSwitching else {
             return
