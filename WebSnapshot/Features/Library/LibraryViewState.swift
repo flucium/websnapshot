@@ -16,6 +16,10 @@ final class LibraryViewState:ObservableObject{
 
     @Published var errorTitle = "Library Operation Could Not Be Completed"
 
+    @Published var pendingDeletionPDFFile: PDFFile?
+
+    @Published var showDeleteConfirmation = false
+
     @Published var currentPageIndex = 0
     
     @Published var searchText:String = String()
