@@ -114,6 +114,27 @@ final class SettingsViewService {
         }
     }
 
+    @discardableResult
+    static func saveDeletion(_ state: SettingsViewState, _ modelContext: ModelContext, _ confirmBeforeDeleting: Bool, _ moveDeletedFilesToTrash: Bool) -> Bool {
+        do {
+            let settings = try StorageSettingsService.load(modelContext)
+
+            guard settings.confirmBeforeDeleting != confirmBeforeDeleting || settings.moveDeletedFilesToTrash != moveDeletedFilesToTrash else {
+                return true
+            }
+
+            try StorageSettingsService.saveDeletion(modelContext, confirmBeforeDeleting, moveDeletedFilesToTrash)
+
+            clearError(state)
+
+            return true
+        } catch {
+            handle(error, "Deletion Settings Could Not Be Changed", "Save deletion settings", state)
+
+            return false
+        }
+    }
+
     static func chooseFixedStorage(_ state: SettingsViewState,_ modelContext: ModelContext,_ fixedStoragePath: String?, sync: LibrarySyncService) {
         guard !LibrarySyncService.isEnabled(modelContext), !sync.state.isSwitching else { return }
         
