@@ -131,7 +131,9 @@ enum LibraryService {
             return
         }
         
-        try (removeFile ?? FileIO.delete)(resolvedURL)
+        let settings = try LibrarySyncSettings.settings(context)
+
+        try (removeFile ?? ((settings?.moveDeletedFilesToTrash ?? true) ? FileIO.moveToTrash : FileIO.delete))(resolvedURL)
         
         do {
             try removePDFRecords(context, url, sync: sync)
@@ -301,14 +303,14 @@ enum LibraryService {
         }
 
         do {
-            try retrySyncedFileDeletions(context, setting, root, removeFile ?? SyncFileStore.remove)
+            try retrySyncedFileDeletions(context, setting, root, removeFile)
         } catch {
             sync.reportError(error)
             throw error
         }
     }
 
-    static func retrySyncedFileDeletions(_ context: ModelContext, _ setting: StorageSettings, _ root: URL, _ removeFile: (URL) throws -> Void = SyncFileStore.remove) throws {
+    static func retrySyncedFileDeletions(_ context: ModelContext, _ setting: StorageSettings, _ root: URL, _ removeFile: ((URL) throws -> Void)? = nil) throws {
         guard let data = setting.pendingSyncDeletions else {
             return
         }
@@ -329,7 +331,19 @@ enum LibraryService {
 
         for path in paths {
             do {
-                try removeFile(SyncFileStore(root: root).fileURL(path))
+                let url = try SyncFileStore(root: root).fileURL(path)
+
+                if let removeFile {
+                    try removeFile(url)
+                } else if setting.moveDeletedFilesToTrash {
+                    try SyncFileStore.coordinatedWrite(url) {
+                        if FileIO.exists($0) {
+                            try FileIO.moveToTrash($0)
+                        }
+                    }
+                } else {
+                    try SyncFileStore.remove(url)
+                }
             } catch {
                 remaining.append(path)
                 firstError = firstError ?? error
