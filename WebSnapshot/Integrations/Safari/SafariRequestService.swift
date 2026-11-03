@@ -78,7 +78,7 @@ final class SafariRequestService: ObservableObject {
                 
                 failedRequest = nil
                 
-                state.status = "Loading and saving webpage…"
+                state.status = "Reloading URL without Safari sign-in or form entries…"
                 
                 do {
                     state.savedURL = try await capture(request.url, modelContext) {
@@ -86,7 +86,7 @@ final class SafariRequestService: ObservableObject {
                         self.state.webPage = page
                     }
                     
-                    state.status = state.savedURL == nil ? "Save cancelled." : "PDF saved."
+                    state.status = state.savedURL == nil ? "Save cancelled." : "PDF saved from the reloaded URL."
                     
                 } catch {
                     if let error = AppError.presentable(error) {

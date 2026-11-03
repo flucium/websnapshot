@@ -86,6 +86,42 @@ final class LibraryTagEditorViewServiceTests: XCTestCase {
         XCTAssertNil(state.appError)
     }
 
+    func testSavePreservesTagsAddedWhileEditorWasOpen() throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+        let pdfFile = PDFFile(URL(fileURLWithPath: "/tmp/Article.pdf"))
+        context.insert(pdfFile)
+        try LibraryService.replaceTags(["Original", "Remove"], pdfFile, context, sync: sync)
+        let editor = LibraryTagEditorViewState()
+        editor.prepare(pdfFile)
+        editor.tagNames = ["Original", "Local"]
+
+        try LibraryService.replaceTags(["Original", "Remove", "Remote"], pdfFile, context, sync: sync)
+
+        XCTAssertTrue(LibraryTagEditorViewService.save(editor, pdfFile, context, sync: sync))
+        let stored = ModelContext(container)
+        let saved = try XCTUnwrap(stored.fetch(FetchDescriptor<PDFFile>()).first)
+        XCTAssertEqual(Set(PDFTagService.tagNames(saved.tags)), ["Original", "Local", "Remote"])
+    }
+
+    func testSaveDoesNotRestoreTagsRemovedWhileEditorWasOpen() throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+        let pdfFile = PDFFile(URL(fileURLWithPath: "/tmp/Article.pdf"))
+        context.insert(pdfFile)
+        try LibraryService.replaceTags(["Original", "Keep"], pdfFile, context, sync: sync)
+        let editor = LibraryTagEditorViewState()
+        editor.prepare(pdfFile)
+        editor.tagNames = ["Original", "Keep", "Local"]
+
+        try LibraryService.replaceTags(["Keep"], pdfFile, context, sync: sync)
+
+        XCTAssertTrue(LibraryTagEditorViewService.save(editor, pdfFile, context, sync: sync))
+        let stored = ModelContext(container)
+        let saved = try XCTUnwrap(stored.fetch(FetchDescriptor<PDFFile>()).first)
+        XCTAssertEqual(Set(PDFTagService.tagNames(saved.tags)), ["Keep", "Local"])
+    }
+
     private func makeContainer() throws -> ModelContainer {
         try ModelContainer(for: PDFFile.self, PDFTag.self,
                            configurations: ModelConfiguration(isStoredInMemoryOnly: true))

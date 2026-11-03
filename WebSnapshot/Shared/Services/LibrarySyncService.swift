@@ -11,6 +11,8 @@ final class LibrarySyncService: ObservableObject {
 
     private var modeGeneration: UInt64 = 0
 
+    private var indexCache = SyncIndexStore.Cache()
+
     static func settings(_ context: ModelContext) throws -> StorageSettings? {
         try LibrarySyncSettings.settings(context)
     }
@@ -37,6 +39,8 @@ final class LibrarySyncService: ObservableObject {
         }
         
         modeGeneration &+= 1
+
+        indexCache = SyncIndexStore.Cache()
         
         state.isSwitching = true
         
@@ -70,6 +74,7 @@ final class LibrarySyncService: ObservableObject {
         do {
             try requireReady()
             try LibrarySyncSettings.reconnect(selected, context)
+            indexCache = SyncIndexStore.Cache()
         } catch {
             context.rollback()
             throw error
@@ -113,18 +118,40 @@ final class LibrarySyncService: ObservableObject {
             let sentData = setting.pendingSyncChanges
             
             let pending = try LibrarySyncRepository.pendingChanges(setting)
+
+            let pdfs = try LibrarySyncRepository.syncedPDFs(context)
+
+            let deviceID = setting.syncDeviceID ?? UUID()
+
+            let counter = setting.syncCounter
+
+            let savedCache = indexCache
             
-            let index = try await Task.detached(priority: .utility) {
+            let (index, cache) = try await Task.detached(priority: .utility) {
                 
                 let store = SyncIndexStore(root: root)
+
+                var cache = savedCache
                 
                 try store.publish(pending)
                 
-                let index = try store.load().merging(pending)
+                var index = try store.load(&cache)
+
+                if !pending.files.isEmpty {
+                    index = index.merging(pending)
+                }
+
+                let changes = try SyncMigration(root: root).reconcile(index, pdfs, deviceID, counter, &cache)
+
+                try store.publish(changes)
+
+                if !changes.files.isEmpty {
+                    index = index.merging(changes)
+                }
                 
-                try store.writeSnapshot(index)
+                try store.writeSnapshot(index, &cache)
             
-                return index
+                return (index, cache)
             }.value
             
             
@@ -132,6 +159,10 @@ final class LibrarySyncService: ObservableObject {
             guard generation == modeGeneration, !state.isSwitching, Self.isEnabled(context), !Task.isCancelled else {
                 return
             }
+
+            indexCache = cache
+
+            setting.syncDeviceID = deviceID
             
             
             
@@ -140,6 +171,8 @@ final class LibrarySyncService: ObservableObject {
             if context.hasChanges {
                 try context.save()
             }
+
+            try LibraryService.retrySyncedFileDeletions(context, setting, root)
             
             state.lastError = nil
             
@@ -165,6 +198,8 @@ final class LibrarySyncService: ObservableObject {
 
     func download(_ pdf: PDFFile, _ context: ModelContext) async throws {
         
+        try Task.checkCancellation()
+
         try requireReady()
         
         guard let setting = try Self.settings(context), setting.syncEnabled else {
@@ -191,9 +226,39 @@ final class LibrarySyncService: ObservableObject {
 
         let url = try pdf.resolveURL()
 
-        try await Task.detached(priority: .userInitiated) {
+        let previousHash = pdf.syncContentHash
+
+        let id = pdf.libraryID
+
+        let task = Task.detached(priority: .userInitiated) {
+            try Task.checkCancellation()
+
             try SyncFileStore.download(url)
-        }.value
+
+            try Task.checkCancellation()
+
+            let hash = try SyncFileStore.contentHash(url)
+
+            try Task.checkCancellation()
+
+            let currentURL: URL
+
+            if let id, previousHash != hash {
+                currentURL = try SyncFileStore(root: root).versionedURL(id, url, hash)
+            } else {
+                currentURL = url
+            }
+
+            return (currentURL, hash)
+        }
+
+        let (currentURL, hash) = try await withTaskCancellationHandler {
+            try await task.value
+        } onCancel: {
+            task.cancel()
+        }
+
+        try Task.checkCancellation()
 
         guard generation == modeGeneration, pdf.modelContext != nil, !pdf.isDeleted, pdf.url == storedURL, !state.isSwitching, Self.isEnabled(context), try pdf.resolveURL() == url else {
             
@@ -201,7 +266,7 @@ final class LibrarySyncService: ObservableObject {
             
         }
         
-        pdf.bookmarkData = try URL.securityScopedBookmarkData(url)
+        try LibrarySyncRepository.updateLocation(pdf, currentURL, SyncFileStore(root: root).relativePath(currentURL), hash, setting)
         
         try context.save()
     }
@@ -319,9 +384,21 @@ enum LibrarySyncMigration {
         }
         
         let pending = try LibrarySyncRepository.pendingChanges(setting)
+
+        try LibraryService.retrySyncedFileDeletions(context, setting, root)
+
+        let pdfs = try LibrarySyncRepository.syncedPDFs(context)
+
+        let deviceID = setting.syncDeviceID ?? UUID()
+
+        let counter = setting.syncCounter
         
         guard let destination = try localRoot ?? LibrarySyncSettings.localStorageURL(setting) else {
             throw AppError.error("Choose a storage folder before turning Sync off.")
+        }
+
+        guard !FileIO.isInTrash(destination) else {
+            throw AppError.error("Choose a storage folder outside the Trash before turning Sync off.")
         }
         
         let accessingDestination = destination.startAccessingSecurityScopedResource()
@@ -338,7 +415,7 @@ enum LibrarySyncMigration {
         
         let (index, urls) = try await Task.detached(priority: .userInitiated) {
             
-            try SyncMigration(root: root).prepareDisable(pending,  destination)
+            try SyncMigration(root: root).prepareDisable(pending, destination, pdfs, deviceID, counter)
             
         }.value
         
@@ -407,15 +484,63 @@ enum LibrarySyncMigration {
 nonisolated struct SyncMigration: Sendable {
     var root: URL
 
+    func reconcile(_ index: SyncIndex, _ pdfs: [SyncLocalPDF], _ deviceID: UUID, _ counter: Int64, _ cache: inout SyncIndexStore.Cache) throws -> SyncIndex {
+        let known = Dictionary(pdfs.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+
+        let store = SyncFileStore(root: root)
+
+        var next = max(index.counter, counter)
+
+        var changes = SyncIndex()
+
+        for record in index.files where !record.isDeleted {
+            guard let location = record.location else {
+                continue
+            }
+
+            let pdf = known[record.id]
+
+            let preferred = pdf?.relativePath == location.relativePath && pdf?.sharedHash == location.contentHash ? pdf?.url : nil
+
+            guard var current = try store.currentLocation(location, preferredURL: preferred, cache: &cache),
+                  current.relativePath != location.relativePath || current.contentHash != location.contentHash else {
+                continue
+            }
+
+            guard next < Int64.max - 1 else {
+                throw SyncStoreError.invalidIndex
+            }
+
+            next += 1
+
+            if current.contentHash != location.contentHash {
+                let source = try store.fileURL(current.relativePath)
+                let destination = try store.versionedURL(record.id, source, current.contentHash)
+
+                current.relativePath = try store.relativePath(destination)
+            }
+
+            current.stamp = SyncStamp(counter: next, deviceID: deviceID, operationID: UUID())
+
+            changes.files.append(SyncPDFRecord(id: record.id, location: current, tags: nil, deleted: nil))
+        }
+
+        return changes
+    }
+
     func prepareEnable(_ pdfs: [SyncLocalPDF], _ deviceID: UUID,  _ counter: Int64) throws -> SyncIndex {
         
         try FileManager.default.createDirectory( at: root, withIntermediateDirectories: true)
         
         var index = try SyncIndexStore(root: root).load()
+
+        var cache = SyncIndexStore.Cache()
+
+        var changes = try reconcile(index, [], deviceID, counter, &cache)
+
+        index = index.merging(changes)
         
         var next = max(counter, index.counter)
-        
-        var changes = SyncIndex()
         
         for pdf in pdfs {
             
@@ -484,7 +609,7 @@ nonisolated struct SyncMigration: Sendable {
             
             let record = SyncPDFRecord( id: pdf.id, location: location, tags: tags, deleted: nil)
             
-            changes.files.append(record)
+            changes = changes.merging(SyncIndex(files: [record]))
             
             index = index.merging( SyncIndex( files: [record] ) )
             
@@ -498,11 +623,23 @@ nonisolated struct SyncMigration: Sendable {
         return index
     }
 
-    func prepareDisable(_ pending: SyncIndex, _ localRoot: URL) throws -> (SyncIndex, [UUID: URL]) {
+    func prepareDisable(_ pending: SyncIndex, _ localRoot: URL, _ pdfs: [SyncLocalPDF] = [], _ deviceID: UUID = UUID(), _ counter: Int64 = 0) throws -> (SyncIndex, [UUID: URL]) {
         
         try SyncIndexStore(root: root).publish(pending)
         
         var index = try SyncIndexStore(root: root).load().merging(pending)
+
+        var cache = SyncIndexStore.Cache()
+
+        let changes = try reconcile(index, pdfs, deviceID, counter, &cache)
+
+        try SyncIndexStore(root: root).publish(changes)
+
+        index = index.merging(changes)
+
+        if !changes.files.isEmpty {
+            try SyncIndexStore(root: root).writeSnapshot(index)
+        }
         
         var destinations: [UUID: URL] = [:]
 

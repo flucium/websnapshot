@@ -11,7 +11,7 @@ struct SafariRequestState {
 
     var savedURL: URL?
 
-    var status = "Ready to save from Safari."
+    var status = "Ready to reload a URL from Safari without its sign-in or form entries."
 
     var appError: AppError?
 }

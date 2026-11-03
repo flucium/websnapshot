@@ -9,6 +9,7 @@ final class LibraryPDFFileMonitor: ObservableObject {
         let fileID: PersistentIdentifier
         let url: URL
         let wasDeleted: Bool
+        var wasModified = false
     }
 
     private var monitors: [PersistentIdentifier: PDFFileMonitor] = [:]
@@ -34,9 +35,9 @@ final class LibraryPDFFileMonitor: ObservableObject {
             }
 
             monitors[key]?.stop()
-            let monitor = PDFFileMonitor(url) { missingURL, wasDeleted in
+            let monitor = PDFFileMonitor(url) { missingURL, wasDeleted, wasModified in
                 Task { @MainActor in
-                    onMissing(Change(fileID: key, url: missingURL, wasDeleted: wasDeleted))
+                    onMissing(Change(fileID: key, url: missingURL, wasDeleted: wasDeleted, wasModified: wasModified))
                 }
             }
 
@@ -67,9 +68,9 @@ private final class PDFFileMonitor {
 
     private var isAccessingSecurityScopedResource = false
 
-    private let onMissing: (URL, Bool) -> Void
+    private let onMissing: (URL, Bool, Bool) -> Void
     
-    init(_ url: URL, _ onMissing: @escaping (URL, Bool) -> Void) {
+    init(_ url: URL, _ onMissing: @escaping (URL, Bool, Bool) -> Void) {
         self.url = url
         self.onMissing = onMissing
     }
@@ -87,7 +88,7 @@ private final class PDFFileMonitor {
 
         guard FileManager.default.fileExists(atPath: url.path) else {
             stopAccessingSecurityScopedResource()
-            onMissing(url, false)
+            onMissing(url, false, false)
             return false
         }
 
@@ -97,13 +98,13 @@ private final class PDFFileMonitor {
             stopAccessingSecurityScopedResource()
 
             if FileManager.default.fileExists(atPath: url.path) == false {
-                onMissing(url, false)
+                onMissing(url, false, false)
             }
 
             return false
         }
 
-        let source = DispatchSource.makeFileSystemObjectSource(fileDescriptor: fileDescriptor, eventMask: [.delete, .rename, .revoke], queue: .main )
+        let source = DispatchSource.makeFileSystemObjectSource(fileDescriptor: fileDescriptor, eventMask: [.delete, .rename, .revoke, .write, .extend], queue: .main )
 
         source.setEventHandler { [weak self, weak source] in
             let wasDeleted = source?.data.contains(.delete) == true
@@ -138,10 +139,11 @@ private final class PDFFileMonitor {
         guard FileManager.default.fileExists( atPath: url.path) == false else {
             stop()
             _ = start()
+            onMissing(url, false, true)
             return
         }
 
-        onMissing(url, wasDeleted)
+        onMissing(url, wasDeleted, false)
         stop()
     }
 

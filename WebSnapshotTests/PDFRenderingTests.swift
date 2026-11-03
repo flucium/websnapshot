@@ -5,6 +5,34 @@ import XCTest
 @testable import WebSnapshot
 
 final class PDFRenderingTests: XCTestCase {
+    func testLargePagesKeepImageSizeBounded() throws {
+        for bounds in [CGRect(x: 0, y: 0, width: 1_440, height: 14_400), CGRect(x: 0, y: 0, width: 14_400, height: 14_400)] {
+            let page = PDFPage()
+            page.setBounds(bounds, for: .mediaBox)
+            page.setBounds(bounds, for: .cropBox)
+
+            for rotation in [0, 90] {
+                page.rotation = rotation
+                let image = try PDFContentService.render(page, 300)
+
+                XCTAssertLessThanOrEqual(image.width, 8_192)
+                XCTAssertLessThanOrEqual(image.height, 8_192)
+                XCTAssertLessThanOrEqual(image.width * image.height, 16_000_000)
+                let expectedRatio = rotation == 90 ? bounds.height / bounds.width : bounds.width / bounds.height
+                XCTAssertEqual(CGFloat(image.width) / CGFloat(image.height), expectedRatio, accuracy: 0.01)
+            }
+        }
+    }
+
+    func testInvalidRenderingResolutionFailsBeforeAllocatingAnImage() {
+        let page = PDFPage()
+        page.setBounds(CGRect(x: 0, y: 0, width: 612, height: 792), for: .mediaBox)
+
+        for dpi in [CGFloat(0), -1, .nan, .infinity] {
+            XCTAssertThrowsError(try PDFContentService.render(page, dpi))
+        }
+    }
+
     func testRotatedAndCroppedPagesKeepBothCornerMarkers() throws {
         let data = NSMutableData()
         var mediaBox = CGRect(x: 0, y: 0, width: 612, height: 792)

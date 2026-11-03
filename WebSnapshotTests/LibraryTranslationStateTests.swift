@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import SwiftData
 import XCTest
 @testable import WebSnapshot
 
@@ -74,5 +75,81 @@ final class LibraryTranslationStateTests: XCTestCase {
         XCTAssertEqual(state.translatedText, "Current result")
         XCTAssertTrue(state.isTranslationPresented)
         XCTAssertFalse(state.isTranslating)
+    }
+
+    func testSlowerOpenCannotReplaceTheLatestPDF() {
+        let state = LibraryViewState()
+        let first = PDFFile(URL(fileURLWithPath: "/tmp/first.pdf"))
+        let second = PDFFile(URL(fileURLWithPath: "/tmp/second.pdf"))
+        let older = state.beginOpeningPDF()
+        let newer = state.beginOpeningPDF()
+
+        state.completeOpeningPDF(second, for: newer)
+        state.completeOpeningPDF(first, for: older)
+
+        XCTAssertTrue(state.selectedPDFFile === second)
+        XCTAssertEqual(state.selectedPDFRowID, second.persistentModelID)
+    }
+
+    func testClosingPDFInvalidatesPendingOpen() {
+        let state = LibraryViewState()
+        let pdfFile = PDFFile(URL(fileURLWithPath: "/tmp/pending.pdf"))
+        let request = state.beginOpeningPDF()
+        state.downloadingPDFs.insert(pdfFile.persistentModelID)
+
+        LibraryViewService.closeDisplayedPDF(state)
+        state.completeOpeningPDF(pdfFile, for: request)
+
+        XCTAssertNil(state.selectedPDFFile)
+        XCTAssertTrue(state.downloadingPDFs.isEmpty)
+    }
+
+    func testTranslationUsesDisplayedSnapshotUntilPDFRefreshes() async throws {
+        let fixture = try ContentSearchFixture(["Original displayed text"])
+        defer { fixture.remove() }
+        let state = LibraryViewState()
+        let pdfFile = PDFFile(fixture.url)
+        let container = try ModelContainer(for: PDFFile.self, PDFTag.self, configurations: ModelConfiguration(isStoredInMemoryOnly: true))
+        container.mainContext.insert(pdfFile)
+        try container.mainContext.save()
+        state.selectedPDFFile = pdfFile
+        LibraryViewService.refreshDisplayedPDF(state)
+        let request = state.beginTranslation(pdfFile, .japanese)
+        let data = try XCTUnwrap(request.data)
+
+        try ContentSearchFixture.data(["Replacement text"]).write(to: fixture.url, options: .atomic)
+        let extracted = try await PDFContentService().text(data, pageIndex: request.pageIndex)
+
+        XCTAssertTrue(extracted.contains("Original displayed text"))
+        XCTAssertEqual(state.displayedPDFVersion, request.version)
+
+        LibraryViewService.refreshDisplayedPDF(state)
+        state.completeTranslation("Outdated result", for: request)
+
+        XCTAssertNotEqual(state.displayedPDFVersion, request.version)
+        XCTAssertNil(state.translationRequest)
+        XCTAssertFalse(state.isTranslationPresented)
+        XCTAssertTrue(state.translatedText.isEmpty)
+        let updated = try XCTUnwrap(state.displayedPDFData)
+        let currentText = try await PDFContentService().text(updated, pageIndex: 0)
+        XCTAssertTrue(currentText.contains("Replacement text"))
+    }
+
+    func testUnchangedPDFDoesNotInvalidateCurrentTranslation() throws {
+        let fixture = try ContentSearchFixture(["Unchanged content"])
+        defer { fixture.remove() }
+        let state = LibraryViewState()
+        let pdfFile = PDFFile(fixture.url)
+        let container = try ModelContainer(for: PDFFile.self, PDFTag.self, configurations: ModelConfiguration(isStoredInMemoryOnly: true))
+        container.mainContext.insert(pdfFile)
+        try container.mainContext.save()
+        state.selectedPDFFile = pdfFile
+        LibraryViewService.refreshDisplayedPDF(state)
+        let request = state.beginTranslation(pdfFile, .japanese)
+
+        LibraryViewService.refreshDisplayedPDF(state)
+
+        XCTAssertTrue(state.isCurrentTranslation(request))
+        XCTAssertEqual(state.displayedPDFVersion, request.version)
     }
 }

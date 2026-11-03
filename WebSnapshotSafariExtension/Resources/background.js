@@ -19,7 +19,7 @@ browser.action.onClicked.addListener(async (tab) => {
         }
         
         await browser.action.setBadgeText({ tabId: tab.id, text: "" });
-        await browser.action.setTitle({ tabId: tab.id, title: "Sent to WebSnapshot for background saving" });
+        await browser.action.setTitle({ tabId: tab.id, title: "Sent to WebSnapshot to reload the URL. Safari sign-in and form entries are not included." });
     } catch (error) {
         await browser.action.setBadgeText({ tabId: tab.id, text: "!" }).catch(() => {});
         await browser.action.setTitle({

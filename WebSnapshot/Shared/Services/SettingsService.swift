@@ -217,6 +217,32 @@ enum StorageSettingsService {
         }
     }
 
+    static func saveDeletion(_ modelContext: ModelContext, _ confirmBeforeDeleting: Bool, _ moveDeletedFilesToTrash: Bool) throws {
+        do {
+            let settings = try load(modelContext)
+
+            guard settings.confirmBeforeDeleting != confirmBeforeDeleting || settings.moveDeletedFilesToTrash != moveDeletedFilesToTrash else {
+                return
+            }
+
+            if settings.modelContext == nil {
+                modelContext.insert(settings)
+            }
+
+            settings.confirmBeforeDeleting = confirmBeforeDeleting
+
+            settings.moveDeletedFilesToTrash = moveDeletedFilesToTrash
+
+            try modelContext.save()
+        } catch let error as AppError {
+            modelContext.rollback()
+            throw error
+        } catch {
+            modelContext.rollback()
+            throw AppError.system("The deletion settings could not be saved.",error.localizedDescription,error)
+        }
+    }
+
     static func reset(_ modelContext: ModelContext, sync: LibrarySyncService) throws {
         try sync.requireReady()
         
@@ -297,7 +323,23 @@ enum LibrarySyncSettings {
             
         }
         
-        return try resolveBookmarkedURL(bookmark)
+        guard let url = try? resolveBookmarkedURL(bookmark), !FileIO.isInTrash(url) else {
+            return nil
+        }
+
+        let accessing = url.startAccessingSecurityScopedResource()
+
+        defer {
+            if accessing {
+                url.stopAccessingSecurityScopedResource()
+            }
+        }
+
+        guard let values = try? url.resourceValues(forKeys: [.isDirectoryKey]), values.isDirectory == true else {
+            return nil
+        }
+
+        return url
     }
 
     static func folderURL(_ setting: StorageSettings) throws -> URL {

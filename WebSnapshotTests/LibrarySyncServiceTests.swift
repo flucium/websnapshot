@@ -61,6 +61,147 @@ final class LibrarySyncServiceTests: XCTestCase {
         XCTAssertNil(sync.state.lastError)
     }
 
+    func testRenamedSyncedPDFReachesAnotherDeviceAndCanTurnSyncOff() async throws {
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let drive = try makeDrive(directory)
+        let container = try makeContainer()
+        let context = container.mainContext
+        try await sync.setEnabled(true, context, drive: drive)
+        let data = Data("renamed fixture".utf8)
+        let original = try XCTUnwrap(LibraryService.savePDF(data, "Before.pdf", context, [], sync: sync))
+        let pdf = try XCTUnwrap(context.fetch(FetchDescriptor<PDFFile>()).first)
+        try LibraryService.replaceTags(["Keep"], pdf, context, sync: sync)
+        await sync.refresh(context)
+        let renamed = original.deletingLastPathComponent().appendingPathComponent("After.pdf")
+        try FileManager.default.moveItem(at: original, to: renamed)
+
+        await sync.refresh(context)
+
+        XCTAssertNil(sync.state.lastError)
+        XCTAssertEqual(pdf.url.resolvingSymlinksInPath().standardizedFileURL, renamed.resolvingSymlinksInPath().standardizedFileURL)
+        XCTAssertTrue(pdf.syncRelativePath?.hasSuffix("After.pdf") == true)
+        let other = try makeContainer()
+        let otherSync = LibrarySyncService()
+        try await otherSync.setEnabled(true, other.mainContext, drive: drive)
+        let remote = try XCTUnwrap(other.mainContext.fetch(FetchDescriptor<PDFFile>()).first)
+        try await otherSync.download(remote, other.mainContext)
+        XCTAssertEqual(try Data(contentsOf: remote.resolveURL()), data)
+        XCTAssertEqual(remote.libraryID, pdf.libraryID)
+        XCTAssertEqual(remote.tags.map(\.name), ["Keep"])
+
+        let destination = directory.appendingPathComponent("Local")
+        try await sync.setEnabled(false, context, localRoot: destination)
+
+        XCTAssertFalse(LibrarySyncService.isEnabled(context))
+        XCTAssertEqual(pdf.url, destination.appendingPathComponent("After.pdf"))
+        XCTAssertEqual(try Data(contentsOf: pdf.resolveURL()), data)
+        XCTAssertEqual(try Data(contentsOf: renamed), data)
+    }
+
+    func testReenablePreservesExternallyEditedCloudPDF() async throws {
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let drive = try makeDrive(directory)
+        let container = try makeContainer()
+        let context = container.mainContext
+        try await sync.setEnabled(true, context, drive: drive)
+        let cloudPDF = try XCTUnwrap(LibraryService.savePDF(Data("original".utf8), "Article.pdf", context, [], sync: sync))
+        let pdf = try XCTUnwrap(context.fetch(FetchDescriptor<PDFFile>()).first)
+        let id = pdf.libraryID
+        try LibraryService.replaceTags(["Keep"], pdf, context, sync: sync)
+        try await sync.setEnabled(false, context, localRoot: directory.appendingPathComponent("Local"))
+        let localPDF = pdf.url
+        let changed = Data("edited externally".utf8)
+        try changed.write(to: cloudPDF, options: .atomic)
+
+        try await sync.setEnabled(true, context)
+
+        XCTAssertEqual(pdf.libraryID, id)
+        XCTAssertEqual(pdf.tags.map(\.name), ["Keep"])
+        XCTAssertEqual(try Data(contentsOf: pdf.resolveURL()), changed)
+        XCTAssertEqual(try Data(contentsOf: localPDF), Data("original".utf8))
+        XCTAssertEqual(pdf.syncContentHash, try SyncFileStore.contentHash(cloudPDF))
+        XCTAssertNoThrow(try SyncIndexStore(root: drive.appendingPathComponent("websnapshot")).load())
+    }
+
+    func testFailedFileDeletionIsPersistedAndRetriedAfterRestart() async throws {
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let container = try makeContainer()
+        let context = container.mainContext
+        let drive = try makeDrive(directory)
+        try await sync.setEnabled(true, context, drive: drive)
+        let cloudPDF = try XCTUnwrap(LibraryService.savePDF(Data("fixture".utf8), "Article.pdf", context, [], sync: sync))
+        let pdf = try XCTUnwrap(context.fetch(FetchDescriptor<PDFFile>()).first)
+        let path = try XCTUnwrap(pdf.syncRelativePath)
+
+        XCTAssertThrowsError(try LibraryService.delete(context, pdf.url, pdf.resolvedURL, sync: sync) { _ in
+            throw CocoaError(.fileWriteNoPermission)
+        })
+
+        XCTAssertEqual(try context.fetchCount(FetchDescriptor<PDFFile>()), 0)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: cloudPDF.path))
+        let stored = ModelContext(container)
+        stored.autosaveEnabled = false
+        let setting = try XCTUnwrap(LibrarySyncService.settings(stored))
+        let deletions = try JSONDecoder().decode([String].self, from: XCTUnwrap(setting.pendingSyncDeletions))
+        XCTAssertEqual(deletions, [path])
+        let restarted = LibrarySyncService()
+
+        await restarted.refresh(stored)
+
+        XCTAssertNil(restarted.state.lastError)
+        XCTAssertNil(setting.pendingSyncDeletions)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: cloudPDF.path))
+        XCTAssertEqual(try stored.fetchCount(FetchDescriptor<PDFFile>()), 0)
+    }
+
+    func testTrashStorageAndInvalidBookmarkAskForReplacementBeforeDisablingSync() async throws {
+        for invalidBookmark in [false, true] {
+            let directory = try temporaryDirectory()
+            defer { try? FileManager.default.removeItem(at: directory) }
+            let fixed = directory.appendingPathComponent("Fixed")
+            try FileManager.default.createDirectory(at: fixed, withIntermediateDirectories: true)
+            let container = try makeContainer()
+            let context = container.mainContext
+            let service = LibrarySyncService()
+            try StorageSettingsService.saveFixedStorage(context, fixed, sync: service)
+            try await service.setEnabled(true, context, drive: makeDrive(directory))
+            let cloudPDF = try XCTUnwrap(LibraryService.savePDF(Data("fixture".utf8), "Saved.pdf", context, [], sync: service))
+            let setting = try XCTUnwrap(LibrarySyncService.settings(context))
+            let trash = directory.appendingPathComponent("Mobile Documents/.Trash/Fixed")
+
+            if invalidBookmark {
+                setting.previousFixedStorageBookmarkData = Data("invalid bookmark".utf8)
+                try context.save()
+            } else {
+                try FileManager.default.createDirectory(at: trash.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try FileManager.default.moveItem(at: fixed, to: trash)
+            }
+
+            let replacement = directory.appendingPathComponent("Replacement")
+            try FileManager.default.createDirectory(at: replacement, withIntermediateDirectories: true)
+            let state = SettingsViewState()
+            var prompts = 0
+
+            let succeeded = await SettingsViewService.changeSync(state, context, false, sync: service) { _, _, _ in
+                prompts += 1
+                return replacement
+            }
+
+            XCTAssertTrue(succeeded)
+            XCTAssertNil(state.appError)
+            XCTAssertEqual(prompts, 1)
+            XCTAssertEqual(setting.fixedStoragePath, replacement.path)
+            XCTAssertEqual(try context.fetch(FetchDescriptor<PDFFile>()).first?.url, replacement.appendingPathComponent("Saved.pdf"))
+            XCTAssertEqual(try Data(contentsOf: cloudPDF), Data("fixture".utf8))
+            if !invalidBookmark {
+                XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: trash.path), [])
+            }
+        }
+    }
+
     func testSyncedPDFWithoutBookmarkCanBeOpened() async throws {
         let directory = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }

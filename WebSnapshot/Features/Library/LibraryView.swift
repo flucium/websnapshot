@@ -19,6 +19,12 @@ struct LibraryView:View {
     
     @Query private var pdfTags: [PDFTag]
 
+    @Query private var storageSettings: [StorageSettings]
+
+    private var moveDeletedFilesToTrash: Bool {
+        storageSettings.first?.moveDeletedFilesToTrash ?? true
+    }
+
     
     private var contentState: LibraryContentState { contentService.state }
 
@@ -33,6 +39,8 @@ struct LibraryView:View {
         }
         .onDisappear {
             pdfFileMonitor.stop()
+
+            libraryViewState.cancelOpeningPDF()
             
             libraryViewState.cancelTranslation()
         }
@@ -46,27 +54,32 @@ struct LibraryView:View {
                 libraryViewState.selectedPDFRowID = nil
             }
         }
-        .task(id: monitoredPDFFilePaths) {
-            await LibraryViewService.synchronizeLibraryFilesAfterViewUpdate(libraryViewState, modelContext, pdfFileMonitor, sync: sync)
-
+        .task(id: monitoredPDFFiles) {
             while Task.isCancelled == false {
+                await LibraryViewService.synchronizeLibraryFilesAfterViewUpdate(libraryViewState, modelContext, pdfFileMonitor, sync: sync, contentService: contentService)
+
+                if !contentState.isIndexing {
+                    Task(priority: .utility) {
+                        await contentService.index(pdfFiles, modelContext)
+                    }
+                }
+
                 do {
-                    try await Task.sleep(nanoseconds: 1_000_000_000)
+                    try await Task.sleep(for: .seconds(30))
                 } catch {
                     break
                 }
-
-                await LibraryViewService.synchronizeLibraryFilesAfterViewUpdate(libraryViewState, modelContext, pdfFileMonitor, sync: sync)
             }
         }
         .background {
             translationTaskView
         }
-        .task(priority: .utility) {
-            while Task.isCancelled == false {
-                await contentService.index(pdfFiles, modelContext)
+        .task(id: libraryViewState.selectedPDFFile?.persistentModelID) {
+            while libraryViewState.selectedPDFFile != nil, Task.isCancelled == false {
+                LibraryViewService.refreshDisplayedPDF(libraryViewState)
+
                 do {
-                    try await Task.sleep(nanoseconds: 1_000_000_000)
+                    try await Task.sleep(for: .seconds(1))
                 } catch {
                     break
                 }
@@ -75,6 +88,23 @@ struct LibraryView:View {
         .alert(item: $libraryViewState.appError) {
             appError in
             AlertModal.show(libraryViewState.errorTitle, appError)
+        }
+        .confirmationDialog(moveDeletedFilesToTrash ? "Move PDF to Trash?" : "Delete PDF?", isPresented: $libraryViewState.showDeleteConfirmation, titleVisibility: .visible) {
+            Button(moveDeletedFilesToTrash ? "Move to Trash" : "Delete", role: .destructive) {
+                LibraryViewService.confirmDeletion(libraryViewState, modelContext, sync: sync)
+            }
+            Button("Cancel", role: .cancel) {
+                libraryViewState.pendingDeletionPDFFile = nil
+            }
+        } message: {
+            if let pdfFile = libraryViewState.pendingDeletionPDFFile {
+                Text(moveDeletedFilesToTrash
+                     ? "\(pdfFile.resolvedURL.lastPathComponent) will be moved to Trash."
+                     : "\(pdfFile.resolvedURL.lastPathComponent) will be permanently deleted. This cannot be undone.")
+            }
+            if storageSettings.first?.syncEnabled == true {
+                Text("This deletion will also sync to your other devices.")
+            }
         }
         .sheet(item: $libraryViewState.tagEditorPDFFile,onDismiss: libraryViewState.closeTagEditor) {
             pdfFile in
@@ -106,7 +136,13 @@ struct LibraryView:View {
                     HStack {
                         Text("Content search is unavailable for some PDFs.")
                             .font(.caption)
-                        Button("Retry", action: contentService.retry)
+                        Button("Retry") {
+                            contentService.retry()
+
+                            Task {
+                                await contentService.index(pdfFiles, modelContext)
+                            }
+                        }
                         Spacer()
                     }
                     .padding(.horizontal)
@@ -150,16 +186,16 @@ struct LibraryView:View {
         }
     }
 
-    private var monitoredPDFFilePaths: [String] {
+    private var monitoredPDFFiles: [LibraryViewState.FileSource] {
         pdfFiles.map {
-            $0.resolvedURL.standardizedFileURL.path
+            LibraryViewState.FileSource($0)
         }
-        .sorted()
+        .sorted { $0.url.absoluteString < $1.url.absoluteString }
     }
 
     private var existingPDFFiles: [PDFFile] {
         pdfFiles.filter {
-            $0.availability != .missing
+            libraryViewState.fileAvailability($0) != .missing
         }
     }
 
@@ -189,7 +225,7 @@ struct LibraryView:View {
                 pdfFile.tags.contains { $0.normalizedName == name }
             }
 
-            return matchesSelectedTag && LibrarySearch.matches(pdfFile,libraryViewState.searchText,libraryViewState.selectedSearchMode)
+            return matchesSelectedTag && LibrarySearch.matches(pdfFile,libraryViewState.searchText,libraryViewState.selectedSearchMode, title: libraryViewState.fileURL(pdfFile).lastPathComponent)
         }
     }
 
@@ -259,7 +295,7 @@ struct LibraryView:View {
     }
 
     private func pdfMetadataView(_ pdfFile: PDFFile) -> some View {
-        let path = pdfFile.resolvedURL.path
+        let path = libraryViewState.fileURL(pdfFile).path
 
         return VStack(alignment: .leading, spacing: 10) {
             HStack {
@@ -309,13 +345,13 @@ struct LibraryView:View {
 
     private func pdfRow(_ pdfFile: PDFFile) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(pdfFile.resolvedURL.lastPathComponent)
+            Text(libraryViewState.fileURL(pdfFile).lastPathComponent)
 
             if libraryViewState.downloadingPDFs.contains(pdfFile.persistentModelID) {
                 
                 Text("Downloading from iCloud…").font(.caption).foregroundStyle(.secondary)
                 
-            } else if pdfFile.syncRelativePath != nil, pdfFile.availability != .available {
+            } else if pdfFile.syncRelativePath != nil, libraryViewState.fileAvailability(pdfFile) != .available {
                 
                 Text("In iCloud — open to download").font(.caption).foregroundStyle(.secondary)
                 
@@ -341,7 +377,7 @@ struct LibraryView:View {
         })
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
             Button("Delete", role: .destructive) {
-                LibraryViewService.deletePDF(libraryViewState, modelContext, pdfFile, sync: sync)
+                LibraryViewService.requestDeletion(libraryViewState, modelContext, pdfFile, sync: sync)
             }
 
             Button("Copy File Path") {
@@ -366,7 +402,7 @@ struct LibraryView:View {
             }
             
             Button("Delete", role: .destructive) {
-                LibraryViewService.deletePDF(libraryViewState, modelContext, pdfFile, sync: sync)
+                LibraryViewService.requestDeletion(libraryViewState, modelContext, pdfFile, sync: sync)
             }
         }
     }
@@ -389,7 +425,7 @@ struct LibraryView:View {
                             LibraryViewService.startTranslation(libraryViewState,.english)
                         }
                     }
-                    .disabled(libraryViewState.isTranslating)
+                    .disabled(libraryViewState.isTranslating || libraryViewState.displayedPDFData == nil)
                     
                     Text(selectedPDFFile.resolvedURL.lastPathComponent )
                         .lineLimit(1)
@@ -405,7 +441,7 @@ struct LibraryView:View {
                     }
                     
                     Button("Delete", role: .destructive,action: {
-                        LibraryViewService.deleteDisplayedPDF(libraryViewState, modelContext, selectedPDFFile, sync: sync)
+                        LibraryViewService.requestDeletion(libraryViewState, modelContext, selectedPDFFile, sync: sync)
                     })
 
 

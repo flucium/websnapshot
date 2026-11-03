@@ -38,6 +38,27 @@ final class AppErrorTests: XCTestCase {
         XCTAssertNil(AppError.presentable(CancellationError()))
     }
 
+    func testSyncErrorsKeepTheirRecoveryInstructions() {
+        let errors: [SyncStoreError] = [.unsupportedSchema, .invalidIndex, .unsafePath, .unavailableFile, .wrongFolder, .wrongDrive]
+
+        for underlying in errors {
+            let error = AppError(underlying)
+
+            XCTAssertEqual(error.userMessage, underlying.localizedDescription)
+            XCTAssertEqual(error.diagnosticMessage, underlying.localizedDescription)
+            XCTAssertEqual(error.underlyingError?.localizedDescription, underlying.localizedDescription)
+        }
+    }
+
+    func testMissingFileErrorsHaveTheSameClassification() {
+        for code in [CocoaError.Code.fileNoSuchFile, .fileReadNoSuchFile] {
+            let error = AppError(CocoaError(code))
+
+            XCTAssertEqual(error.kind, .notFound)
+            XCTAssertFalse(error.isRetryable)
+        }
+    }
+
     func testUnderlyingErrorIsKeptForDiagnostics() {
         let underlying = NSError(domain: "TestDomain", code: 42)
         let error = AppError.invalidIO(

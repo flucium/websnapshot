@@ -30,6 +30,10 @@ final class StorageSettings {
     
     var fixedStorageBookmarkData: Data?
 
+    var confirmBeforeDeleting: Bool = true
+
+    var moveDeletedFilesToTrash: Bool = true
+
     var syncEnabled: Bool = false
 
     var syncDriveBookmarkData: Data? = nil
@@ -51,6 +55,8 @@ final class StorageSettings {
     var syncCounter: Int64 = 0
     
     var pendingSyncChanges: Data? = nil
+
+    var pendingSyncDeletions: Data? = nil
 
     init(_ storage: Storage) {
         self.storage = storage
