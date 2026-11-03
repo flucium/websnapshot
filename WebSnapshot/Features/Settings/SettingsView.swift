@@ -36,6 +36,14 @@ struct SettingsView: View {
         storageSettings.first?.syncEnabled ?? false
     }
 
+    private var savedDeletionConfirmation: Bool {
+        storageSettings.first?.confirmBeforeDeleting ?? true
+    }
+
+    private var savedMoveToTrash: Bool {
+        storageSettings.first?.moveDeletedFilesToTrash ?? true
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
@@ -45,6 +53,8 @@ struct SettingsView: View {
                     icloudSyncView()
 
                     storageView()
+
+                    deletionSettingsView()
                     
                     refreshCacheView()
 
@@ -75,6 +85,42 @@ struct SettingsView: View {
         .task(id: savedSync) {
             if settingsViewState.selectedSync != savedSync {
                 settingsViewState.selectedSync = savedSync
+            }
+        }
+        .task(id: savedDeletionConfirmation) {
+            if settingsViewState.selectedDeletionConfirmation != savedDeletionConfirmation {
+                settingsViewState.selectedDeletionConfirmation = savedDeletionConfirmation
+            }
+        }
+        .task(id: savedMoveToTrash) {
+            if settingsViewState.selectedMoveToTrash != savedMoveToTrash {
+                settingsViewState.selectedMoveToTrash = savedMoveToTrash
+            }
+        }
+        .onChange(of: settingsViewState.selectedDeletionConfirmation) { _, enabled in
+            let previousValue = savedDeletionConfirmation
+
+            guard enabled != previousValue else {
+                return
+            }
+
+            Task { @MainActor in
+                if !SettingsViewService.saveDeletion(settingsViewState, modelContext, enabled, savedMoveToTrash) {
+                    settingsViewState.selectedDeletionConfirmation = previousValue
+                }
+            }
+        }
+        .onChange(of: settingsViewState.selectedMoveToTrash) { _, enabled in
+            let previousValue = savedMoveToTrash
+
+            guard enabled != previousValue else {
+                return
+            }
+
+            Task { @MainActor in
+                if !SettingsViewService.saveDeletion(settingsViewState, modelContext, savedDeletionConfirmation, enabled) {
+                    settingsViewState.selectedMoveToTrash = previousValue
+                }
             }
         }
         .onChange(of: settingsViewState.selectedSync) { _, enabled in
@@ -132,15 +178,18 @@ struct SettingsView: View {
             appError in
             AlertModal.show(settingsViewState.errorTitle, appError)
         }
-        .confirmationDialog("Delete All Library Files and Tags?", isPresented: $settingsViewState.showDeleteLibraryConfirmation, titleVisibility: .visible) {
-            Button("Delete All", role: .destructive) {
+        .confirmationDialog(savedMoveToTrash ? "Move All Library Files to Trash and Delete All Tags?" : "Delete All Library Files and Tags?", isPresented: $settingsViewState.showDeleteLibraryConfirmation, titleVisibility: .visible) {
+            Button(savedMoveToTrash ? "Move to Trash" : "Delete All", role: .destructive) {
                 SettingsViewService.deleteLibrary(settingsViewState, modelContext, sync: sync, contentService: contentService)
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text(savedSync
-                 ? "All PDFs in the Library and all tags will be permanently deleted. This deletion will also sync to your other devices. This cannot be undone."
+            Text(savedMoveToTrash
+                 ? "All PDFs in the Library will be moved to Trash. All tags will be permanently deleted."
                  : "All PDFs in the Library will be permanently deleted from their saved locations, along with all tags. This cannot be undone.")
+            if savedSync {
+                Text("This deletion will also sync to your other devices.")
+            }
         }
     }
     
@@ -289,6 +338,36 @@ struct SettingsView: View {
     }
     
     
+    private func deletionSettingsView() -> some View {
+        SettingsSection("trash") {
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Deletion")
+                    .font(.headline)
+                Text("Choose how files are deleted from the Library.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+
+            Toggle("Ask for confirmation before deleting", isOn: Binding {
+                settingsViewState.selectedDeletionConfirmation
+            } set: { enabled in
+                Task { @MainActor in
+                    settingsViewState.selectedDeletionConfirmation = enabled
+                }
+            })
+            .toggleStyle(.checkbox)
+
+            Toggle("Move deleted files to Trash", isOn: Binding {
+                settingsViewState.selectedMoveToTrash
+            } set: { enabled in
+                Task { @MainActor in
+                    settingsViewState.selectedMoveToTrash = enabled
+                }
+            })
+            .toggleStyle(.checkbox)
+        }
+    }
+
     private func refreshCacheView() -> some View{
         SettingsSection("arrow.clockwise") {
             VStack(alignment: .leading, spacing: 3) {
@@ -352,14 +431,20 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text("Delete Library")
                     .font(.headline)
-                Text("Permanently delete all PDFs in the Library and all tags.")
+                Text(savedMoveToTrash
+                     ? "Move all PDFs in the Library to Trash and permanently delete all tags."
+                     : "Permanently delete all PDFs in the Library and all tags.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
 
             Button("Delete All Files and Tags…", role: .destructive) {
                 
-                settingsViewState.showDeleteLibraryConfirmation = true
+                if savedDeletionConfirmation {
+                    settingsViewState.showDeleteLibraryConfirmation = true
+                } else {
+                    SettingsViewService.deleteLibrary(settingsViewState, modelContext, sync: sync, contentService: contentService)
+                }
             }
             .disabled(contentState.isRefreshingCache)
         }
