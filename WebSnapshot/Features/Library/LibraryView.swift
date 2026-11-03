@@ -19,6 +19,12 @@ struct LibraryView:View {
     
     @Query private var pdfTags: [PDFTag]
 
+    @Query private var storageSettings: [StorageSettings]
+
+    private var moveDeletedFilesToTrash: Bool {
+        storageSettings.first?.moveDeletedFilesToTrash ?? true
+    }
+
     
     private var contentState: LibraryContentState { contentService.state }
 
@@ -82,6 +88,23 @@ struct LibraryView:View {
         .alert(item: $libraryViewState.appError) {
             appError in
             AlertModal.show(libraryViewState.errorTitle, appError)
+        }
+        .confirmationDialog(moveDeletedFilesToTrash ? "Move PDF to Trash?" : "Delete PDF?", isPresented: $libraryViewState.showDeleteConfirmation, titleVisibility: .visible) {
+            Button(moveDeletedFilesToTrash ? "Move to Trash" : "Delete", role: .destructive) {
+                LibraryViewService.confirmDeletion(libraryViewState, modelContext, sync: sync)
+            }
+            Button("Cancel", role: .cancel) {
+                libraryViewState.pendingDeletionPDFFile = nil
+            }
+        } message: {
+            if let pdfFile = libraryViewState.pendingDeletionPDFFile {
+                Text(moveDeletedFilesToTrash
+                     ? "\(pdfFile.resolvedURL.lastPathComponent) will be moved to Trash."
+                     : "\(pdfFile.resolvedURL.lastPathComponent) will be permanently deleted. This cannot be undone.")
+            }
+            if storageSettings.first?.syncEnabled == true {
+                Text("This deletion will also sync to your other devices.")
+            }
         }
         .sheet(item: $libraryViewState.tagEditorPDFFile,onDismiss: libraryViewState.closeTagEditor) {
             pdfFile in
@@ -354,7 +377,7 @@ struct LibraryView:View {
         })
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
             Button("Delete", role: .destructive) {
-                LibraryViewService.deletePDF(libraryViewState, modelContext, pdfFile, sync: sync)
+                LibraryViewService.requestDeletion(libraryViewState, modelContext, pdfFile, sync: sync)
             }
 
             Button("Copy File Path") {
@@ -379,7 +402,7 @@ struct LibraryView:View {
             }
             
             Button("Delete", role: .destructive) {
-                LibraryViewService.deletePDF(libraryViewState, modelContext, pdfFile, sync: sync)
+                LibraryViewService.requestDeletion(libraryViewState, modelContext, pdfFile, sync: sync)
             }
         }
     }
@@ -418,7 +441,7 @@ struct LibraryView:View {
                     }
                     
                     Button("Delete", role: .destructive,action: {
-                        LibraryViewService.deleteDisplayedPDF(libraryViewState, modelContext, selectedPDFFile, sync: sync)
+                        LibraryViewService.requestDeletion(libraryViewState, modelContext, selectedPDFFile, sync: sync)
                     })
 
 
