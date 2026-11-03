@@ -30,6 +30,10 @@ final class StorageSettings {
     
     var fixedStorageBookmarkData: Data?
 
+    var confirmBeforeDeleting: Bool = true
+
+    var moveDeletedFilesToTrash: Bool = true
+
     var syncEnabled: Bool = false
 
     var syncDriveBookmarkData: Data? = nil
