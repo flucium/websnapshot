@@ -207,6 +207,94 @@ final class LibraryDeletionTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: url), Data("keep".utf8))
     }
 
+    func testDeletionRequestWaitsForConfirmationAndPreservesDisplayedPDF() throws {
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("Keep.pdf")
+        try Data("keep".utf8).write(to: url)
+        let container = try makeContainer()
+        let context = container.mainContext
+        let pdf = PDFFile(url)
+        context.insert(pdf)
+        try context.save()
+        let state = LibraryViewState()
+        state.selectedPDFFile = pdf
+        state.currentPageIndex = 3
+
+        LibraryViewService.requestDeletion(state, context, pdf, sync: sync)
+
+        XCTAssertTrue(state.showDeleteConfirmation)
+        XCTAssertEqual(state.pendingDeletionPDFFile?.persistentModelID, pdf.persistentModelID)
+        XCTAssertEqual(state.selectedPDFFile?.persistentModelID, pdf.persistentModelID)
+        XCTAssertEqual(state.currentPageIndex, 3)
+        XCTAssertEqual(try ModelContext(container).fetchCount(FetchDescriptor<PDFFile>()), 1)
+        XCTAssertEqual(try Data(contentsOf: url), Data("keep".utf8))
+    }
+
+    func testConfirmingDeletionRemovesOnlyTheRequestedPDF() throws {
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let urls = ["Delete.pdf", "Keep.pdf"].map { directory.appendingPathComponent($0) }
+        let container = try makeContainer()
+        let context = container.mainContext
+        for url in urls {
+            try Data("fixture".utf8).write(to: url)
+            context.insert(PDFFile(url))
+        }
+        try context.save()
+        let pdf = try XCTUnwrap(context.fetch(FetchDescriptor<PDFFile>()).first { $0.url == urls[0] })
+        let state = LibraryViewState()
+        LibraryViewService.requestDeletion(state, context, pdf, sync: sync)
+
+        LibraryViewService.confirmDeletion(state, context, sync: sync)
+
+        XCTAssertFalse(state.showDeleteConfirmation)
+        XCTAssertNil(state.pendingDeletionPDFFile)
+        XCTAssertNil(state.appError)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: urls[0].path))
+        XCTAssertEqual(try Data(contentsOf: urls[1]), Data("fixture".utf8))
+        XCTAssertEqual(try ModelContext(container).fetchCount(FetchDescriptor<PDFFile>()), 1)
+    }
+
+    func testDisablingConfirmationDeletesWithoutPresentingDialog() throws {
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("Delete.pdf")
+        try Data("fixture".utf8).write(to: url)
+        let container = try makeContainer()
+        let context = container.mainContext
+        let pdf = PDFFile(url)
+        context.insert(pdf)
+        try context.save()
+        try StorageSettingsService.saveDeletion(context, false, false)
+        let state = LibraryViewState()
+
+        LibraryViewService.requestDeletion(state, context, pdf, sync: sync)
+
+        XCTAssertFalse(state.showDeleteConfirmation)
+        XCTAssertNil(state.pendingDeletionPDFFile)
+        XCTAssertNil(state.appError)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: url.path))
+        try assertEmpty(container)
+    }
+
+    func testTrashRetryClearsPendingDeletionForAnAlreadyMissingFile() throws {
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let container = try makeContainer()
+        let context = container.mainContext
+        let storage = StorageSettings(.fixed)
+        storage.moveDeletedFilesToTrash = true
+        storage.pendingSyncDeletions = try JSONEncoder().encode(["Missing.pdf"])
+        context.insert(storage)
+        try context.save()
+
+        try LibraryService.retrySyncedFileDeletions(context, storage, directory)
+
+        XCTAssertNil(storage.pendingSyncDeletions)
+        XCTAssertNil(try ModelContext(container).fetch(FetchDescriptor<StorageSettings>()).first?.pendingSyncDeletions)
+    }
+
     private func assertEmpty(_ container: ModelContainer, file: StaticString = #filePath, line: UInt = #line) throws {
         let context = ModelContext(container)
         XCTAssertEqual(try context.fetchCount(FetchDescriptor<PDFFile>()), 0, file: file, line: line)

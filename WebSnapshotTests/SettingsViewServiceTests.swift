@@ -19,6 +19,7 @@ final class SettingsViewServiceTests: XCTestCase {
 
         XCTAssertTrue(SettingsViewService.saveAppearance(state, context, .system))
         XCTAssertTrue(SettingsViewService.saveStorage(state, context, .flexibility, sync: sync))
+        XCTAssertTrue(SettingsViewService.saveDeletion(state, context, true, true))
 
         XCTAssertTrue(try context.fetch(FetchDescriptor<AppearanceSettings>()).isEmpty)
         XCTAssertTrue(try context.fetch(FetchDescriptor<StorageSettings>()).isEmpty)
@@ -50,6 +51,7 @@ final class SettingsViewServiceTests: XCTestCase {
 
         XCTAssertTrue(SettingsViewService.saveAppearance(state, context, .dark))
         XCTAssertTrue(SettingsViewService.saveStorage(state, context, .fixed, sync: sync))
+        XCTAssertTrue(SettingsViewService.saveDeletion(state, context, true, true))
 
         XCTAssertTrue(context.hasChanges)
         XCTAssertEqual(state.appError, previousError)
@@ -146,6 +148,63 @@ final class SettingsViewServiceTests: XCTestCase {
         let readContext = ModelContext(container)
         let settings = try readContext.fetch(FetchDescriptor<StorageSettings>())
         XCTAssertEqual(settings.first?.storage, .fixed)
+    }
+
+    func testDeletionChangesPersistWithoutChangingStorageOrSyncSettings() throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+        let storage = StorageSettings(.fixed)
+        storage.fixedStoragePath = "/tmp/storage"
+        storage.fixedStorageBookmarkData = Data([1, 2])
+        storage.syncEnabled = true
+        storage.syncDrivePath = "/tmp/drive"
+        storage.syncDriveBookmarkData = Data([3, 4])
+        storage.syncFolderPath = "/tmp/drive/websnapshot"
+        storage.syncFolderBookmarkData = Data([5, 6])
+        storage.pendingSyncDeletions = Data("[]".utf8)
+        context.insert(storage)
+        try context.save()
+        let state = SettingsViewState()
+        state.appError = .error("Previous failure")
+
+        for confirmBeforeDeleting in [false, true] {
+            for moveDeletedFilesToTrash in [true, false] {
+                XCTAssertTrue(SettingsViewService.saveDeletion(state, context, confirmBeforeDeleting, moveDeletedFilesToTrash))
+
+                let settings = try ModelContext(container).fetch(FetchDescriptor<StorageSettings>())
+                let saved = try XCTUnwrap(settings.first)
+                XCTAssertEqual(settings.count, 1)
+                XCTAssertEqual(saved.confirmBeforeDeleting, confirmBeforeDeleting)
+                XCTAssertEqual(saved.moveDeletedFilesToTrash, moveDeletedFilesToTrash)
+                XCTAssertEqual(saved.storage, .fixed)
+                XCTAssertEqual(saved.fixedStoragePath, "/tmp/storage")
+                XCTAssertEqual(saved.fixedStorageBookmarkData, Data([1, 2]))
+                XCTAssertTrue(saved.syncEnabled)
+                XCTAssertEqual(saved.syncDrivePath, "/tmp/drive")
+                XCTAssertEqual(saved.syncDriveBookmarkData, Data([3, 4]))
+                XCTAssertEqual(saved.syncFolderPath, "/tmp/drive/websnapshot")
+                XCTAssertEqual(saved.syncFolderBookmarkData, Data([5, 6]))
+                XCTAssertEqual(saved.pendingSyncDeletions, Data("[]".utf8))
+                XCTAssertFalse(context.hasChanges)
+                XCTAssertNil(state.appError)
+            }
+        }
+    }
+
+    func testDeletionChangesCreateOneRecordAndSurviveStorageChanges() throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+        let state = SettingsViewState()
+
+        XCTAssertTrue(SettingsViewService.saveDeletion(state, context, false, true))
+        XCTAssertTrue(SettingsViewService.saveStorage(state, context, .fixed, sync: sync))
+        try StorageSettingsService.reset(context, sync: sync)
+
+        let settings = try ModelContext(container).fetch(FetchDescriptor<StorageSettings>())
+        XCTAssertEqual(settings.count, 1)
+        XCTAssertFalse(try XCTUnwrap(settings.first).confirmBeforeDeleting)
+        XCTAssertTrue(try XCTUnwrap(settings.first).moveDeletedFilesToTrash)
+        XCTAssertEqual(settings.first?.storage, .flexibility)
     }
 
     private func makeContainer() throws -> ModelContainer {
