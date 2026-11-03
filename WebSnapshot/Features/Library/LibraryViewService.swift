@@ -185,6 +185,46 @@ final class LibraryViewService {
         }
     }
 
+    static func requestDeletion(_ state: LibraryViewState, _ modelContext: ModelContext, _ pdfFile: PDFFile, sync: LibrarySyncService) {
+        do {
+            let settings = try LibrarySyncSettings.settings(modelContext)
+
+            if settings?.confirmBeforeDeleting ?? true {
+                state.pendingDeletionPDFFile = pdfFile
+
+                state.showDeleteConfirmation = true
+            } else {
+                deleteRequestedPDF(state, modelContext, pdfFile, sync: sync)
+            }
+        } catch {
+            handle(error, "PDF Could Not Be Deleted", "Load deletion settings", state, pdfFile.resolvedURL)
+        }
+    }
+
+    static func confirmDeletion(_ state: LibraryViewState, _ modelContext: ModelContext, sync: LibrarySyncService) {
+        guard let pdfFile = state.pendingDeletionPDFFile else {
+            return
+        }
+
+        state.pendingDeletionPDFFile = nil
+
+        state.showDeleteConfirmation = false
+
+        deleteRequestedPDF(state, modelContext, pdfFile, sync: sync)
+    }
+
+    private static func deleteRequestedPDF(_ state: LibraryViewState, _ modelContext: ModelContext, _ pdfFile: PDFFile, sync: LibrarySyncService) {
+        guard pdfFile.modelContext != nil, !pdfFile.isDeleted else {
+            return
+        }
+
+        if state.selectedPDFFile?.persistentModelID == pdfFile.persistentModelID {
+            deleteDisplayedPDF(state, modelContext, pdfFile, sync: sync)
+        } else {
+            deletePDF(state, modelContext, pdfFile, sync: sync)
+        }
+    }
+
     static func deletePDF(_ state: LibraryViewState, _ modelContext: ModelContext, _ pdfFile: PDFFile, sync: LibrarySyncService) {
         do {
             try LibraryService.delete(modelContext, pdfFile.url, pdfFile.resolvedURL, sync: sync)
