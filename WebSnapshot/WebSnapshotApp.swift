@@ -8,25 +8,52 @@ struct WebSnapshotApp: App {
 
     var body: some Scene {
         WindowGroup {
-            HomeView()
-                .environmentObject(appDelegate.content)
-                .environmentObject(appDelegate.sync)
+            WebSnapshotRootView(appDelegate: appDelegate, startup: appDelegate.startup)
                 .frame(minWidth: 980, minHeight: 400)
         }
         .defaultSize(width: 1000, height: 600)
         .windowResizability(.contentMinSize)
-        .modelContainer(appDelegate.modelContainer)
+    }
+}
+
+private struct WebSnapshotRootView: View {
+    let appDelegate: WebSnapshotAppDelegate
+
+    @ObservedObject var startup: LibraryStartupService
+
+    var body: some View {
+        if let modelContainer = startup.modelContainer {
+            HomeView()
+                .environmentObject(appDelegate.content)
+                .environmentObject(appDelegate.sync)
+                .modelContainer(modelContainer)
+        } else {
+            DatabaseRecoveryView(startup: startup) {
+                Task {
+                    await appDelegate.openLibrary()
+                }
+            }
+        }
     }
 }
 
 @MainActor
 final class WebSnapshotAppDelegate: NSObject, NSApplicationDelegate {
-    let modelContainer: ModelContainer
+    let startup: LibraryStartupService
     let sync: LibrarySyncService
     let content: LibraryContentService
     let safariRequests: SafariRequestService
 
-    override init() {
+    private var appearanceObservation: NSKeyValueObservation?
+    
+    private var syncTask: Task<Void, Never>?
+    
+    override convenience init() {
+        self.init(LibraryStartupService())
+    }
+
+    init(_ startup: LibraryStartupService, safariRequests: SafariRequestService? = nil) {
+        self.startup = startup
         
         let sync = LibrarySyncService()
         
@@ -34,7 +61,7 @@ final class WebSnapshotAppDelegate: NSObject, NSApplicationDelegate {
         
         content = LibraryContentService(sync: sync)
         
-        safariRequests = SafariRequestService {
+        self.safariRequests = safariRequests ?? SafariRequestService {
             
             url, context, onStart in
             
@@ -46,36 +73,14 @@ final class WebSnapshotAppDelegate: NSObject, NSApplicationDelegate {
             }, onStart)
         }
 
-        do {
-            modelContainer = try ModelContainer(for: AppearanceSettings.self, StorageSettings.self, PDFFile.self, PDFTag.self, configurations: ModelConfiguration(cloudKitDatabase: .none))
-        } catch {
-            fatalError("Could not open the WebSnapshot library: \(error)")
-        }
         super.init()
     }
     
-    private var appearanceObservation: NSKeyValueObservation?
-    
-    private var syncTask: Task<Void, Never>?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
        
-        syncTask = Task {
-            @MainActor in
-            
-            while !Task.isCancelled {
-                
-                await sync.refresh(modelContainer.mainContext)
-                
-                do {
-                    try await Task.sleep(for: .seconds(2))
-                }catch {
-                    break
-                }
-            
-            }
-            
-            
+        Task {
+            await openLibrary()
         }
         
         appearanceObservation = NSApp.observe(\.appearance, options: [.initial, .new]) {
@@ -92,38 +97,37 @@ final class WebSnapshotAppDelegate: NSObject, NSApplicationDelegate {
         
     }
 
+    func openLibrary() async {
+        await startup.open()
+
+        guard let modelContainer = startup.modelContainer else {
+            return
+        }
+
+        if syncTask == nil {
+            syncTask = Task {
+                @MainActor in
+
+                while !Task.isCancelled {
+                    await sync.refresh(modelContainer.mainContext)
+
+                    do {
+                        try await Task.sleep(for: .seconds(2))
+                    } catch {
+                        break
+                    }
+                }
+            }
+        }
+
+        safariRequests.startProcessing(modelContainer.mainContext)
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
         syncTask?.cancel()
     }
 
-    private func updateApplicationIcon() {
-        
-        guard let applicationAppearance = NSApp.appearance else {
-            NSApp.applicationIconImage = nil
-            return
-        }
-
-        let usesDarkIcon = applicationAppearance.bestMatch( from: [.aqua, .darkAqua]) == .darkAqua
-        
-        let sourceImage: NSImage = usesDarkIcon ? .appIconDark : .appIconLight
-        
-        let iconSize = NSSize(width: 128, height: 128)
-
-        let applicationIcon = NSImage(size: iconSize, flipped: false) { _ in
-            
-            let iconRect = NSRect(origin: .zero, size: iconSize).insetBy(dx: 12, dy: 12)
-
-            NSBezierPath(roundedRect: iconRect, xRadius: 23, yRadius: 23).addClip()
-            
-            sourceImage.draw(in: iconRect)
-
-            return true
-            
-        }
-        
-
-        NSApp.applicationIconImage = applicationIcon
-    }
+   
 
     func application(_ application: NSApplication, open urls: [URL]) {
         
@@ -160,6 +164,36 @@ final class WebSnapshotAppDelegate: NSObject, NSApplicationDelegate {
             requests.receive(url)
         }
         
-        requests.startProcessing(modelContainer.mainContext)
+        if let modelContainer = startup.modelContainer {
+            requests.startProcessing(modelContainer.mainContext)
+        }
+    }
+    
+    private func updateApplicationIcon() {
+        
+        guard let applicationAppearance = NSApp.appearance else {
+            NSApp.applicationIconImage = nil
+            return
+        }
+
+        let usesDarkIcon = applicationAppearance.bestMatch( from: [.aqua, .darkAqua]) == .darkAqua
+        
+        let sourceImage: NSImage = usesDarkIcon ? .appIconDark : .appIconLight
+        
+        let iconSize = NSSize(width: 128, height: 128)
+
+        let applicationIcon = NSImage(size: iconSize, flipped: false) { _ in
+            
+            let iconRect = NSRect(origin: .zero, size: iconSize).insetBy(dx: 12, dy: 12)
+
+            NSBezierPath(roundedRect: iconRect, xRadius: 23, yRadius: 23).addClip()
+            
+            sourceImage.draw(in: iconRect)
+
+            return true
+            
+        }
+
+        NSApp.applicationIconImage = applicationIcon
     }
 }
