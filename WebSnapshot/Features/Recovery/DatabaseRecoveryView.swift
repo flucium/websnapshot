@@ -2,13 +2,13 @@ import AppKit
 import SwiftUI
 
 struct DatabaseRecoveryView: View {
-    @ObservedObject var startup: LibraryStartupService
+    @ObservedObject var libraryStartupService: LibraryStartupService
 
     let retry: () -> Void
 
     var body: some View {
         VStack(spacing: 20) {
-            if case .failed(let error) = startup.state {
+            if case .failed(let error) = libraryStartupService.state {
                 recovery(error)
             } else {
                 ProgressView("Opening Library…")
