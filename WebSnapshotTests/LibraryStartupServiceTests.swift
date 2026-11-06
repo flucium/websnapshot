@@ -112,7 +112,7 @@ final class LibraryStartupServiceTests: XCTestCase {
         await startup.open()
 
         var retries = 0
-        let hostingView = NSHostingView(rootView: DatabaseRecoveryView(startup: startup) {
+        let hostingView = NSHostingView(rootView: DatabaseRecoveryView(libraryStartupService: startup) {
             retries += 1
         })
         let window = NSWindow(
