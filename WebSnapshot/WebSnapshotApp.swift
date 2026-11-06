@@ -8,7 +8,7 @@ struct WebSnapshotApp: App {
 
     var body: some Scene {
         WindowGroup {
-            WebSnapshotRootView(appDelegate: appDelegate, startup: appDelegate.startup)
+            WebSnapshotRootView(appDelegate: appDelegate, libraryStartupService: appDelegate.startup)
                 .frame(minWidth: 980, minHeight: 400)
         }
         .defaultSize(width: 1000, height: 600)
@@ -19,16 +19,16 @@ struct WebSnapshotApp: App {
 private struct WebSnapshotRootView: View {
     let appDelegate: WebSnapshotAppDelegate
 
-    @ObservedObject var startup: LibraryStartupService
+    @ObservedObject var libraryStartupService: LibraryStartupService
 
     var body: some View {
-        if let modelContainer = startup.modelContainer {
+        if let modelContainer = libraryStartupService.modelContainer {
             HomeView()
                 .environmentObject(appDelegate.content)
                 .environmentObject(appDelegate.sync)
                 .modelContainer(modelContainer)
         } else {
-            DatabaseRecoveryView(startup: startup) {
+            DatabaseRecoveryView(libraryStartupService: libraryStartupService) {
                 Task {
                     await appDelegate.openLibrary()
                 }
@@ -44,9 +44,10 @@ final class WebSnapshotAppDelegate: NSObject, NSApplicationDelegate {
     let content: LibraryContentService
     let safariRequests: SafariRequestService
 
-    private var appearanceObservation: NSKeyValueObservation?
-    
     private var syncTask: Task<Void, Never>?
+
+    private var appearanceObservation: NSKeyValueObservation?
+
     
     override convenience init() {
         self.init(LibraryStartupService())
@@ -195,5 +196,10 @@ final class WebSnapshotAppDelegate: NSObject, NSApplicationDelegate {
         }
 
         NSApp.applicationIconImage = applicationIcon
+    }
+    
+    deinit {
+        appearanceObservation?.invalidate()
+        appearanceObservation = nil
     }
 }
