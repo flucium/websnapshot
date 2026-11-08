@@ -20,17 +20,25 @@ final class SafariRequestService: ObservableObject {
     
     private var task: Task<Void, Never>?
     
-    private let capture: Capture
+    private let capture: CaptureWithProgress
     
     typealias Capture = @MainActor (URL, ModelContext, (WebPage) -> Void) async throws -> URL?
+
+    typealias CaptureWithProgress = @MainActor (URL, ModelContext, (WebPage) -> Void, (WebPDFExportState) -> Void) async throws -> URL?
 
     var handleFailure: ((AppError) -> FailureAction)?
     var canRetry: Bool {
         failedRequest != nil && state.current == nil
     }
 
-    init(_ capture: @escaping Capture) {
+    init(_ capture: @escaping CaptureWithProgress) {
         self.capture = capture
+    }
+
+    convenience init(_ capture: @escaping Capture) {
+        self.init { url, context, onStart, _ in
+            try await capture(url, context, onStart)
+        }
     }
 
     func receive(_ url: URL) {
@@ -75,21 +83,43 @@ final class SafariRequestService: ObservableObject {
                 state.current = request
                 
                 state.savedURL = nil
+
+                state.exportState = nil
+
+                state.isCancelling = false
                 
                 failedRequest = nil
                 
                 state.status = "Reloading URL without Safari sign-in or form entries…"
                 
                 do {
-                    state.savedURL = try await capture(request.url, modelContext) {
+                    let savedURL = try await capture(request.url, modelContext, {
                         page in
+
+                        guard !Task.isCancelled, self.state.current == request else {
+                            return
+                        }
+
                         self.state.webPage = page
-                    }
+                    }, {
+                        progress in
+
+                        guard !Task.isCancelled, self.state.current == request else {
+                            return
+                        }
+
+                        self.state.exportState = progress
+                        self.state.status = progress.title
+                    })
+
+                    try Task.checkCancellation()
+
+                    state.savedURL = savedURL
                     
                     state.status = state.savedURL == nil ? "Save cancelled." : "PDF saved from the reloaded URL."
                     
                 } catch {
-                    if let error = AppError.presentable(error) {
+                    if !Task.isCancelled, let error = AppError.presentable(error) {
                     
                         state.appError = error
                         
@@ -103,7 +133,7 @@ final class SafariRequestService: ObservableObject {
                             
                             let action = handleFailure(error)
                             
-                            if action == .retry {
+                            if action == .retry, !Task.isCancelled {
                                 state.pending.insert(request, at: 0)
                             }
                             
@@ -117,7 +147,17 @@ final class SafariRequestService: ObservableObject {
                     }
                 }
                 
+                if Task.isCancelled {
+                    state.status = "Save cancelled."
+                }
+
                 state.current = nil
+
+                state.webPage = nil
+
+                state.exportState = nil
+
+                state.isCancelling = false
                 
                 if state.appError != nil {
                     break
@@ -155,6 +195,14 @@ final class SafariRequestService: ObservableObject {
         state.pending.removeAll()
         
         task?.cancel()
+
+        failedRequest = nil
+
+        state.appError = nil
+
+        state.isCancelling = task != nil
+
+        state.status = task == nil ? "Save cancelled." : "Cancelling…"
         
         state.webPage?.stopLoading()
     }
