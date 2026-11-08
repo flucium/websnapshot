@@ -108,4 +108,36 @@ final class WebNavigationTests: XCTestCase {
         XCTAssertFalse(state.isCurrentSave(second))
         XCTAssertFalse(state.isSaving)
     }
+
+    func testCancellingASaveWaitsForCleanupAndRejectsLateProgress() async throws {
+        let state = FetchViewState()
+        let first = try XCTUnwrap(state.beginSave())
+        state.updateExportState(WebPDFExportState(height: 1200), first)
+
+        let task = Task {
+            defer { state.finishSave(first) }
+            try? await Task.sleep(for: .seconds(30))
+            state.updateExportState(WebPDFExportState(height: 9000), first)
+        }
+        state.saveTask = task
+        state.cancelSave()
+
+        XCTAssertTrue(state.isSaving)
+        XCTAssertTrue(state.isCancellingSave)
+        XCTAssertNil(state.beginSave())
+        XCTAssertEqual(state.exportState?.height, 1200)
+
+        await task.value
+
+        XCTAssertFalse(state.isSaving)
+        XCTAssertFalse(state.isCancellingSave)
+        XCTAssertNil(state.exportState)
+
+        let second = try XCTUnwrap(state.beginSave())
+        state.updateExportState(WebPDFExportState(height: 9000), first)
+        XCTAssertEqual(state.exportState?.height, 0)
+        state.updateExportState(WebPDFExportState(height: 2000), second)
+        XCTAssertEqual(state.exportState?.height, 2000)
+        state.finishSave(second)
+    }
 }

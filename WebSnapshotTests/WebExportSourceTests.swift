@@ -136,7 +136,7 @@ final class WebExportSourceTests: XCTestCase {
         XCTAssertEqual(page.mediaType, .print)
     }
 
-    func testPreparationRejectsContentThatKeepsGrowingAtTheScrollLimit() async throws {
+    func testPreparationRejectsContentThatKeepsGrowingAtTheHeightLimit() async throws {
         let page = WebPage()
         try await load(page, "https://example.com/article")
         _ = try await page.callJavaScript("""
@@ -153,11 +153,14 @@ final class WebExportSourceTests: XCTestCase {
             return true;
             """)
 
+        var limits = WebPDFService.Limits()
+        limits.maximumHeight = 3500
+
         do {
-            try await WebPDFService.preparePageForPDFExport(page, maximumScrolls: 4)
+            try await WebPDFService.preparePageForPDFExport(page, limits: limits)
             XCTFail("An incomplete scroll must not be treated as a prepared page")
         } catch {
-            XCTAssertEqual((error as? AppError)?.kind, .timeout)
+            XCTAssertEqual((error as? AppError)?.kind, .invalidLoad)
         }
     }
 

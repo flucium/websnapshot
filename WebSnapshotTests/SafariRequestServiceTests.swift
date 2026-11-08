@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 import Combine
 import SwiftData
 import XCTest
@@ -135,13 +136,139 @@ final class SafariRequestServiceTests: XCTestCase {
         XCTAssertTrue(service.state.pending.isEmpty)
     }
 
+    func testProgressIsPublishedAndClearedAfterCapture() async throws {
+        let container = try makeContainer()
+        let service = SafariRequestService { _, _, _, onProgress in
+            onProgress(WebPDFExportState(phase: .resources, height: 2000, pendingImages: 2))
+            try await Task.sleep(for: .milliseconds(30))
+            return nil
+        }
+
+        service.receive(try makeRequest().openURL)
+        service.startProcessing(container.mainContext)
+        try await waitUntil { service.state.exportState?.phase == .resources }
+
+        XCTAssertEqual(service.state.exportState?.pendingImages, 2)
+        XCTAssertEqual(service.state.status, "Waiting for Images and Fonts")
+
+        try await waitUntil { service.state.current == nil }
+        XCTAssertNil(service.state.exportState)
+        XCTAssertNil(service.state.webPage)
+        XCTAssertFalse(service.state.isCancelling)
+    }
+
+    func testCancellationDiscardsLateProgressAndResultsBeforeTheNextRequest() async throws {
+        let container = try makeContainer()
+        var finishFirst: CheckedContinuation<Void, Never>?
+        var attempts: [URL] = []
+        let first = try makeRequest("https://example.com/first")
+        let skipped = try makeRequest("https://example.com/skipped")
+        let next = try makeRequest("https://example.com/next")
+        let service = SafariRequestService { url, _, _, onProgress in
+            attempts.append(url)
+            if url == first.url {
+                onProgress(WebPDFExportState(height: 1000))
+                await withCheckedContinuation { finishFirst = $0 }
+                onProgress(WebPDFExportState(height: 9000))
+                return URL(fileURLWithPath: "/tmp/cancelled-result.pdf")
+            }
+
+            onProgress(WebPDFExportState(height: 2000))
+            return nil
+        }
+        var reportedHeights: [Double] = []
+        let observation = service.$state.sink {
+            if let progress = $0.exportState {
+                reportedHeights.append(progress.height)
+            }
+        }
+        defer { observation.cancel() }
+
+        service.receive(first.openURL)
+        service.receive(skipped.openURL)
+        service.startProcessing(container.mainContext)
+        try await waitUntil { finishFirst != nil }
+        service.cancel()
+        XCTAssertTrue(service.state.isCancelling)
+
+        service.receive(next.openURL)
+        service.startProcessing(container.mainContext)
+        finishFirst?.resume()
+        try await waitUntil { service.state.pending.isEmpty && service.state.current == nil }
+
+        XCTAssertEqual(attempts, [first.url, next.url])
+        XCTAssertFalse(reportedHeights.contains(9000))
+        XCTAssertNil(service.state.savedURL)
+        XCTAssertNil(service.state.appError)
+        XCTAssertNil(service.state.exportState)
+        XCTAssertFalse(service.state.isCancelling)
+    }
+
+    func testCancellationDuringFailureHandlingDoesNotRequeueTheRequest() async throws {
+        let container = try makeContainer()
+        var attempts = 0
+        let service = SafariRequestService { _, _, _ in
+            attempts += 1
+            throw AppError.timeout("The page kept growing")
+        }
+        service.handleFailure = { _ in
+            service.cancel()
+            return .retry
+        }
+        defer { service.handleFailure = nil }
+
+        service.receive(try makeRequest().openURL)
+        service.startProcessing(container.mainContext)
+        try await waitUntil { service.state.pending.isEmpty && service.state.current == nil }
+
+        XCTAssertEqual(attempts, 1)
+        XCTAssertNil(service.state.appError)
+        XCTAssertEqual(service.state.status, "Save cancelled.")
+    }
+
+    func testClosingProgressWindowCancelsCaptureAndQueuedRequests() async throws {
+        let container = try makeContainer()
+        let service = SafariRequestService { _, _, _, onProgress in
+            onProgress(WebPDFExportState(height: 12_000))
+            try await Task.sleep(for: .seconds(30))
+            XCTFail("Closing the progress window must cancel capture")
+            return nil
+        }
+        service.receive(try makeRequest().openURL)
+        service.receive(try makeRequest("https://example.com/next").openURL)
+        service.startProcessing(container.mainContext)
+        try await waitUntil { service.state.exportState != nil }
+
+        let controller = SafariCaptureProgressWindow(service)
+        controller.update()
+        defer { controller.close() }
+
+        let window = try XCTUnwrap(controller.window)
+        XCTAssertTrue(window.isVisible)
+
+        if let path = ProcessInfo.processInfo.environment["WEBSNAPSHOT_SAFARI_PROGRESS_PREVIEW_PATH"], let view = window.contentView {
+            view.layoutSubtreeIfNeeded()
+            let bitmap = try XCTUnwrap(view.bitmapImageRepForCachingDisplay(in: view.bounds))
+            view.cacheDisplay(in: view.bounds, to: bitmap)
+            let data = try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))
+            try data.write(to: URL(fileURLWithPath: path))
+        }
+
+        window.performClose(nil)
+        controller.update()
+        XCTAssertFalse(window.isVisible)
+        try await waitUntil { service.state.current == nil }
+        XCTAssertTrue(service.state.pending.isEmpty)
+        XCTAssertNil(service.state.appError)
+    }
+
     private func makeRequest(_ address: String = "https://example.com") throws -> SafariCaptureRequest {
         try SafariCaptureRequest(id: UUID(), url: XCTUnwrap(URL(string: address)))
     }
 
     private func makeContainer() throws -> ModelContainer {
         try ModelContainer(for: StorageSettings.self,
-                           configurations: ModelConfiguration(isStoredInMemoryOnly: true))
+                           configurations: ModelConfiguration(isStoredInMemoryOnly: true, cloudKitDatabase: .none))
     }
 
     private func waitUntil(_ condition: () -> Bool) async throws {
