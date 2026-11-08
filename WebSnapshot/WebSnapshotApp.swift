@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import SwiftUI
 import SwiftData
 
@@ -8,7 +9,7 @@ struct WebSnapshotApp: App {
 
     var body: some Scene {
         WindowGroup {
-            WebSnapshotRootView(appDelegate: appDelegate, libraryStartupService: appDelegate.startup)
+            WebSnapshotRootView(libraryStartupService: appDelegate.libraryStartupService, appDelegate: appDelegate)
                 .frame(minWidth: 980, minHeight: 400)
         }
         .defaultSize(width: 1000, height: 600)
@@ -17,15 +18,15 @@ struct WebSnapshotApp: App {
 }
 
 private struct WebSnapshotRootView: View {
-    let appDelegate: WebSnapshotAppDelegate
-
     @ObservedObject var libraryStartupService: LibraryStartupService
+    
+    let appDelegate: WebSnapshotAppDelegate
 
     var body: some View {
         if let modelContainer = libraryStartupService.modelContainer {
             HomeView()
                 .environmentObject(appDelegate.content)
-                .environmentObject(appDelegate.sync)
+                .environmentObject(appDelegate.librarySyncService)
                 .modelContainer(modelContainer)
         } else {
             DatabaseRecoveryView(libraryStartupService: libraryStartupService) {
@@ -39,39 +40,46 @@ private struct WebSnapshotRootView: View {
 
 @MainActor
 final class WebSnapshotAppDelegate: NSObject, NSApplicationDelegate {
-    let startup: LibraryStartupService
-    let sync: LibrarySyncService
+    let libraryStartupService: LibraryStartupService
+    
+    let librarySyncService: LibrarySyncService
+    
     let content: LibraryContentService
+    
     let safariRequests: SafariRequestService
 
     private var syncTask: Task<Void, Never>?
 
     private var appearanceObservation: NSKeyValueObservation?
 
+    private var safariProgressObservation: AnyCancellable?
+
+    private var safariProgressWindow: SafariCaptureProgressWindow?
+
     
     override convenience init() {
         self.init(LibraryStartupService())
     }
 
-    init(_ startup: LibraryStartupService, safariRequests: SafariRequestService? = nil) {
-        self.startup = startup
+    init(_ libraryStartupService: LibraryStartupService, safariRequests: SafariRequestService? = nil) {
+        self.libraryStartupService = libraryStartupService
         
-        let sync = LibrarySyncService()
+        let librarySyncService = LibrarySyncService()
         
-        self.sync = sync
+        self.librarySyncService = librarySyncService
         
-        content = LibraryContentService(sync: sync)
+        content = LibraryContentService(sync: librarySyncService)
         
         self.safariRequests = safariRequests ?? SafariRequestService {
             
-            url, context, onStart in
+            url, context, onStart, onProgress in
             
-            try await WebCaptureService.capture(url, context, sync: sync, chooseDestination: { name in
+            try await WebCaptureService.capture(url, context, sync: librarySyncService, chooseDestination: { name in
                 prepareForSafariDialog()
                 
                 return savePanel(name)
                 
-            }, onStart)
+            }, onProgress: onProgress, onStart)
         }
 
         super.init()
@@ -79,6 +87,16 @@ final class WebSnapshotAppDelegate: NSObject, NSApplicationDelegate {
     
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+
+        safariProgressObservation = safariRequests.$state.sink {
+            [weak self] _ in
+
+            Task {
+                @MainActor [weak self] in
+
+                self?.updateSafariProgress()
+            }
+        }
        
         Task {
             await openLibrary()
@@ -99,9 +117,9 @@ final class WebSnapshotAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func openLibrary() async {
-        await startup.open()
+        await libraryStartupService.open()
 
-        guard let modelContainer = startup.modelContainer else {
+        guard let modelContainer = libraryStartupService.modelContainer else {
             return
         }
 
@@ -110,7 +128,7 @@ final class WebSnapshotAppDelegate: NSObject, NSApplicationDelegate {
                 @MainActor in
 
                 while !Task.isCancelled {
-                    await sync.refresh(modelContainer.mainContext)
+                    await librarySyncService.refresh(modelContainer.mainContext)
 
                     do {
                         try await Task.sleep(for: .seconds(2))
@@ -126,6 +144,17 @@ final class WebSnapshotAppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         syncTask?.cancel()
+        safariProgressObservation?.cancel()
+        safariRequests.cancel()
+        safariProgressWindow?.window?.orderOut(nil)
+    }
+
+    private func updateSafariProgress() {
+        if safariRequests.state.current != nil, safariProgressWindow == nil {
+            safariProgressWindow = SafariCaptureProgressWindow(safariRequests)
+        }
+
+        safariProgressWindow?.update()
     }
 
    
@@ -165,7 +194,7 @@ final class WebSnapshotAppDelegate: NSObject, NSApplicationDelegate {
             requests.receive(url)
         }
         
-        if let modelContainer = startup.modelContainer {
+        if let modelContainer = libraryStartupService.modelContainer {
             requests.startProcessing(modelContainer.mainContext)
         }
     }
