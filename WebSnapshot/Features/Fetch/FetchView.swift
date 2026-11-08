@@ -6,7 +6,7 @@ struct FetchView: View {
     
     @Environment(\.modelContext) private var modelContext
 
-    @EnvironmentObject private var sync: LibrarySyncService
+    @EnvironmentObject private var librarySyncService: LibrarySyncService
     
     @StateObject private var fetchViewState = FetchViewState()
 
@@ -16,6 +16,10 @@ struct FetchView: View {
         VStack{
             
             searchToolView()
+
+            if fetchViewState.isSaving {
+                exportProgressView()
+            }
          
             webView()
         }
@@ -50,21 +54,44 @@ struct FetchView: View {
             })
             
             Button("Save", action: {
-                FetchViewService.saveWebPage(fetchViewState,modelContext,storageSettings, sync: sync)
+                FetchViewService.saveWebPage(fetchViewState,modelContext,storageSettings, sync: librarySyncService)
             })
             .disabled(fetchViewState.isSaving || fetchViewState.webPage.isLoading)
 
-            if fetchViewState.isSaving {
-                ProgressView().controlSize(.small)
-            }
         }
         .alert(item:$fetchViewState.appError){
             appError in
             AlertModal.show(fetchViewState.failedOperation?.errorTitle ?? "Operation Could Not Be Completed",appError) {
-                FetchViewService.retryFailedOperation(fetchViewState, modelContext, storageSettings, sync: sync)
+                FetchViewService.retryFailedOperation(fetchViewState, modelContext, storageSettings, sync: librarySyncService)
             }
         }
         .padding()
+    }
+
+    private func exportProgressView() -> some View {
+        HStack(spacing: 12) {
+            ProgressView().controlSize(.small)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(fetchViewState.isCancellingSave ? "Cancelling…" : fetchViewState.exportState?.title ?? "Preparing Page")
+                    .font(.callout.weight(.medium))
+
+                if let progress = fetchViewState.exportState {
+                    Text(progress.detail)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Spacer()
+
+            Button("Cancel") {
+                fetchViewState.cancelSave()
+            }
+            .disabled(fetchViewState.isCancellingSave)
+        }
+        .padding(.horizontal)
+        .padding(.bottom, 10)
     }
 
     func webView() -> some View{

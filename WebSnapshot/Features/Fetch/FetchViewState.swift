@@ -5,14 +5,20 @@ import WebKit
 @MainActor
 final class FetchViewState : WebState{
     @Published private(set) var isSaving = false
+
+    @Published private(set) var isCancellingSave = false
+
+    @Published private(set) var exportState: WebPDFExportState?
     
     @Published var failedOperation: Operation?
     
-    private var loadRequestID: UUID?
-    private var saveRequestID: UUID?
-
     var loadTask: Task<Void, Never>?
+    
     var saveTask: Task<Void, Never>?
+
+    private var loadRequestID: UUID?
+    
+    private var saveRequestID: UUID?
 
 
     enum Operation: Equatable {
@@ -69,7 +75,7 @@ final class FetchViewState : WebState{
     }
 
     func beginSave() -> UUID? {
-        guard !isSaving else {
+        guard !isSaving, saveTask == nil else {
             return nil
         }
         
@@ -78,12 +84,24 @@ final class FetchViewState : WebState{
         saveRequestID = id
         
         isSaving = true
+
+        isCancellingSave = false
+
+        exportState = WebPDFExportState()
         
         return id
     }
 
     func isCurrentSave(_ id: UUID) -> Bool {
         saveRequestID == id
+    }
+
+    func updateExportState(_ progress: WebPDFExportState, _ id: UUID) {
+        guard isCurrentSave(id), !isCancellingSave else {
+            return
+        }
+
+        exportState = progress
     }
 
     func finishSave(_ id: UUID) {
@@ -96,16 +114,27 @@ final class FetchViewState : WebState{
         saveTask = nil
         
         isSaving = false
+
+        isCancellingSave = false
+
+        exportState = nil
     }
 
     func cancelSave() {
         saveTask?.cancel()
-        
-        saveTask = nil
+
+        if saveTask != nil {
+            isCancellingSave = true
+            return
+        }
         
         saveRequestID = nil
         
         isSaving = false
+
+        isCancellingSave = false
+
+        exportState = nil
     }
 
     override func clear() {

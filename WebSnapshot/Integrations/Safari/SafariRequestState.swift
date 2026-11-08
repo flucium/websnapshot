@@ -11,6 +11,10 @@ struct SafariRequestState {
 
     var savedURL: URL?
 
+    var exportState: WebPDFExportState?
+
+    var isCancelling = false
+
     var status = "Ready to reload a URL from Safari without its sign-in or form entries."
 
     var appError: AppError?

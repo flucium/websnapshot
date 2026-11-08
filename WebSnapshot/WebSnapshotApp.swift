@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import SwiftUI
 import SwiftData
 
@@ -8,74 +9,97 @@ struct WebSnapshotApp: App {
 
     var body: some Scene {
         WindowGroup {
-            HomeView()
-                .environmentObject(appDelegate.content)
-                .environmentObject(appDelegate.sync)
+            WebSnapshotRootView(libraryStartupService: appDelegate.libraryStartupService, appDelegate: appDelegate)
                 .frame(minWidth: 980, minHeight: 400)
         }
         .defaultSize(width: 1000, height: 600)
         .windowResizability(.contentMinSize)
-        .modelContainer(appDelegate.modelContainer)
+    }
+}
+
+private struct WebSnapshotRootView: View {
+    @ObservedObject var libraryStartupService: LibraryStartupService
+    
+    let appDelegate: WebSnapshotAppDelegate
+
+    var body: some View {
+        if let modelContainer = libraryStartupService.modelContainer {
+            HomeView()
+                .environmentObject(appDelegate.content)
+                .environmentObject(appDelegate.librarySyncService)
+                .modelContainer(modelContainer)
+        } else {
+            DatabaseRecoveryView(libraryStartupService: libraryStartupService) {
+                Task {
+                    await appDelegate.openLibrary()
+                }
+            }
+        }
     }
 }
 
 @MainActor
 final class WebSnapshotAppDelegate: NSObject, NSApplicationDelegate {
-    let modelContainer: ModelContainer
-    let sync: LibrarySyncService
+    let libraryStartupService: LibraryStartupService
+    
+    let librarySyncService: LibrarySyncService
+    
     let content: LibraryContentService
+    
     let safariRequests: SafariRequestService
 
-    override init() {
+    private var syncTask: Task<Void, Never>?
+
+    private var appearanceObservation: NSKeyValueObservation?
+
+    private var safariProgressObservation: AnyCancellable?
+
+    private var safariProgressWindow: SafariCaptureProgressWindow?
+
+    
+    override convenience init() {
+        self.init(LibraryStartupService())
+    }
+
+    init(_ libraryStartupService: LibraryStartupService, safariRequests: SafariRequestService? = nil) {
+        self.libraryStartupService = libraryStartupService
         
-        let sync = LibrarySyncService()
+        let librarySyncService = LibrarySyncService()
         
-        self.sync = sync
+        self.librarySyncService = librarySyncService
         
-        content = LibraryContentService(sync: sync)
+        content = LibraryContentService(sync: librarySyncService)
         
-        safariRequests = SafariRequestService {
+        self.safariRequests = safariRequests ?? SafariRequestService {
             
-            url, context, onStart in
+            url, context, onStart, onProgress in
             
-            try await WebCaptureService.capture(url, context, sync: sync, chooseDestination: { name in
+            try await WebCaptureService.capture(url, context, sync: librarySyncService, chooseDestination: { name in
                 prepareForSafariDialog()
                 
                 return savePanel(name)
                 
-            }, onStart)
+            }, onProgress: onProgress, onStart)
         }
 
-        do {
-            modelContainer = try ModelContainer(for: AppearanceSettings.self, StorageSettings.self, PDFFile.self, PDFTag.self, configurations: ModelConfiguration(cloudKitDatabase: .none))
-        } catch {
-            fatalError("Could not open the WebSnapshot library: \(error)")
-        }
         super.init()
     }
     
-    private var appearanceObservation: NSKeyValueObservation?
-    
-    private var syncTask: Task<Void, Never>?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-       
-        syncTask = Task {
-            @MainActor in
-            
-            while !Task.isCancelled {
-                
-                await sync.refresh(modelContainer.mainContext)
-                
-                do {
-                    try await Task.sleep(for: .seconds(2))
-                }catch {
-                    break
-                }
-            
+
+        safariProgressObservation = safariRequests.$state.sink {
+            [weak self] _ in
+
+            Task {
+                @MainActor [weak self] in
+
+                self?.updateSafariProgress()
             }
-            
-            
+        }
+       
+        Task {
+            await openLibrary()
         }
         
         appearanceObservation = NSApp.observe(\.appearance, options: [.initial, .new]) {
@@ -92,38 +116,48 @@ final class WebSnapshotAppDelegate: NSObject, NSApplicationDelegate {
         
     }
 
-    func applicationWillTerminate(_ notification: Notification) {
-        syncTask?.cancel()
-    }
+    func openLibrary() async {
+        await libraryStartupService.open()
 
-    private func updateApplicationIcon() {
-        
-        guard let applicationAppearance = NSApp.appearance else {
-            NSApp.applicationIconImage = nil
+        guard let modelContainer = libraryStartupService.modelContainer else {
             return
         }
 
-        let usesDarkIcon = applicationAppearance.bestMatch( from: [.aqua, .darkAqua]) == .darkAqua
-        
-        let sourceImage: NSImage = usesDarkIcon ? .appIconDark : .appIconLight
-        
-        let iconSize = NSSize(width: 128, height: 128)
+        if syncTask == nil {
+            syncTask = Task {
+                @MainActor in
 
-        let applicationIcon = NSImage(size: iconSize, flipped: false) { _ in
-            
-            let iconRect = NSRect(origin: .zero, size: iconSize).insetBy(dx: 12, dy: 12)
+                while !Task.isCancelled {
+                    await librarySyncService.refresh(modelContainer.mainContext)
 
-            NSBezierPath(roundedRect: iconRect, xRadius: 23, yRadius: 23).addClip()
-            
-            sourceImage.draw(in: iconRect)
-
-            return true
-            
+                    do {
+                        try await Task.sleep(for: .seconds(2))
+                    } catch {
+                        break
+                    }
+                }
+            }
         }
-        
 
-        NSApp.applicationIconImage = applicationIcon
+        safariRequests.startProcessing(modelContainer.mainContext)
     }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        syncTask?.cancel()
+        safariProgressObservation?.cancel()
+        safariRequests.cancel()
+        safariProgressWindow?.window?.orderOut(nil)
+    }
+
+    private func updateSafariProgress() {
+        if safariRequests.state.current != nil, safariProgressWindow == nil {
+            safariProgressWindow = SafariCaptureProgressWindow(safariRequests)
+        }
+
+        safariProgressWindow?.update()
+    }
+
+   
 
     func application(_ application: NSApplication, open urls: [URL]) {
         
@@ -160,6 +194,41 @@ final class WebSnapshotAppDelegate: NSObject, NSApplicationDelegate {
             requests.receive(url)
         }
         
-        requests.startProcessing(modelContainer.mainContext)
+        if let modelContainer = libraryStartupService.modelContainer {
+            requests.startProcessing(modelContainer.mainContext)
+        }
+    }
+    
+    private func updateApplicationIcon() {
+        
+        guard let applicationAppearance = NSApp.appearance else {
+            NSApp.applicationIconImage = nil
+            return
+        }
+
+        let usesDarkIcon = applicationAppearance.bestMatch( from: [.aqua, .darkAqua]) == .darkAqua
+        
+        let sourceImage: NSImage = usesDarkIcon ? .appIconDark : .appIconLight
+        
+        let iconSize = NSSize(width: 128, height: 128)
+
+        let applicationIcon = NSImage(size: iconSize, flipped: false) { _ in
+            
+            let iconRect = NSRect(origin: .zero, size: iconSize).insetBy(dx: 12, dy: 12)
+
+            NSBezierPath(roundedRect: iconRect, xRadius: 23, yRadius: 23).addClip()
+            
+            sourceImage.draw(in: iconRect)
+
+            return true
+            
+        }
+
+        NSApp.applicationIconImage = applicationIcon
+    }
+    
+    deinit {
+        appearanceObservation?.invalidate()
+        appearanceObservation = nil
     }
 }
