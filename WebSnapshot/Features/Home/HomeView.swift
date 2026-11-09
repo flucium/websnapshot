@@ -82,10 +82,10 @@ struct HomeView: View {
 }
 
 #Preview {
-    let sync = LibrarySyncService()
-    let contentService = LibraryContentService(sync: sync)
+    let librarySyncService = LibrarySyncService()
+    let contentService = LibraryContentService(librarySyncService)
 
     HomeView()
         .environmentObject(contentService)
-        .environmentObject(sync)
+        .environmentObject(librarySyncService)
 }

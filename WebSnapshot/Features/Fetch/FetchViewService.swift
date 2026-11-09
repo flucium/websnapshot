@@ -51,7 +51,8 @@ final class FetchViewService {
         }
     }
 
-    static func saveWebPage(_ state: FetchViewState,_ modelContext: ModelContext,_ storageSettings: [StorageSettings], sync: LibrarySyncService) {
+    static func saveWebPage(_ state: FetchViewState,_ modelContext: ModelContext,_ storageSettings: [StorageSettings], _ librarySyncService: LibrarySyncService) {
+        
         guard let requestID = state.beginSave() else {
             return
         }
@@ -81,7 +82,9 @@ final class FetchViewService {
                 guard state.isCurrentSave(requestID), state.webPage === page else {
                     return
                 }
-                guard try LibraryService.savePDF(document.data, URL.pdfFileName(page.title, page.url), modelContext, storageSettings, sync: sync, chooseDestination: { name in
+                
+                guard try LibraryService.savePDF(document.data, URL.pdfFileName(page.title, page.url), modelContext, storageSettings, librarySyncService, chooseDestination: { name in
+                    
                     let destination = savePanel(name)
 
                     return Task.isCancelled ? nil : destination
@@ -103,14 +106,14 @@ final class FetchViewService {
         }
     }
 
-    static func retryFailedOperation( _ state: FetchViewState, _ modelContext: ModelContext, _ storageSettings: [StorageSettings], sync: LibrarySyncService ) {
+    static func retryFailedOperation( _ state: FetchViewState, _ modelContext: ModelContext, _ storageSettings: [StorageSettings], _ librarySyncService: LibrarySyncService ) {
         switch state.failedOperation {
             
         case .load:
             loadWebPage(state)
             
         case .save:
-            saveWebPage(state, modelContext, storageSettings, sync: sync)
+            saveWebPage(state, modelContext, storageSettings,  librarySyncService)
             
         case nil:
             break

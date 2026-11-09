@@ -68,13 +68,13 @@ final class WebSnapshotAppDelegate: NSObject, NSApplicationDelegate {
         
         self.librarySyncService = librarySyncService
         
-        content = LibraryContentService(sync: librarySyncService)
+        content = LibraryContentService( librarySyncService)
         
         self.safariRequests = safariRequests ?? SafariRequestService {
             
             url, context, onStart, onProgress in
             
-            try await WebCaptureService.capture(url, context, sync: librarySyncService, chooseDestination: { name in
+            try await WebCaptureService.capture(url, context, librarySyncService, chooseDestination: { name in
                 prepareForSafariDialog()
                 
                 return savePanel(name)

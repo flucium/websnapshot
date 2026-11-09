@@ -11,7 +11,7 @@ struct LibraryView:View {
     
     @EnvironmentObject private var contentService: LibraryContentService
 
-    @EnvironmentObject private var sync: LibrarySyncService
+    @EnvironmentObject private var librarySyncService: LibrarySyncService
 
     @Environment(\.modelContext) private var modelContext
 
@@ -56,7 +56,7 @@ struct LibraryView:View {
         }
         .task(id: monitoredPDFFiles) {
             while Task.isCancelled == false {
-                await LibraryViewService.synchronizeLibraryFilesAfterViewUpdate(libraryViewState, modelContext, pdfFileMonitor, sync: sync, contentService: contentService)
+                await LibraryViewService.synchronizeLibraryFilesAfterViewUpdate(libraryViewState, modelContext, pdfFileMonitor, librarySyncService, contentService: contentService)
 
                 if !contentState.isIndexing {
                     Task(priority: .utility) {
@@ -91,7 +91,7 @@ struct LibraryView:View {
         }
         .confirmationDialog(moveDeletedFilesToTrash ? "Move PDF to Trash?" : "Delete PDF?", isPresented: $libraryViewState.showDeleteConfirmation, titleVisibility: .visible) {
             Button(moveDeletedFilesToTrash ? "Move to Trash" : "Delete", role: .destructive) {
-                LibraryViewService.confirmDeletion(libraryViewState, modelContext, sync: sync)
+                LibraryViewService.confirmDeletion(libraryViewState, modelContext, librarySyncService)
             }
             Button("Cancel", role: .cancel) {
                 libraryViewState.pendingDeletionPDFFile = nil
@@ -150,7 +150,7 @@ struct LibraryView:View {
 
                 HStack {
                     Button("Import PDFs…") {
-                        LibraryViewService.importPDFs(libraryViewState, modelContext, sync: sync)
+                        LibraryViewService.importPDFs(libraryViewState, modelContext, librarySyncService)
                     }
 
                     Button("Export PDF…") {
@@ -373,11 +373,11 @@ struct LibraryView:View {
         }
         .contentShape(Rectangle())
         .simultaneousGesture(TapGesture(count: 2).onEnded {
-            LibraryViewService.openPDF(libraryViewState, modelContext, pdfFile, sync: sync)
+            LibraryViewService.openPDF(libraryViewState, modelContext, pdfFile, librarySyncService)
         })
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
             Button("Delete", role: .destructive) {
-                LibraryViewService.requestDeletion(libraryViewState, modelContext, pdfFile, sync: sync)
+                LibraryViewService.requestDeletion(libraryViewState, modelContext, pdfFile, librarySyncService)
             }
 
             Button("Copy File Path") {
@@ -386,7 +386,7 @@ struct LibraryView:View {
         }
         .contextMenu {
             Button("Open PDF") {
-                LibraryViewService.openPDF(libraryViewState, modelContext, pdfFile, sync: sync)
+                LibraryViewService.openPDF(libraryViewState, modelContext, pdfFile, librarySyncService)
             }
             
             Button("Edit Tags…") {
@@ -402,7 +402,7 @@ struct LibraryView:View {
             }
             
             Button("Delete", role: .destructive) {
-                LibraryViewService.requestDeletion(libraryViewState, modelContext, pdfFile, sync: sync)
+                LibraryViewService.requestDeletion(libraryViewState, modelContext, pdfFile, librarySyncService)
             }
         }
     }
@@ -441,7 +441,7 @@ struct LibraryView:View {
                     }
                     
                     Button("Delete", role: .destructive,action: {
-                        LibraryViewService.requestDeletion(libraryViewState, modelContext, selectedPDFFile, sync: sync)
+                        LibraryViewService.requestDeletion(libraryViewState, modelContext, selectedPDFFile, librarySyncService)
                     })
 
 
@@ -566,10 +566,10 @@ private struct PDFTagBadge: View {
 }
 
 #Preview {
-    let sync = LibrarySyncService()
-    let contentService = LibraryContentService(sync: sync)
+    let librarySyncService = LibrarySyncService()
+    let contentService = LibraryContentService(librarySyncService)
 
     LibraryView()
         .environmentObject(contentService)
-        .environmentObject(sync)
+        .environmentObject(librarySyncService)
 }

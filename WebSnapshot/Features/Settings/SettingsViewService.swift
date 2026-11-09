@@ -3,10 +3,10 @@ import SwiftData
 
 @MainActor
 final class SettingsViewService {
-    static func changeSync(_ state: SettingsViewState, _ context: ModelContext, _ enabled: Bool, sync: LibrarySyncService, chooseDirectory: @MainActor (URL?, String, String) -> URL? = directoryPanel) async -> Bool {
+    static func changeSync(_ state: SettingsViewState, _ context: ModelContext, _ enabled: Bool, _ librarySyncService: LibrarySyncService, chooseDirectory: @MainActor (URL?, String, String) -> URL? = directoryPanel) async -> Bool {
         
         do {
-            try sync.requireReady()
+            try librarySyncService.requireReady()
             
             guard LibrarySyncService.isEnabled(context) != enabled else {
                 return true
@@ -17,14 +17,14 @@ final class SettingsViewService {
         
                 if saved?.syncDriveBookmarkData != nil {
                 
-                    try await sync.setEnabled(true, context)
+                    try await librarySyncService.setEnabled(true, context)
                     
                 } else {
                     
                     guard let selected = chooseDirectory(SyncFileStore.defaultCloudDriveURL, "Allow Access to iCloud Drive", "Enable Sync") else {
                         return false
                     }
-                    try await sync.setEnabled(true, context, drive: selected)
+                    try await librarySyncService.setEnabled(true, context, drive: selected)
                 }
                 
             } else {
@@ -33,7 +33,7 @@ final class SettingsViewService {
                 }
                 
                 if try LibrarySyncService.localStorageURL(saved) != nil {
-                    try await sync.setEnabled(false, context)
+                    try await librarySyncService.setEnabled(false, context)
                 } else {
                     
                     let initial = saved.previousFixedStoragePath.map {
@@ -44,7 +44,7 @@ final class SettingsViewService {
                         return false
                     }
                     
-                    try await sync.setEnabled(false, context, localRoot: selected)
+                    try await librarySyncService.setEnabled(false, context, localRoot: selected)
                 }
             }
             
@@ -61,14 +61,14 @@ final class SettingsViewService {
         
     }
 
-    static func reconnectSync(_ state: SettingsViewState, _ context: ModelContext, sync: LibrarySyncService) {
+    static func reconnectSync(_ state: SettingsViewState, _ context: ModelContext, _ librarySyncService: LibrarySyncService) {
         
         guard let selected = directoryPanel(SyncFileStore.defaultCloudDriveURL, "Reconnect iCloud Drive", "Reconnect") else {
             return
         }
         
         do {
-            try sync.reconnect(selected, context)
+            try librarySyncService.reconnect(selected, context)
             
             clearError(state)
         } catch {
@@ -96,13 +96,13 @@ final class SettingsViewService {
     }
 
     @discardableResult
-    static func saveStorage(_ state: SettingsViewState,_ modelContext: ModelContext,_ storage: StorageSettings.Storage, sync: LibrarySyncService) -> Bool {
+    static func saveStorage(_ state: SettingsViewState,_ modelContext: ModelContext,_ storage: StorageSettings.Storage, _ librarySyncService: LibrarySyncService) -> Bool {
         do {
             guard try StorageSettingsService.load(modelContext).storage != storage else {
                 return true
             }
 
-            try StorageSettingsService.save(modelContext, storage, sync: sync)
+            try StorageSettingsService.save(modelContext, storage, librarySyncService)
             
             clearError(state)
             
@@ -135,8 +135,11 @@ final class SettingsViewService {
         }
     }
 
-    static func chooseFixedStorage(_ state: SettingsViewState,_ modelContext: ModelContext,_ fixedStoragePath: String?, sync: LibrarySyncService) {
-        guard !LibrarySyncService.isEnabled(modelContext), !sync.state.isSwitching else { return }
+    static func chooseFixedStorage(_ state: SettingsViewState,_ modelContext: ModelContext,_ fixedStoragePath: String?, _ librarySyncService: LibrarySyncService) {
+        
+        guard !LibrarySyncService.isEnabled(modelContext), !librarySyncService.state.isSwitching else {
+            return
+        }
         
         let currentURL = fixedStoragePath.map {
             URL(fileURLWithPath: $0, isDirectory: true)
@@ -147,7 +150,7 @@ final class SettingsViewService {
         }
 
         do {
-            try StorageSettingsService.saveFixedStorage(modelContext, selectedURL, sync: sync)
+            try StorageSettingsService.saveFixedStorage(modelContext, selectedURL, librarySyncService)
             
             clearError(state)
         } catch {
@@ -172,13 +175,13 @@ final class SettingsViewService {
     }
 
     @discardableResult
-    static func deleteLibrary(_ state: SettingsViewState, _ context: ModelContext, sync: LibrarySyncService, contentService: LibraryContentService) -> Bool {
+    static func deleteLibrary(_ state: SettingsViewState, _ context: ModelContext, _ librarySyncService: LibrarySyncService, contentService: LibraryContentService) -> Bool {
         guard !contentService.state.isRefreshingCache else {
             return false
         }
 
         do {
-            try LibraryService.deleteAll(context, sync: sync)
+            try LibraryService.deleteAll(context, librarySyncService)
             contentService.libraryDidClear()
             clearError(state)
             return true

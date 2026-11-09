@@ -107,11 +107,11 @@ enum StorageSettingsService {
         return settings.first?.fixedStoragePath
     }
 
-    static func fixedStorageURL(_ settings: [StorageSettings], sync: LibrarySyncService) throws -> URL? {
+    static func fixedStorageURL(_ settings: [StorageSettings], _ librarySyncService: LibrarySyncService) throws -> URL? {
         
         if let setting = settings.first, setting.syncEnabled {
         
-            return try sync.folderURL(setting)
+            return try librarySyncService.folderURL(setting)
         
         }
         
@@ -155,8 +155,8 @@ enum StorageSettingsService {
         }
     }
 
-    static func save(_ modelContext: ModelContext,_ storage: StorageSettings.Storage, sync: LibrarySyncService) throws {
-        try sync.requireReady()
+    static func save(_ modelContext: ModelContext,_ storage: StorageSettings.Storage, _ librarySyncService: LibrarySyncService) throws {
+        try librarySyncService.requireReady()
         
         if LibrarySyncService.isEnabled(modelContext), storage != .fixed {
         
@@ -175,8 +175,8 @@ enum StorageSettingsService {
         }
     }
 
-    static func saveFixedStorage(_ modelContext: ModelContext,_ url: URL, sync: LibrarySyncService) throws {
-        try sync.requireReady()
+    static func saveFixedStorage(_ modelContext: ModelContext,_ url: URL, _ librarySyncService: LibrarySyncService) throws {
+        try librarySyncService.requireReady()
         
         if LibrarySyncService.isEnabled(modelContext) {
             throw AppError.error("The storage folder cannot be changed while Sync is on.")

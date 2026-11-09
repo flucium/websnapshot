@@ -54,7 +54,7 @@ struct FetchView: View {
             })
             
             Button("Save", action: {
-                FetchViewService.saveWebPage(fetchViewState,modelContext,storageSettings, sync: librarySyncService)
+                FetchViewService.saveWebPage(fetchViewState,modelContext,storageSettings,  librarySyncService)
             })
             .disabled(fetchViewState.isSaving || fetchViewState.webPage.isLoading)
 
@@ -62,7 +62,7 @@ struct FetchView: View {
         .alert(item:$fetchViewState.appError){
             appError in
             AlertModal.show(fetchViewState.failedOperation?.errorTitle ?? "Operation Could Not Be Completed",appError) {
-                FetchViewService.retryFailedOperation(fetchViewState, modelContext, storageSettings, sync: librarySyncService)
+                FetchViewService.retryFailedOperation(fetchViewState, modelContext, storageSettings, librarySyncService)
             }
         }
         .padding()

@@ -5,7 +5,7 @@ struct SettingsView: View {
 
     @Environment(\.modelContext) private var modelContext
     
-    @EnvironmentObject private var sync: LibrarySyncService
+    @EnvironmentObject private var librarySyncService: LibrarySyncService
     
     @EnvironmentObject private var contentService: LibraryContentService
 
@@ -16,7 +16,7 @@ struct SettingsView: View {
     @Query private var storageSettings: [StorageSettings]
 
     
-    private var syncState: LibrarySyncState { sync.state }
+    private var syncState: LibrarySyncState { librarySyncService.state }
     
     private var contentState: LibraryContentState { contentService.state }
 
@@ -131,7 +131,7 @@ struct SettingsView: View {
             
             Task { @MainActor in
             
-                let succeeded = await SettingsViewService.changeSync(settingsViewState, modelContext, enabled, sync: sync)
+                let succeeded = await SettingsViewService.changeSync(settingsViewState, modelContext, enabled, librarySyncService)
                 
                 if !succeeded {
                     settingsViewState.selectedSync = savedSync
@@ -167,7 +167,7 @@ struct SettingsView: View {
             }
 
             Task { @MainActor in
-                let didSave = SettingsViewService.saveStorage(settingsViewState, modelContext, storage, sync: sync)
+                let didSave = SettingsViewService.saveStorage(settingsViewState, modelContext, storage, librarySyncService)
             
                 if !didSave {
                     settingsViewState.selectedStorage = previousStorage
@@ -180,7 +180,7 @@ struct SettingsView: View {
         }
         .confirmationDialog(savedMoveToTrash ? "Move All Library Files to Trash and Delete All Tags?" : "Delete All Library Files and Tags?", isPresented: $settingsViewState.showDeleteLibraryConfirmation, titleVisibility: .visible) {
             Button(savedMoveToTrash ? "Move to Trash" : "Delete All", role: .destructive) {
-                SettingsViewService.deleteLibrary(settingsViewState, modelContext, sync: sync, contentService: contentService)
+                SettingsViewService.deleteLibrary(settingsViewState, modelContext, librarySyncService, contentService: contentService)
             }
             Button("Cancel", role: .cancel) {}
         } message: {
@@ -267,11 +267,13 @@ struct SettingsView: View {
             if storageSettings.first?.syncDriveBookmarkData != nil || storageSettings.first?.syncFolderBookmarkData != nil {
                 HStack {
                     Button("Reconnect iCloud Drive…") {
-                        SettingsViewService.reconnectSync(settingsViewState, modelContext, sync: sync)
+                        SettingsViewService.reconnectSync(settingsViewState, modelContext, librarySyncService)
                     }
                     if savedSync {
                         Button("Retry Sync") {
-                            Task { await sync.refresh(modelContext) }
+                            Task {
+                                await librarySyncService.refresh(modelContext)
+                            }
                         }
                     }
                 }
@@ -327,7 +329,7 @@ struct SettingsView: View {
                     Spacer(minLength: 8)
 
                     Button(fixedStoragePath == nil ? "Choose Folder…" : "Change…" ) {
-                        SettingsViewService.chooseFixedStorage( settingsViewState, modelContext, fixedStoragePath, sync: sync )
+                        SettingsViewService.chooseFixedStorage( settingsViewState, modelContext, fixedStoragePath, librarySyncService )
                     }
                     .disabled(savedSync)
 
@@ -443,7 +445,7 @@ struct SettingsView: View {
                 if savedDeletionConfirmation {
                     settingsViewState.showDeleteLibraryConfirmation = true
                 } else {
-                    SettingsViewService.deleteLibrary(settingsViewState, modelContext, sync: sync, contentService: contentService)
+                    SettingsViewService.deleteLibrary(settingsViewState, modelContext, librarySyncService, contentService: contentService)
                 }
             }
             .disabled(contentState.isRefreshingCache)
@@ -486,10 +488,10 @@ private struct SettingsSection<Content: View>: View {
 }
 
 #Preview {
-    let sync = LibrarySyncService()
-    let contentService = LibraryContentService(sync: sync)
+    let librarySyncService = LibrarySyncService()
+    let contentService = LibraryContentService(librarySyncService)
 
     SettingsView()
         .environmentObject(contentService)
-        .environmentObject(sync)
+        .environmentObject(librarySyncService)
 }

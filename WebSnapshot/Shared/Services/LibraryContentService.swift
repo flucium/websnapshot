@@ -7,7 +7,7 @@ final class LibraryContentService: ObservableObject {
 
     @Published private(set) var state = LibraryContentState()
 
-    private let sync: LibrarySyncService
+    private let librarySyncService: LibrarySyncService
 
     private var indexTask: Task<Void, Never>?
 
@@ -24,10 +24,10 @@ final class LibraryContentService: ObservableObject {
     }
 
     
-    init(sync: LibrarySyncService, _ extract: @escaping @Sendable (URL) async throws -> String = {
+    init(_ librarySyncService: LibrarySyncService, _ extract: @escaping @Sendable (URL) async throws -> String = {
         try await PDFContentService().text($0)
     }) {
-        self.sync = sync
+        self.librarySyncService = librarySyncService
         self.extract = extract
     }
 
@@ -42,14 +42,14 @@ final class LibraryContentService: ObservableObject {
     }
 
     func index(_ pdfFiles: [PDFFile], _ modelContext: ModelContext, pruneFailures: Bool = true) async {
-        guard !Task.isCancelled, !state.isRefreshingCache, !sync.state.isSwitching else {
+        guard !Task.isCancelled, !state.isRefreshingCache, !librarySyncService.state.isSwitching else {
             return
         }
 
         while let indexTask {
             await indexTask.value
 
-            guard !Task.isCancelled, !state.isRefreshingCache, !sync.state.isSwitching else {
+            guard !Task.isCancelled, !state.isRefreshingCache, !librarySyncService.state.isSwitching else {
                 return
             }
         }
@@ -73,7 +73,7 @@ final class LibraryContentService: ObservableObject {
 
     @discardableResult
     func refreshContentCache(_ modelContext: ModelContext) -> Task<Void, Error>? {
-        guard !state.isRefreshingCache, !sync.state.isSwitching else {
+        guard !state.isRefreshingCache, !librarySyncService.state.isSwitching else {
             return nil
         }
 
@@ -96,7 +96,7 @@ final class LibraryContentService: ObservableObject {
 
             try Task.checkCancellation()
 
-            try sync.requireReady()
+            try librarySyncService.requireReady()
 
             let removedCount = try self.invalidateContentCache(modelContext)
 
@@ -108,11 +108,11 @@ final class LibraryContentService: ObservableObject {
 
             try Task.checkCancellation()
 
-            try sync.requireReady()
+            try librarySyncService.requireReady()
 
             let afterIndexing = try modelContext.fetch(FetchDescriptor<PDFFile>())
 
-            try LibraryService.deleteMissingFiles(modelContext, afterIndexing, sync: sync)
+            try LibraryService.deleteMissingFiles(modelContext, afterIndexing, librarySyncService)
 
             let remaining = try modelContext.fetch(FetchDescriptor<PDFFile>())
 
@@ -132,7 +132,7 @@ final class LibraryContentService: ObservableObject {
         do {
             let pdfFiles = try modelContext.fetch(FetchDescriptor<PDFFile>())
 
-            try LibraryService.deleteMissingFiles(modelContext, pdfFiles, sync: sync)
+            try LibraryService.deleteMissingFiles(modelContext, pdfFiles, librarySyncService)
 
             let remaining = try modelContext.fetch(FetchDescriptor<PDFFile>())
 
@@ -154,7 +154,7 @@ final class LibraryContentService: ObservableObject {
 
     private func indexContent(_ pdfFiles: [PDFFile], _ modelContext: ModelContext, pruneFailures: Bool = true) async {
 
-        guard state.isIndexing == false, !sync.state.isSwitching else {
+        guard state.isIndexing == false, !librarySyncService.state.isSwitching else {
             return
         }
 
@@ -185,7 +185,7 @@ final class LibraryContentService: ObservableObject {
 
         for pdfFile in pdfFiles {
 
-            if Task.isCancelled || sync.state.isSwitching {
+            if Task.isCancelled || librarySyncService.state.isSwitching {
                 return
             }
 
@@ -281,7 +281,7 @@ final class LibraryContentService: ObservableObject {
 
                 let text = try await extract(request.url)
 
-                if sync.state.isSwitching {
+                if librarySyncService.state.isSwitching {
                     return
                 }
 
