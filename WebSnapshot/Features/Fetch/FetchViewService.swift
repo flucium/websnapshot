@@ -5,81 +5,81 @@ import WebKit
 @MainActor
 final class FetchViewService {
     
-    static func loadWebPage(_ state: FetchViewState) {
+    static func loadWebPage(_ fetchViewState: FetchViewState) {
     
-        let input = state.searchText
+        let input = fetchViewState.searchText
         
-        let requestID = state.beginLoad()
+        let requestID = fetchViewState.beginLoad()
         
-        state.appError = nil
+        fetchViewState.appError = nil
         
-        state.failedOperation = nil
+        fetchViewState.failedOperation = nil
 
-        state.loadTask = Task {
+        fetchViewState.loadTask = Task {
             do {
                 _ = try await fetch(input) {
                     page in
                     
-                    guard state.isCurrentLoad(requestID) else {
+                    guard fetchViewState.isCurrentLoad(requestID) else {
                         return
                     }
                     
-                    state.webPage = page
+                    fetchViewState.webPage = page
                 }
         
                 try Task.checkCancellation()
                 
-                guard state.isCurrentLoad(requestID) else {
+                guard fetchViewState.isCurrentLoad(requestID) else {
                     return
                 }
                 
-                state.appError = nil
+                fetchViewState.appError = nil
                 
-                state.failedOperation = nil
+                fetchViewState.failedOperation = nil
                 
-                state.finishLoad(requestID)
+                fetchViewState.finishLoad(requestID)
             } catch {
                 
-                guard state.isCurrentLoad(requestID) else {
+                guard fetchViewState.isCurrentLoad(requestID) else {
                     return
                 }
                 
-                handle(error,  .load,  state,  URL.supportedWebURL(input))
+                handle(error,  .load,  fetchViewState,  URL.supportedWebURL(input))
                 
-                state.finishLoad(requestID)
+                fetchViewState.finishLoad(requestID)
             }
         }
     }
 
-    static func saveWebPage(_ state: FetchViewState,_ modelContext: ModelContext,_ storageSettings: [StorageSettings], _ librarySyncService: LibrarySyncService) {
+    static func saveWebPage(_ fetchViewState: FetchViewState,_ modelContext: ModelContext,_ storageSettings: [StorageSettings], _ librarySyncService: LibrarySyncService) {
         
-        guard let requestID = state.beginSave() else {
+        guard let requestID = fetchViewState.beginSave() else {
             return
         }
         
-        let page = state.webPage
+        let page = fetchViewState.webPage
         
         let url = page.url
 
-        state.saveTask = Task {
+        fetchViewState.saveTask = Task {
             defer {
-                state.finishSave(requestID)
+                fetchViewState.finishSave(requestID)
             }
             
             do {
                 let document = try await WebPDFService.export(page) {
                     progress in
 
-                    guard !Task.isCancelled, state.webPage === page else {
+                    guard !Task.isCancelled, fetchViewState.webPage === page else {
                         return
                     }
 
-                    state.updateExportState(progress, requestID)
+                    fetchViewState.updateExportState(progress, requestID)
                 }
 
                 try Task.checkCancellation()
                 
-                guard state.isCurrentSave(requestID), state.webPage === page else {
+                guard fetchViewState.isCurrentSave(requestID), fetchViewState.webPage === page else {
                     return
                 }
                 
@@ -92,28 +92,28 @@ final class FetchViewService {
                     return
                 }
 
-                state.appError = nil
+                fetchViewState.appError = nil
                 
-                state.failedOperation = nil
+                fetchViewState.failedOperation = nil
                 
             } catch {
-                guard state.isCurrentSave(requestID) else {
+                guard fetchViewState.isCurrentSave(requestID) else {
                     return
                 }
                 
-                handle(error, .save,  state, url)
+                handle(error, .save,  fetchViewState, url)
             }
         }
     }
 
-    static func retryFailedOperation( _ state: FetchViewState, _ modelContext: ModelContext, _ storageSettings: [StorageSettings], _ librarySyncService: LibrarySyncService ) {
-        switch state.failedOperation {
+    static func retryFailedOperation( _ fetchViewState: FetchViewState, _ modelContext: ModelContext, _ storageSettings: [StorageSettings], _ librarySyncService: LibrarySyncService ) {
+        switch fetchViewState.failedOperation {
             
         case .load:
-            loadWebPage(state)
+            loadWebPage(fetchViewState)
             
         case .save:
-            saveWebPage(state, modelContext, storageSettings,  librarySyncService)
+            saveWebPage(fetchViewState, modelContext, storageSettings,  librarySyncService)
             
         case nil:
             break
@@ -143,15 +143,15 @@ final class FetchViewService {
         
     }
 
-    private static func handle(_ error: Error,_ operation: FetchViewState.Operation,_ state: FetchViewState,_ targetURL: URL? = nil) {
+    private static func handle(_ error: Error,_ operation: FetchViewState.Operation,_ fetchViewState: FetchViewState,_ targetURL: URL? = nil) {
         guard let appError = AppError.presentable(error) else {
             return
         }
 
-        AppLogger.record(appError, operation == .load ? "Load webpage" : "Save webpage as PDF", targetURL ?? (operation == .load ? URL.supportedWebURL(state.searchText) : state.webPage.url) )
+        AppLogger.record(appError, operation == .load ? "Load webpage" : "Save webpage as PDF", targetURL ?? (operation == .load ? URL.supportedWebURL(fetchViewState.searchText) : fetchViewState.webPage.url) )
         
-        state.failedOperation = operation
+        fetchViewState.failedOperation = operation
         
-        state.appError = appError
+        fetchViewState.appError = appError
     }
 }
