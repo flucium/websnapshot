@@ -189,9 +189,9 @@ enum LibraryService {
         }
     }
 
-    static func replaceTags(_ names: [String], _ pdf: PDFFile, _ context: ModelContext,sync: LibrarySyncService) throws {
+    static func replaceTags(_ names: [String], _ pdf: PDFFile, _ context: ModelContext,_ librarySyncService: LibrarySyncService) throws {
         
-        try sync.requireReady()
+        try librarySyncService.requireReady()
         
         guard pdf.modelContext != nil, !pdf.isDeleted else {
             throw AppError.error("This PDF is no longer in the library.")

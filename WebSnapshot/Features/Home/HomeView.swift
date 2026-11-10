@@ -6,11 +6,11 @@ import AppKit
 struct HomeView: View {
     @StateObject private var homeViewState = HomeViewState()
     
-    @EnvironmentObject private var sync: LibrarySyncService
+    @EnvironmentObject private var librarySyncService: LibrarySyncService
     
     @Query private var appearanceSettings: [AppearanceSettings]
     
-    private var librarySyncState: LibrarySyncState { sync.state }
+    private var librarySyncState: LibrarySyncState { librarySyncService.state }
 
     private var appearance: AppearanceSettings.Appearance {
         appearance(appearanceSettings)

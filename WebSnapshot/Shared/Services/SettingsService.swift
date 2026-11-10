@@ -243,8 +243,8 @@ enum StorageSettingsService {
         }
     }
 
-    static func reset(_ modelContext: ModelContext, sync: LibrarySyncService) throws {
-        try sync.requireReady()
+    static func reset(_ modelContext: ModelContext, _ librarySyncService: LibrarySyncService) throws {
+        try librarySyncService.requireReady()
         
         if LibrarySyncService.isEnabled(modelContext) {
             throw AppError.error("Turn off Sync before resetting Storage.")

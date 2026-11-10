@@ -13,12 +13,12 @@ final class LibraryTagEditorViewService {
         state.tagNames = PDFTagService.removingTag(name, state.tagNames)
     }
 
-    static func save(_ state: LibraryTagEditorViewState, _ pdfFile: PDFFile, _ modelContext: ModelContext, sync: LibrarySyncService) -> Bool {
+    static func save(_ state: LibraryTagEditorViewState, _ pdfFile: PDFFile, _ modelContext: ModelContext, _ librarySyncService: LibrarySyncService) -> Bool {
         
         do {
             let names = PDFTagService.mergingTagChanges(state.tagNames, previous: state.originalTagNames, current: PDFTagService.tagNames(pdfFile.tags))
 
-            try LibraryService.replaceTags(names,pdfFile,modelContext, sync: sync)
+            try LibraryService.replaceTags(names,pdfFile,modelContext, librarySyncService)
 
             return true
         } catch {
