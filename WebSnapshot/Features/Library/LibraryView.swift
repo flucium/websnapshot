@@ -7,7 +7,7 @@ struct LibraryView:View {
 
     @StateObject private var libraryViewState = LibraryViewState()
     
-    @StateObject private var pdfFileMonitor = LibraryPDFFileMonitor()
+    @StateObject private var libraryPDFFileMonitor = LibraryPDFFileMonitor()
     
     @EnvironmentObject private var contentService: LibraryContentService
 
@@ -38,7 +38,7 @@ struct LibraryView:View {
             }
         }
         .onDisappear {
-            pdfFileMonitor.stop()
+            libraryPDFFileMonitor.stop()
 
             libraryViewState.cancelOpeningPDF()
             
@@ -56,7 +56,7 @@ struct LibraryView:View {
         }
         .task(id: monitoredPDFFiles) {
             while Task.isCancelled == false {
-                await LibraryViewService.synchronizeLibraryFilesAfterViewUpdate(libraryViewState, modelContext, pdfFileMonitor, librarySyncService, contentService: contentService)
+                await LibraryViewService.synchronizeLibraryFilesAfterViewUpdate(libraryViewState, modelContext, libraryPDFFileMonitor, librarySyncService, contentService: contentService)
 
                 if !contentState.isIndexing {
                     Task(priority: .utility) {
