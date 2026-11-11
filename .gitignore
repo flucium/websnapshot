@@ -83,6 +83,7 @@ fastlane/test_output
 # Other
 ARCHITECTURE.md
 copyright.sh
+default.profraw
 
 !version.txt
 !.github
