@@ -39,8 +39,8 @@ struct HomeView: View {
     }
     
     @ViewBuilder
-    private func detail(_ destination: NavigationDestination?) -> some View {
-        switch destination {
+    private func detail(_ navigationDestination: NavigationDestination?) -> some View {
+        switch navigationDestination {
         case .fetch:
             FetchView()
         case .library:
@@ -54,7 +54,7 @@ struct HomeView: View {
 
     var body: some View {
         NavigationSplitView {
-            List(selection: $homeViewState.destination) {
+            List(selection: $homeViewState.navigationDestination) {
                 NavigationLink(value: NavigationDestination.fetch) {
                     Label("Fetch", systemImage: "magnifyingglass")
                 }
@@ -68,7 +68,7 @@ struct HomeView: View {
                 }
             }
         } detail: {
-            detail(homeViewState.destination)
+            detail(homeViewState.navigationDestination)
         }
         .onAppear {
             updateApplicationAppearance(appearance)

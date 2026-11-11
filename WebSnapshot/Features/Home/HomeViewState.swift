@@ -7,5 +7,5 @@ enum NavigationDestination: Hashable {
 }
 
 final class HomeViewState: ObservableObject {
-    @Published var destination: NavigationDestination? = .fetch
+    @Published var navigationDestination: NavigationDestination? = .fetch
 }
