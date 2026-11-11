@@ -12,14 +12,15 @@ final class LibraryPDFFileMonitor: ObservableObject {
         var wasModified = false
     }
 
-    private var monitors: [PersistentIdentifier: PDFFileMonitor] = [:]
+    private var pdfFileMonitors: [PersistentIdentifier: PDFFileMonitor] = [:]
 
     func sync(_ pdfFiles: [PDFFile],_ onMissing: @escaping (Change) -> Void) {
+        
         let fileIDs = Set(pdfFiles.map(\.persistentModelID))
 
-        for key in Array(monitors.keys) where fileIDs.contains(key) == false {
-            monitors[key]?.stop()
-            monitors[key] = nil
+        for key in Array(pdfFileMonitors.keys) where fileIDs.contains(key) == false {
+            pdfFileMonitors[key]?.stop()
+            pdfFileMonitors[key] = nil
         }
 
         for pdfFile in pdfFiles {
@@ -29,31 +30,37 @@ final class LibraryPDFFileMonitor: ObservableObject {
                 continue
             }
 
-            if let monitor = monitors[key], monitor.url == url {
-                _ = monitor.start()
+            if let pdfFileMonitor = pdfFileMonitors[key], pdfFileMonitor.url == url {
+                
+                _ = pdfFileMonitor.start()
+                
                 continue
             }
 
-            monitors[key]?.stop()
-            let monitor = PDFFileMonitor(url) { missingURL, wasDeleted, wasModified in
+            pdfFileMonitors[key]?.stop()
+            
+            let pdfFileMonitor = PDFFileMonitor(url) { missingURL, wasDeleted, wasModified in
+                
                 Task { @MainActor in
                     onMissing(Change(fileID: key, url: missingURL, wasDeleted: wasDeleted, wasModified: wasModified))
                 }
+                
             }
 
-            monitors[key] = monitor
-            if monitor.start() == false && FileManager.default.fileExists(atPath: url.path) {
+            pdfFileMonitors[key] = pdfFileMonitor
+            
+            if pdfFileMonitor.start() == false && FileManager.default.fileExists(atPath: url.path) {
                 AppLogger.recordDiagnostic("The file monitor could not be started.","Monitor PDF",url)
             }
         }
     }
 
     func stop() {
-        for monitor in monitors.values {
-            monitor.stop()
+        for pdfFileMonitor in pdfFileMonitors.values {
+            pdfFileMonitor.stop()
         }
 
-        monitors.removeAll()
+        pdfFileMonitors.removeAll()
     }
 
 }
