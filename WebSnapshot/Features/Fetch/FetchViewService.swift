@@ -143,14 +143,14 @@ final class FetchViewService {
         
     }
 
-    private static func handle(_ error: Error,_ operation: FetchViewState.Operation,_ fetchViewState: FetchViewState,_ targetURL: URL? = nil) {
+    private static func handle(_ error: Error,_ fetchViewStateOperation: FetchViewState.Operation,_ fetchViewState: FetchViewState,_ targetURL: URL? = nil) {
         guard let appError = AppError.presentable(error) else {
             return
         }
 
-        AppLogger.record(appError, operation == .load ? "Load webpage" : "Save webpage as PDF", targetURL ?? (operation == .load ? URL.supportedWebURL(fetchViewState.searchText) : fetchViewState.webPage.url) )
+        AppLogger.record(appError, fetchViewStateOperation == .load ? "Load webpage" : "Save webpage as PDF", targetURL ?? (fetchViewStateOperation == .load ? URL.supportedWebURL(fetchViewState.searchText) : fetchViewState.webPage.url) )
         
-        fetchViewState.failedOperation = operation
+        fetchViewState.failedOperation = fetchViewStateOperation
         
         fetchViewState.appError = appError
     }
