@@ -5,7 +5,7 @@ import Translation
 
 @MainActor
 final class LibraryViewService {
-    static func importPDFs(_ state: LibraryViewState, _ modelContext: ModelContext, _ librarySyncService: LibrarySyncService) {
+        static func importPDFs(_ libraryViewState: LibraryViewState, _ modelContext: ModelContext, _ librarySyncService: LibrarySyncService) {
 
         guard let sourceURLs = importPDFsPanel(), sourceURLs.isEmpty == false else {
             return
@@ -35,13 +35,13 @@ final class LibraryViewService {
                 return
             }
 
-            importPDFs(state, modelContext, sourceURLs, destinationDirectory, librarySyncService)
+            importPDFs(libraryViewState, modelContext, sourceURLs, destinationDirectory, librarySyncService)
         } catch {
-            handle(error, "PDFs Could Not Be Imported", "Import PDFs", state)
+            handle(error, "PDFs Could Not Be Imported", "Import PDFs", libraryViewState)
         }
     }
 
-    static func importPDFs(_ state: LibraryViewState, _ modelContext: ModelContext, _ sourceURLs: [URL], _ destinationDirectory: URL, _ librarySyncService: LibrarySyncService) {
+    static func importPDFs(_ libraryViewState: LibraryViewState, _ modelContext: ModelContext, _ sourceURLs: [URL], _ destinationDirectory: URL, _ librarySyncService: LibrarySyncService) {
         
         guard sourceURLs.isEmpty == false else {
             return
@@ -70,22 +70,24 @@ final class LibraryViewService {
                 $0.url.standardizedFileURL == destination.standardizedFileURL
             }
 
-            state.searchText = ""
+            libraryViewState.searchText = ""
 
-            state.selectedTag = .all
+            libraryViewState.selectedTag = .all
 
-            state.selectedPDFRowID = registeredPDF?.persistentModelID
+            libraryViewState.selectedPDFRowID = registeredPDF?.persistentModelID
         }
 
-        state.appError = nil
+        libraryViewState.appError = nil
 
         guard let firstFailure = failures.first else {
             return
         }
 
         if sourceURLs.count == 1 {
-            state.errorTitle = "PDF Could Not Be Imported"
-            state.appError = firstFailure.error
+            libraryViewState.errorTitle = "PDF Could Not Be Imported"
+            
+            libraryViewState.appError = firstFailure.error
+            
             return
         }
 
@@ -93,12 +95,12 @@ final class LibraryViewService {
             "\($0.url.lastPathComponent): \($0.error.userMessage)"
         }.joined(separator: "\n")
 
-        state.errorTitle = importedURLs.isEmpty ? "PDFs Could Not Be Imported" : "Some PDFs Could Not Be Imported"
+        libraryViewState.errorTitle = importedURLs.isEmpty ? "PDFs Could Not Be Imported" : "Some PDFs Could Not Be Imported"
 
-        state.appError = .error("\(importedURLs.count) of \(sourceURLs.count) PDFs were imported.\n\n\(messages)")
+        libraryViewState.appError = .error("\(importedURLs.count) of \(sourceURLs.count) PDFs were imported.\n\n\(messages)")
     }
 
-    static func exportPDF(_ state: LibraryViewState, _ pdfFile: PDFFile) {
+    static func exportPDF(_ libraryViewState: LibraryViewState, _ pdfFile: PDFFile) {
 
         let sourceURL = pdfFile.resolvedURL
 
@@ -109,26 +111,26 @@ final class LibraryViewService {
         do {
             try LibraryService.exportPDF(sourceURL,  destinationURL)
 
-            state.appError = nil
+            libraryViewState.appError = nil
 
         } catch {
 
-            handle(error, "PDF Could Not Be Exported", "Export PDF", state, sourceURL)
+            handle(error, "PDF Could Not Be Exported", "Export PDF", libraryViewState, sourceURL)
 
         }
     }
 
-    static func startTranslation(_ state: LibraryViewState, _ targetLanguage: TranslationLanguage) {
+    static func startTranslation(_ libraryViewState: LibraryViewState, _ targetLanguage: TranslationLanguage) {
 
-        guard let selectedPDFFile = state.selectedPDFFile, state.displayedPDFData != nil else {
+        guard let selectedPDFFile = libraryViewState.selectedPDFFile, libraryViewState.displayedPDFData != nil else {
             return
         }
 
-        state.appError = nil
+        libraryViewState.appError = nil
 
-        let request = state.beginTranslation(selectedPDFFile, targetLanguage)
+        let request = libraryViewState.beginTranslation(selectedPDFFile, targetLanguage)
 
-        state.translationPreparationTask = Task { @MainActor in
+        libraryViewState.translationPreparationTask = Task { @MainActor in
 
             do {
                 try Task.checkCancellation()
@@ -145,26 +147,26 @@ final class LibraryViewService {
 
                 try Task.checkCancellation()
 
-                state.prepareTranslation(text, for: request)
+                libraryViewState.prepareTranslation(text, for: request)
             } catch {
-                guard state.isCurrentTranslation(request) else {
+                guard libraryViewState.isCurrentTranslation(request) else {
                     return
                 }
 
-                state.finishTranslation(request)
+                libraryViewState.finishTranslation(request)
 
                 if selectedPDFFile.availability == .missing {
-                    closeMissingPDF(state)
+                    closeMissingPDF(libraryViewState)
                 }
 
-                handle(error, "Text Could Not Be Prepared", "Prepare PDF text", state, request.url)
+                handle(error, "Text Could Not Be Prepared", "Prepare PDF text", libraryViewState, request.url)
             }
         }
     }
 
-    static func translate(_ state: LibraryViewState,_ session: TranslationSession,_ request: LibraryViewState.TranslationRequest) async {
+    static func translate(_ libraryViewState: LibraryViewState,_ session: TranslationSession,_ request: LibraryViewState.TranslationRequest) async {
 
-        guard let text = request.text, state.isCurrentTranslation(request), !Task.isCancelled else {
+        guard let text = request.text, libraryViewState.isCurrentTranslation(request), !Task.isCancelled else {
             return
         }
 
@@ -173,81 +175,81 @@ final class LibraryViewService {
 
             try Task.checkCancellation()
 
-            state.completeTranslation(translated, for: request)
+            libraryViewState.completeTranslation(translated, for: request)
         } catch {
-            guard state.isCurrentTranslation(request) else {
+            guard libraryViewState.isCurrentTranslation(request) else {
                 return
             }
 
-            handle(error, "Translation Could Not Be Completed", "Translate PDF text", state, request.url)
+            handle(error, "Translation Could Not Be Completed", "Translate PDF text", libraryViewState, request.url)
 
-            state.finishTranslation(request)
+            libraryViewState.finishTranslation(request)
         }
     }
 
-    static func requestDeletion(_ state: LibraryViewState, _ modelContext: ModelContext, _ pdfFile: PDFFile, _ librarySyncService: LibrarySyncService) {
+    static func requestDeletion(_ libraryViewState: LibraryViewState, _ modelContext: ModelContext, _ pdfFile: PDFFile, _ librarySyncService: LibrarySyncService) {
         do {
             let settings = try LibrarySyncSettings.settings(modelContext)
 
             if settings?.confirmBeforeDeleting ?? true {
-                state.pendingDeletionPDFFile = pdfFile
+                libraryViewState.pendingDeletionPDFFile = pdfFile
 
-                state.showDeleteConfirmation = true
+                libraryViewState.showDeleteConfirmation = true
             } else {
-                deleteRequestedPDF(state, modelContext, pdfFile, librarySyncService)
+                deleteRequestedPDF(libraryViewState, modelContext, pdfFile, librarySyncService)
             }
         } catch {
-            handle(error, "PDF Could Not Be Deleted", "Load deletion settings", state, pdfFile.resolvedURL)
+            handle(error, "PDF Could Not Be Deleted", "Load deletion settings", libraryViewState, pdfFile.resolvedURL)
         }
     }
 
-    static func confirmDeletion(_ state: LibraryViewState, _ modelContext: ModelContext, _ librarySyncService: LibrarySyncService) {
-        guard let pdfFile = state.pendingDeletionPDFFile else {
+    static func confirmDeletion(_ libraryViewState: LibraryViewState, _ modelContext: ModelContext, _ librarySyncService: LibrarySyncService) {
+        guard let pdfFile = libraryViewState.pendingDeletionPDFFile else {
             return
         }
 
-        state.pendingDeletionPDFFile = nil
+        libraryViewState.pendingDeletionPDFFile = nil
 
-        state.showDeleteConfirmation = false
+        libraryViewState.showDeleteConfirmation = false
 
-        deleteRequestedPDF(state, modelContext, pdfFile, librarySyncService)
+        deleteRequestedPDF(libraryViewState, modelContext, pdfFile, librarySyncService)
     }
 
-    private static func deleteRequestedPDF(_ state: LibraryViewState, _ modelContext: ModelContext, _ pdfFile: PDFFile, _ librarySyncService: LibrarySyncService) {
+    private static func deleteRequestedPDF(_ libraryViewState: LibraryViewState, _ modelContext: ModelContext, _ pdfFile: PDFFile, _ librarySyncService: LibrarySyncService) {
         guard pdfFile.modelContext != nil, !pdfFile.isDeleted else {
             return
         }
 
-        if state.selectedPDFFile?.persistentModelID == pdfFile.persistentModelID {
-            deleteDisplayedPDF(state, modelContext, pdfFile, librarySyncService)
+        if libraryViewState.selectedPDFFile?.persistentModelID == pdfFile.persistentModelID {
+            deleteDisplayedPDF(libraryViewState, modelContext, pdfFile, librarySyncService)
         } else {
-            deletePDF(state, modelContext, pdfFile, librarySyncService)
+            deletePDF(libraryViewState, modelContext, pdfFile, librarySyncService)
         }
     }
 
-    static func deletePDF(_ state: LibraryViewState, _ modelContext: ModelContext, _ pdfFile: PDFFile, _ librarySyncService: LibrarySyncService) {
+    static func deletePDF(_ libraryViewState: LibraryViewState, _ modelContext: ModelContext, _ pdfFile: PDFFile, _ librarySyncService: LibrarySyncService) {
         do {
             try LibraryService.delete(modelContext, pdfFile.url, pdfFile.resolvedURL, librarySyncService)
 
-            state.selectedPDFFile = nil
+            libraryViewState.selectedPDFFile = nil
 
-            state.appError = nil
+            libraryViewState.appError = nil
         } catch {
-            handle(error, "PDF Could Not Be Deleted", "Delete PDF", state, pdfFile.resolvedURL)
+            handle(error, "PDF Could Not Be Deleted", "Delete PDF", libraryViewState, pdfFile.resolvedURL)
         }
     }
 
-    static func deleteDisplayedPDF(_ state: LibraryViewState, _ modelContext: ModelContext, _ pdfFile: PDFFile, _ librarySyncService: LibrarySyncService) {
+    static func deleteDisplayedPDF(_ libraryViewState: LibraryViewState, _ modelContext: ModelContext, _ pdfFile: PDFFile, _ librarySyncService: LibrarySyncService) {
 
         let url = pdfFile.url
 
         let resolvedURL = pdfFile.resolvedURL
 
-        state.cancelTranslation()
+        libraryViewState.cancelTranslation()
 
-        state.selectedPDFFile = nil
+        libraryViewState.selectedPDFFile = nil
 
-        state.appError = nil
+        libraryViewState.appError = nil
 
         Task { @MainActor in
 
@@ -256,12 +258,12 @@ final class LibraryViewService {
             do {
                 try LibraryService.delete(modelContext, url, resolvedURL, librarySyncService)
             } catch {
-                handle(error, "PDF Could Not Be Deleted", "Delete PDF", state, resolvedURL)
+                handle(error, "PDF Could Not Be Deleted", "Delete PDF", libraryViewState, resolvedURL)
             }
         }
     }
 
-    static func copyFilePath(_ state: LibraryViewState, _ pdfFile: PDFFile) {
+    static func copyFilePath(_ libraryViewState: LibraryViewState, _ pdfFile: PDFFile) {
 
         let resolvedURL = pdfFile.resolvedURL
 
@@ -278,19 +280,19 @@ final class LibraryViewService {
                 throw AppError.system("The file path could not be copied.")
             }
 
-            state.appError = nil
+            libraryViewState.appError = nil
         } catch {
-            handle(error, "File Path Could Not Be Copied", "Copy PDF path", state, resolvedURL)
+            handle(error, "File Path Could Not Be Copied", "Copy PDF path", libraryViewState, resolvedURL)
         }
     }
 
-    static func synchronizeLibraryFiles(_ state: LibraryViewState,_ modelContext: ModelContext,_ libraryPDFFileMonitor: LibraryPDFFileMonitor, _ librarySyncService: LibrarySyncService, _ change: LibraryPDFFileMonitor.Change? = nil, contentService: LibraryContentService? = nil) {
+    static func synchronizeLibraryFiles(_ libraryViewState: LibraryViewState,_ modelContext: ModelContext,_ libraryPDFFileMonitor: LibraryPDFFileMonitor, _ librarySyncService: LibrarySyncService, _ change: LibraryPDFFileMonitor.Change? = nil, contentService: LibraryContentService? = nil) {
 
         do {
             let pdfFiles = try modelContext.fetch(FetchDescriptor<PDFFile>())
 
             defer {
-                refreshFileLocations(state, pdfFiles.filter {
+                refreshFileLocations(libraryViewState, pdfFiles.filter {
                     !$0.isDeleted && $0.modelContext != nil
                 })
             }
@@ -299,15 +301,15 @@ final class LibraryViewService {
 
                 libraryPDFFileMonitor.stop()
 
-                if let selected = state.selectedPDFFile, selected.isDeleted || selected.modelContext == nil {
-                    closeMissingPDF(state)
+                if let selected = libraryViewState.selectedPDFFile, selected.isDeleted || selected.modelContext == nil {
+                    closeMissingPDF(libraryViewState)
                 }
 
                 return
             }
 
             if let change, change.wasModified, FileIO.exists(change.url), let pdfFile = modelContext.model(for: change.fileID) as? PDFFile, pdfFile.modelContext != nil, !pdfFile.isDeleted {
-                refreshDisplayedPDF(state)
+                refreshDisplayedPDF(libraryViewState)
 
                 if let contentService {
                     Task {
@@ -323,17 +325,17 @@ final class LibraryViewService {
             if let change {
                 confirmedDeletedFileIDs = change.wasDeleted && FileIO.exists(change.url) == false ? [change.fileID] : []
 
-                if let selectedPDFFile = state.selectedPDFFile, selectedPDFFile.persistentModelID == change.fileID, selectedPDFFile.availability == .missing || confirmedDeletedFileIDs.contains(change.fileID) {
+                if let selectedPDFFile = libraryViewState.selectedPDFFile, selectedPDFFile.persistentModelID == change.fileID, selectedPDFFile.availability == .missing || confirmedDeletedFileIDs.contains(change.fileID) {
 
-                    closeMissingPDF(state)
+                    closeMissingPDF(libraryViewState)
 
                 }
 
             } else {
                 confirmedDeletedFileIDs = []
 
-                if state.selectedPDFFile?.availability == .missing {
-                    closeMissingPDF(state)
+                if libraryViewState.selectedPDFFile?.availability == .missing {
+                    closeMissingPDF(libraryViewState)
                 }
             }
 
@@ -343,21 +345,21 @@ final class LibraryViewService {
                 !$0.isDeleted && $0.modelContext != nil
             }
 
-            libraryPDFFileMonitor.sync(existingPDFFiles) { [weak state, weak libraryPDFFileMonitor] change in
+            libraryPDFFileMonitor.sync(existingPDFFiles) { [weak libraryViewState, weak libraryPDFFileMonitor] change in
 
-                guard let state, let libraryPDFFileMonitor else {
+                guard let libraryViewState, let libraryPDFFileMonitor else {
                     return
                 }
 
-                synchronizeLibraryFiles(state, modelContext, libraryPDFFileMonitor, librarySyncService, change, contentService: contentService)
+                synchronizeLibraryFiles(libraryViewState, modelContext, libraryPDFFileMonitor, librarySyncService, change, contentService: contentService)
             }
 
         } catch {
-            handle(error, "Library Could Not Be Synchronized", "Synchronize PDF library", state, change?.url)
+            handle(error, "Library Could Not Be Synchronized", "Synchronize PDF library", libraryViewState, change?.url)
         }
     }
 
-    private static func refreshFileLocations(_ state: LibraryViewState, _ pdfFiles: [PDFFile]) {
+    private static func refreshFileLocations(_ libraryViewState: LibraryViewState, _ pdfFiles: [PDFFile]) {
         let locations = Dictionary(pdfFiles.map {
             pdfFile in
 
@@ -366,46 +368,46 @@ final class LibraryViewService {
             first, _ in first
         })
 
-        state.updateFileLocations(locations)
+        libraryViewState.updateFileLocations(locations)
     }
 
-    static func openPDF(_ state: LibraryViewState, _ modelContext: ModelContext, _ pdfFile: PDFFile, _ librarySyncService: LibrarySyncService) {
+    static func openPDF(_ libraryViewState: LibraryViewState, _ modelContext: ModelContext, _ pdfFile: PDFFile, _ librarySyncService: LibrarySyncService) {
 
-        let request = state.beginOpeningPDF()
+        let request = libraryViewState.beginOpeningPDF()
 
         if pdfFile.syncRelativePath != nil {
 
             let id = pdfFile.persistentModelID
 
-            state.downloadingPDFs.insert(id)
+            libraryViewState.downloadingPDFs.insert(id)
 
-            state.openPDFTask = Task {
+            libraryViewState.openPDFTask = Task {
                 @MainActor in
 
                 defer {
-                    state.finishOpeningPDF(request)
+                    libraryViewState.finishOpeningPDF(request)
                 }
 
                 do {
                     try await librarySyncService.download(pdfFile, modelContext)
 
-                    guard state.isCurrentOpenRequest(request), !Task.isCancelled, !pdfFile.isDeleted, pdfFile.modelContext != nil, !librarySyncService.state.isSwitching else {
+                    guard libraryViewState.isCurrentOpenRequest(request), !Task.isCancelled, !pdfFile.isDeleted, pdfFile.modelContext != nil, !librarySyncService.state.isSwitching else {
                         return
                     }
 
-                    state.completeOpeningPDF(pdfFile, for: request)
+                    libraryViewState.completeOpeningPDF(pdfFile, for: request)
 
-                    refreshDisplayedPDF(state)
+                    refreshDisplayedPDF(libraryViewState)
 
                 } catch {
 
-                    guard state.isCurrentOpenRequest(request), !Task.isCancelled else {
+                    guard libraryViewState.isCurrentOpenRequest(request), !Task.isCancelled else {
                         return
                     }
 
-                    state.errorTitle = "PDF Could Not Be Downloaded"
+                    libraryViewState.errorTitle = "PDF Could Not Be Downloaded"
 
-                    state.appError = AppError(error)
+                    libraryViewState.appError = AppError(error)
                 }
 
             }
@@ -414,16 +416,16 @@ final class LibraryViewService {
 
         }
 
-        state.completeOpeningPDF(pdfFile, for: request)
+        libraryViewState.completeOpeningPDF(pdfFile, for: request)
 
-        refreshDisplayedPDF(state)
+        refreshDisplayedPDF(libraryViewState)
 
     }
 
-    static func closeDisplayedPDF(_ state: LibraryViewState) {
-        let request = state.beginOpeningPDF()
+    static func closeDisplayedPDF(_ libraryViewState: LibraryViewState) {
+        let request = libraryViewState.beginOpeningPDF()
 
-        state.cancelTranslation()
+        libraryViewState.cancelTranslation()
 
         Task {
 
@@ -431,33 +433,33 @@ final class LibraryViewService {
 
             await Task.yield()
 
-            guard state.isCurrentOpenRequest(request) else {
+            guard libraryViewState.isCurrentOpenRequest(request) else {
                 return
             }
 
-            state.finishOpeningPDF(request)
+            libraryViewState.finishOpeningPDF(request)
 
-            state.selectedPDFFile = nil
+            libraryViewState.selectedPDFFile = nil
         }
     }
 
-    static func synchronizeLibraryFilesAfterViewUpdate(_ state: LibraryViewState, _ modelContext: ModelContext, _ libraryPDFFileMonitor: LibraryPDFFileMonitor,  _ librarySyncService: LibrarySyncService, contentService: LibraryContentService? = nil) async {
+    static func synchronizeLibraryFilesAfterViewUpdate(_ libraryViewState: LibraryViewState, _ modelContext: ModelContext, _ libraryPDFFileMonitor: LibraryPDFFileMonitor,  _ librarySyncService: LibrarySyncService, contentService: LibraryContentService? = nil) async {
         do {
             try await Task.sleep(nanoseconds: 50_000_000)
         } catch {
             return
         }
 
-        synchronizeLibraryFiles(state, modelContext, libraryPDFFileMonitor, librarySyncService, contentService: contentService)
+        synchronizeLibraryFiles(libraryViewState, modelContext, libraryPDFFileMonitor, librarySyncService, contentService: contentService)
     }
 
-    static func refreshDisplayedPDF(_ state: LibraryViewState) {
-        guard let pdfFile = state.selectedPDFFile else {
+    static func refreshDisplayedPDF(_ libraryViewState: LibraryViewState) {
+        guard let pdfFile = libraryViewState.selectedPDFFile else {
             return
         }
 
         guard !pdfFile.isDeleted, pdfFile.modelContext != nil else {
-            closeMissingPDF(state)
+            closeMissingPDF(libraryViewState)
             return
         }
 
@@ -474,7 +476,7 @@ final class LibraryViewService {
         do {
             let fingerprint = try PDFContentService.fingerprint(url)
 
-            guard state.displayedPDFURL != url || state.displayedPDFFingerprint != fingerprint else {
+            guard libraryViewState.displayedPDFURL != url || libraryViewState.displayedPDFFingerprint != fingerprint else {
                 return
             }
 
@@ -484,25 +486,25 @@ final class LibraryViewService {
                 return
             }
 
-            state.displayPDF(data, url, fingerprint)
+            libraryViewState.displayPDF(data, url, fingerprint)
         } catch {
             if pdfFile.availability == .missing {
-                closeMissingPDF(state)
+                closeMissingPDF(libraryViewState)
             }
 
-            if state.appError == nil {
-                handle(error, "PDF Could Not Be Opened", "Refresh displayed PDF", state, url)
+            if libraryViewState.appError == nil {
+                handle(error, "PDF Could Not Be Opened", "Refresh displayed PDF", libraryViewState, url)
             }
         }
     }
 
-    private static func closeMissingPDF(_ state: LibraryViewState) {
-        state.cancelOpeningPDF()
-        state.cancelTranslation()
-        state.selectedPDFFile = nil
+    private static func closeMissingPDF(_ libraryViewState: LibraryViewState) {
+        libraryViewState.cancelOpeningPDF()
+        libraryViewState.cancelTranslation()
+        libraryViewState.selectedPDFFile = nil
     }
 
-    private static func handle( _ error: Error, _ title: String, _ operation: String, _ state: LibraryViewState, _ targetURL: URL? = nil ) {
+    private static func handle( _ error: Error, _ title: String, _ operation: String, _ libraryViewState: LibraryViewState, _ targetURL: URL? = nil ) {
 
         guard let appError = AppError.presentable(error), appError.isCancellation == false else {
             return
@@ -510,8 +512,8 @@ final class LibraryViewService {
 
         AppLogger.record(appError, operation, targetURL)
 
-        state.errorTitle = title
+        libraryViewState.errorTitle = title
 
-        state.appError = appError
+        libraryViewState.appError = appError
     }
 }

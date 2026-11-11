@@ -3,17 +3,17 @@ import PDFKit
 
 struct LibraryPDFView: NSViewRepresentable {
     
-    @ObservedObject var libraryState: LibraryViewState
+    @ObservedObject var libraryViewState: LibraryViewState
     
     let url: URL
     
-    init(_ url: URL,_ libraryState: LibraryViewState) {
+    init(_ url: URL, _ libraryViewState : LibraryViewState) {
         self.url = url
-        self.libraryState = libraryState
+        self.libraryViewState = libraryViewState
     }
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(libraryState)
+        Coordinator(libraryViewState)
     }
 
     func makeNSView(context: Context) -> PDFView {
@@ -29,12 +29,12 @@ struct LibraryPDFView: NSViewRepresentable {
     }
 
     func updateNSView(_ view: PDFView, context: Context) {
-        guard let data = libraryState.displayedPDFData, libraryState.displayedPDFURL == url else {
+        guard let data = libraryViewState.displayedPDFData, libraryViewState.displayedPDFURL == url else {
             view.document = nil
             return
         }
 
-        let version = libraryState.displayedPDFVersion
+        let version = libraryViewState.displayedPDFVersion
 
         guard context.coordinator.loadedVersion != version else {
             return
@@ -44,7 +44,7 @@ struct LibraryPDFView: NSViewRepresentable {
 
         context.coordinator.lastPageIndex = nil
 
-        let pageIndex = libraryState.currentPageIndex
+        let pageIndex = libraryViewState.currentPageIndex
 
         do {
             let document = try Self.document(data)
@@ -62,7 +62,7 @@ struct LibraryPDFView: NSViewRepresentable {
             AppLogger.record(appError, "Open PDF", url)
 
             DispatchQueue.main.async {
-                guard context.coordinator.loadedVersion == version, libraryState.displayedPDFVersion == version else {
+                guard context.coordinator.loadedVersion == version, libraryViewState.displayedPDFVersion == version else {
                     return
                 }
 
@@ -86,19 +86,19 @@ struct LibraryPDFView: NSViewRepresentable {
     }
 
     final class Coordinator: NSObject {
-        weak var libraryState: LibraryViewState?
+        weak var libraryViewState: LibraryViewState?
         
         var loadedVersion: UUID?
         
         var lastPageIndex: Int?
 
         init(_ libraryState: LibraryViewState) {
-            self.libraryState = libraryState
+            self.libraryViewState = libraryState
         }
 
         func present(_ appError: AppError) {
-            libraryState?.errorTitle = "PDF Could Not Be Opened"
-            libraryState?.appError = appError
+            libraryViewState?.errorTitle = "PDF Could Not Be Opened"
+            libraryViewState?.appError = appError
         }
 
         @objc func pageChanged(_ notification: Notification) {
@@ -121,11 +121,11 @@ struct LibraryPDFView: NSViewRepresentable {
             let version = loadedVersion
 
             DispatchQueue.main.async { [weak self] in
-                guard let self, loadedVersion == version, libraryState?.displayedPDFVersion == version else {
+                guard let self, loadedVersion == version, libraryViewState?.displayedPDFVersion == version else {
                     return
                 }
 
-                libraryState?.currentPageIndex = pageIndex
+                libraryViewState?.currentPageIndex = pageIndex
             }
         }
     }
