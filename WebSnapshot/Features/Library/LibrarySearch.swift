@@ -1,7 +1,7 @@
 import Foundation
 
 enum LibrarySearch {
-    static func matches(_ pdf: PDFFile, _ input: String, _ mode: LibrarySearchMode, title: String? = nil) -> Bool {
+    static func matches(_ pdf: PDFFile, _ input: String, _ librarySerchMode: LibrarySearchMode, title: String? = nil) -> Bool {
         let text = input.trimmingCharacters(in: .whitespacesAndNewlines)
     
         guard !text.isEmpty else {
@@ -14,7 +14,7 @@ enum LibrarySearch {
             $0.name.localizedCaseInsensitiveContains(text)
         }
         
-        switch mode {
+        switch librarySerchMode {
         case .all:
             return titleMatches || tagMatches || (pdf.searchableText?.localizedCaseInsensitiveContains(text) ?? false)
         case .title:
