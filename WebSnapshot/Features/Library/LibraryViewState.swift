@@ -109,10 +109,10 @@ final class LibraryViewState:ObservableObject{
 
     
 
-    func beginTranslation(_ pdfFile: PDFFile, _ language: TranslationLanguage) -> TranslationRequest {
+    func beginTranslation(_ pdfFile: PDFFile, _ translationLanguage: TranslationLanguage) -> TranslationRequest {
         cancelTranslation()
         
-        let request = TranslationRequest( pdfFileID: pdfFile.persistentModelID, url: pdfFile.resolvedURL, pageIndex: currentPageIndex, data: displayedPDFData, version: displayedPDFVersion, configuration: TranslationSession.Configuration(source: language.opposite.localeLanguage, target: language.localeLanguage, preferredStrategy: .lowLatency ) )
+        let request = TranslationRequest( pdfFileID: pdfFile.persistentModelID, url: pdfFile.resolvedURL, pageIndex: currentPageIndex, data: displayedPDFData, version: displayedPDFVersion, configuration: TranslationSession.Configuration(source: translationLanguage.opposite.localeLanguage, target: translationLanguage.localeLanguage, preferredStrategy: .lowLatency ) )
         
         translationRequest = request
         
