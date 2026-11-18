@@ -286,7 +286,7 @@ final class LibraryViewService {
         }
     }
 
-    static func synchronizeLibraryFiles(_ libraryViewState: LibraryViewState,_ modelContext: ModelContext,_ libraryPDFFileMonitor: LibraryPDFFileMonitor, _ librarySyncService: LibrarySyncService, _ change: LibraryPDFFileMonitor.Change? = nil, contentService: LibraryContentService? = nil) {
+    static func synchronizeLibraryFiles(_ libraryViewState: LibraryViewState,_ modelContext: ModelContext,_ libraryPDFFileMonitor: LibraryPDFFileMonitor, _ librarySyncService: LibrarySyncService, _ change: LibraryPDFFileMonitor.Change? = nil, libraryContentService: LibraryContentService? = nil) {
 
         do {
             let pdfFiles = try modelContext.fetch(FetchDescriptor<PDFFile>())
@@ -311,9 +311,9 @@ final class LibraryViewService {
             if let change, change.wasModified, FileIO.exists(change.url), let pdfFile = modelContext.model(for: change.fileID) as? PDFFile, pdfFile.modelContext != nil, !pdfFile.isDeleted {
                 refreshDisplayedPDF(libraryViewState)
 
-                if let contentService {
+                if let libraryContentService {
                     Task {
-                        await contentService.index([pdfFile], modelContext, pruneFailures: false)
+                        await libraryContentService.index([pdfFile], modelContext, pruneFailures: false)
                     }
                 }
 
@@ -351,7 +351,7 @@ final class LibraryViewService {
                     return
                 }
 
-                synchronizeLibraryFiles(libraryViewState, modelContext, libraryPDFFileMonitor, librarySyncService, change, contentService: contentService)
+                synchronizeLibraryFiles(libraryViewState, modelContext, libraryPDFFileMonitor, librarySyncService, change, libraryContentService: libraryContentService)
             }
 
         } catch {
@@ -443,14 +443,14 @@ final class LibraryViewService {
         }
     }
 
-    static func synchronizeLibraryFilesAfterViewUpdate(_ libraryViewState: LibraryViewState, _ modelContext: ModelContext, _ libraryPDFFileMonitor: LibraryPDFFileMonitor,  _ librarySyncService: LibrarySyncService, contentService: LibraryContentService? = nil) async {
+    static func synchronizeLibraryFilesAfterViewUpdate(_ libraryViewState: LibraryViewState, _ modelContext: ModelContext, _ libraryPDFFileMonitor: LibraryPDFFileMonitor,  _ librarySyncService: LibrarySyncService, _ libraryContentService: LibraryContentService? = nil) async {
         do {
             try await Task.sleep(nanoseconds: 50_000_000)
         } catch {
             return
         }
 
-        synchronizeLibraryFiles(libraryViewState, modelContext, libraryPDFFileMonitor, librarySyncService, contentService: contentService)
+        synchronizeLibraryFiles(libraryViewState, modelContext, libraryPDFFileMonitor, librarySyncService, libraryContentService: libraryContentService)
     }
 
     static func refreshDisplayedPDF(_ libraryViewState: LibraryViewState) {

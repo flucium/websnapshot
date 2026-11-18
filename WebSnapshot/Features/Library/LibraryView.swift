@@ -9,7 +9,7 @@ struct LibraryView:View {
     
     @StateObject private var libraryPDFFileMonitor = LibraryPDFFileMonitor()
     
-    @EnvironmentObject private var contentService: LibraryContentService
+    @EnvironmentObject private var libraryContentService: LibraryContentService
 
     @EnvironmentObject private var librarySyncService: LibrarySyncService
 
@@ -26,7 +26,7 @@ struct LibraryView:View {
     }
 
     
-    private var contentState: LibraryContentState { contentService.state }
+    private var contentState: LibraryContentState { libraryContentService.state }
 
     
     var body: some View {
@@ -56,11 +56,11 @@ struct LibraryView:View {
         }
         .task(id: monitoredPDFFiles) {
             while Task.isCancelled == false {
-                await LibraryViewService.synchronizeLibraryFilesAfterViewUpdate(libraryViewState, modelContext, libraryPDFFileMonitor, librarySyncService, contentService: contentService)
+                await LibraryViewService.synchronizeLibraryFilesAfterViewUpdate(libraryViewState, modelContext, libraryPDFFileMonitor, librarySyncService, libraryContentService)
 
                 if !contentState.isIndexing {
                     Task(priority: .utility) {
-                        await contentService.index(pdfFiles, modelContext)
+                        await libraryContentService.index(pdfFiles, modelContext)
                     }
                 }
 
@@ -137,10 +137,10 @@ struct LibraryView:View {
                         Text("Content search is unavailable for some PDFs.")
                             .font(.caption)
                         Button("Retry") {
-                            contentService.retry()
+                            libraryContentService.retry()
 
                             Task {
-                                await contentService.index(pdfFiles, modelContext)
+                                await libraryContentService.index(pdfFiles, modelContext)
                             }
                         }
                         Spacer()
