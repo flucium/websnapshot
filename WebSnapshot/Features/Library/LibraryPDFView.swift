@@ -79,10 +79,10 @@ struct LibraryPDFView: NSViewRepresentable {
         return document
     }
 
-    static func dismantleNSView(_ view: PDFView, _ coordinator: Coordinator) {
-        NotificationCenter.default.removeObserver(coordinator, name: .PDFViewPageChanged,object: view)
+    static func dismantleNSView(_ pdfView: PDFView, _ coordinator: Coordinator) {
+        NotificationCenter.default.removeObserver(coordinator, name: .PDFViewPageChanged,object: pdfView)
 
-        view.document = nil
+        pdfView.document = nil
     }
 
     final class Coordinator: NSObject {
