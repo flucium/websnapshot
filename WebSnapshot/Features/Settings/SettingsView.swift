@@ -16,7 +16,8 @@ struct SettingsView: View {
     
     @Query private var storageSettings: [StorageSettings]
 
-    private var syncState: LibrarySyncState { librarySyncService.state }
+//    private var syncState: LibrarySyncState { librarySyncService.state }
+    private var librarySyncState: LibrarySyncState { librarySyncService.state }
     
     private var contentState: LibraryContentState { libraryContentService.state }
 
@@ -69,7 +70,7 @@ struct SettingsView: View {
             .frame(maxWidth: .infinity, alignment: .top)
         }
         .background(Color(nsColor: .windowBackgroundColor))
-        .disabled(syncState.isSwitching)
+        .disabled(librarySyncState.isSwitching)
         .task(id: savedAppearance) {
             let appearance = savedAppearance
             if settingsViewState.selectedAppearance != appearance {
@@ -252,7 +253,7 @@ struct SettingsView: View {
             .labelsHidden()
             .pickerStyle(.segmented)
             .frame(maxWidth: 360)
-            if syncState.isSwitching {
+            if librarySyncState.isSwitching {
                 HStack {
                     ProgressView().controlSize(.small)
                     Text("Copying library…")
@@ -261,7 +262,7 @@ struct SettingsView: View {
                 Text("Turning Sync off copies PDFs to your previous Fixed folder, or asks for a folder if Storage was Flexibility.")
                     .font(.callout).foregroundStyle(.secondary)
             }
-            if let error = syncState.lastError {
+            if let error = librarySyncState.lastError {
                 Text(error.userMessage).font(.callout).foregroundStyle(.secondary)
             }
             if storageSettings.first?.syncDriveBookmarkData != nil || storageSettings.first?.syncFolderBookmarkData != nil {
