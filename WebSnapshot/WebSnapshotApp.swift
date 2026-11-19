@@ -14,6 +14,136 @@ struct WebSnapshotApp: App {
         }
         .defaultSize(width: 1000, height: 600)
         .windowResizability(.contentMinSize)
+        .commands {
+            AboutCommands()
+        }
+
+        Window("About WebSnapshot", id: AboutView.windowID) {
+            AboutView()
+        }
+        .defaultSize(width: 540, height: 400)
+        .windowResizability(.contentMinSize)
+        .commandsRemoved()
+    }
+}
+
+private struct AboutCommands: Commands {
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some Commands {
+        CommandGroup(replacing: .appInfo) {
+            Button("About WebSnapshot") {
+                openWindow(id: AboutView.windowID)
+            }
+        }
+    }
+}
+
+private struct AboutView: View {
+    static let windowID = "about"
+
+    private enum License: String, CaseIterable {
+        case application = "LICENSE"
+        case thirdParty = "LICENSE_THIRDPARTY"
+    }
+
+    @State private var showLicenses: Bool = false
+
+    @State private var selectedLicense: License = .application
+
+    private var version: String? {
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
+
+        if let version, let build, version != build {
+            return "\(version) (\(build))"
+        }
+
+        return version ?? build
+    }
+
+    var body: some View {
+        Group {
+            if showLicenses {
+                licensesView()
+            } else {
+                aboutView()
+            }
+        }
+        .padding(24)
+        .frame(minWidth: 480, maxWidth: .infinity, minHeight: 360, maxHeight: .infinity)
+    }
+
+    private func aboutView() -> some View {
+        VStack(spacing: 12) {
+            Image(nsImage: NSApp.applicationIconImage)
+                .resizable()
+                .frame(width: 88, height: 88)
+                .accessibilityHidden(true)
+
+            Text("WebSnapshot")
+                .font(.title)
+                .fontWeight(.semibold)
+
+            if let version {
+                Text("Version \(version)")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+
+            if let copyright = Bundle.main.object(forInfoDictionaryKey: "NSHumanReadableCopyright") as? String,
+               !copyright.isEmpty {
+                Text(verbatim: copyright)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+
+            Button("Licenses…") {
+                showLicenses = true
+            }
+        }
+    }
+
+    private func licensesView() -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                Button {
+                    showLicenses = false
+                } label: {
+                    Label("Back", systemImage: "chevron.left")
+                }
+
+                Text("Licenses")
+                    .font(.headline)
+            }
+
+            Picker("License", selection: $selectedLicense) {
+                ForEach(License.allCases, id: \.self) {
+                    license in
+                    Text(verbatim: license.rawValue)
+                        .tag(license)
+                }
+            }
+            .labelsHidden()
+            .pickerStyle(.segmented)
+
+            ScrollView {
+                Group {
+                    if let url = Bundle.main.url(forResource: selectedLicense.rawValue, withExtension: nil),
+                       let license = try? String(contentsOf: url, encoding: .utf8) {
+                        Text(verbatim: license)
+                            .textSelection(.enabled)
+                    } else {
+                        Text("Could not load this license.")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .font(.callout)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .id(selectedLicense)
+        }
     }
 }
 
