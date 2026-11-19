@@ -40,7 +40,7 @@ final class FileIO{
         }
     }
 
-    static func isMissingFileError(_ error: Error) -> Bool {
+    nonisolated static func isMissingFileError(_ error: Error) -> Bool {
         let error = error as NSError
         
         return (error.domain == NSCocoaErrorDomain && (error.code == CocoaError.fileReadNoSuchFile.rawValue || error.code == CocoaError.fileNoSuchFile.rawValue)) || (error.domain == NSPOSIXErrorDomain && error.code == Int(ENOENT))
