@@ -9,7 +9,7 @@ struct SafariCaptureProgressView: View {
             Text("Saving Webpage")
                 .font(.title2.weight(.semibold))
 
-            if let request = safariRequests.state.current {
+            if let request = safariRequests.safariRequestState.current {
                 Text(request.url.absoluteString)
                     .font(.callout)
                     .foregroundStyle(.secondary)
@@ -22,10 +22,10 @@ struct SafariCaptureProgressView: View {
                 ProgressView().controlSize(.small)
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(safariRequests.state.isCancelling ? "Cancelling…" : safariRequests.state.status)
+                    Text(safariRequests.safariRequestState.isCancelling ? "Cancelling…" : safariRequests.safariRequestState.status)
                         .font(.callout.weight(.medium))
 
-                    if let progress = safariRequests.state.exportState {
+                    if let progress = safariRequests.safariRequestState.exportState {
                         Text(progress.detail)
                             .font(.caption)
                             .foregroundStyle(.secondary)
@@ -33,8 +33,8 @@ struct SafariCaptureProgressView: View {
                 }
             }
 
-            if !safariRequests.state.pending.isEmpty {
-                Text(safariRequests.state.pending.count == 1 ? "1 more webpage queued" : "\(safariRequests.state.pending.count) more webpages queued")
+            if !safariRequests.safariRequestState.pending.isEmpty {
+                Text(safariRequests.safariRequestState.pending.count == 1 ? "1 more webpage queued" : "\(safariRequests.safariRequestState.pending.count) more webpages queued")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -42,11 +42,11 @@ struct SafariCaptureProgressView: View {
             HStack {
                 Spacer()
 
-                Button(safariRequests.state.pending.isEmpty ? "Cancel" : "Cancel All") {
+                Button(safariRequests.safariRequestState.pending.isEmpty ? "Cancel" : "Cancel All") {
                     safariRequests.cancel()
                 }
                 .keyboardShortcut(.cancelAction)
-                .disabled(safariRequests.state.isCancelling)
+                .disabled(safariRequests.safariRequestState.isCancelling)
                 .help("Cancel the current save and all queued requests.")
             }
         }
@@ -83,7 +83,7 @@ final class SafariCaptureProgressWindow: NSWindowController, NSWindowDelegate {
     }
 
     func update() {
-        guard let request = safariRequests.state.current, safariRequests.state.appError == nil else {
+        guard let request = safariRequests.safariRequestState.current, safariRequests.safariRequestState.appError == nil else {
             window?.orderOut(nil)
             return
         }
@@ -97,7 +97,7 @@ final class SafariCaptureProgressWindow: NSWindowController, NSWindowDelegate {
     }
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {
-        hiddenRequestID = safariRequests.state.current?.id
+        hiddenRequestID = safariRequests.safariRequestState.current?.id
         safariRequests.cancel()
         return true
     }

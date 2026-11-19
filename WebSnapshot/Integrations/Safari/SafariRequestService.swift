@@ -77,7 +77,7 @@ final class SafariRequestService: ObservableObject {
                 startProcessing(modelContext)
             }
             
-            while !state.pending.isEmpty && !Task.isCancelled {
+            while !safariRequestState.pending.isEmpty && !Task.isCancelled {
                 
                 let request = safariRequestState.pending.removeFirst()
                 
@@ -97,20 +97,20 @@ final class SafariRequestService: ObservableObject {
                     let savedURL = try await capture(request.url, modelContext, {
                         page in
 
-                        guard !Task.isCancelled, self.state.current == request else {
+                        guard !Task.isCancelled, self.safariRequestState.current == request else {
                             return
                         }
 
-                        self.state.webPage = page
+                        self.safariRequestState.webPage = page
                     }, {
                         progress in
 
-                        guard !Task.isCancelled, self.state.current == request else {
+                        guard !Task.isCancelled, self.safariRequestState.current == request else {
                             return
                         }
 
-                        self.state.exportState = progress
-                        self.state.status = progress.title
+                        self.safariRequestState.exportState = progress
+                        self.safariRequestState.status = progress.title
                     })
 
                     try Task.checkCancellation()
