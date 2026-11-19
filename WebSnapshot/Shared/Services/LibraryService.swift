@@ -148,22 +148,23 @@ enum LibraryService {
     static func deleteAll(_ context: ModelContext, _ librarySyncService: LibrarySyncService, _ removeFile: ((URL) throws -> Void)? = nil) throws {
         try librarySyncService.requireReady()
 
-        let pdfs = try context.fetch(FetchDescriptor<PDFFile>())
+        let pdfFiles = try context.fetch(FetchDescriptor<PDFFile>())
 
         if LibrarySyncService.isEnabled(context) {
-            try removeSyncedPDFRecords(context, pdfs, librarySyncService, removeFile)
+            try removeSyncedPDFRecords(context, pdfFiles, librarySyncService, removeFile)
         } else {
-            for pdf in pdfs where pdf.modelContext != nil && !pdf.isDeleted {
-                if pdf.availability == .missing {
-                    try removePDFRecords(context, pdf.url, librarySyncService)
+            for pdfFile in pdfFiles where pdfFile.modelContext != nil && !pdfFile.isDeleted {
+                if pdfFile.availability == .missing {
+                    try removePDFRecords(context, pdfFile.url, librarySyncService)
                 } else {
-                    try delete(context, pdf.url, pdf.resolveURL(), librarySyncService, removeFile)
+                    try delete(context, pdfFile.url, pdfFile.resolveURL(), librarySyncService, removeFile)
                 }
             }
         }
 
         try update(context, "The library's tags could not be deleted.") {
             let tags = try context.fetch(FetchDescriptor<PDFTag>())
+            
             for tag in tags {
                 context.delete(tag)
             }
@@ -189,22 +190,22 @@ enum LibraryService {
         }
     }
 
-    static func replaceTags(_ names: [String], _ pdf: PDFFile, _ context: ModelContext,_ librarySyncService: LibrarySyncService) throws {
+    static func replaceTags(_ names: [String], _ pdfFile: PDFFile, _ context: ModelContext,_ librarySyncService: LibrarySyncService) throws {
         
         try librarySyncService.requireReady()
         
-        guard pdf.modelContext != nil, !pdf.isDeleted else {
+        guard pdfFile.modelContext != nil, !pdfFile.isDeleted else {
             throw AppError.error("This PDF is no longer in the library.")
         }
         
-        let previous = PDFTagService.tagNames(pdf.tags)
+        let previous = PDFTagService.tagNames(pdfFile.tags)
         
         try update(context, "The tags could not be saved.") {
         
-            try PDFTagService.replaceTags(names, pdf, context)
+            try PDFTagService.replaceTags(names, pdfFile, context)
             
             if let setting = try LibrarySyncSettings.settings(context), setting.syncEnabled {
-                try LibrarySyncRepository.queueTags(PDFTagService.tagNames(pdf.tags), previous: previous, pdf, setting)
+                try LibrarySyncRepository.queueTags(PDFTagService.tagNames(pdfFile.tags), previous: previous, pdfFile, setting)
             }
             
             return true
@@ -223,14 +224,14 @@ enum LibraryService {
         }
     }
 
-    static func deleteMissingFiles(_ context: ModelContext, _ pdfs: [PDFFile], _ librarySyncService: LibrarySyncService,_ confirmedDeletedIDs: Set<PersistentIdentifier> = []) throws {
+    static func deleteMissingFiles(_ context: ModelContext, _ pdfFiles: [PDFFile], _ librarySyncService: LibrarySyncService,_ confirmedDeletedIDs: Set<PersistentIdentifier> = []) throws {
         
         guard !librarySyncService.librarySyncState.isSwitching, !LibrarySyncService.isEnabled(context) else {
             return
         }
         
         try update(context, "The library could not be synchronized.") {
-            PDFFileService.deleteMissingFiles(context, pdfs, confirmedDeletedIDs)
+            PDFFileService.deleteMissingFiles(context, pdfFiles, confirmedDeletedIDs)
         }
     }
 
@@ -277,7 +278,8 @@ enum LibraryService {
         try removeSyncedPDFRecords(context, pdfs, librarySyncService, removeFile)
     }
 
-    private static func removeSyncedPDFRecords(_ context: ModelContext, _ pdfs: [PDFFile], _ librarySyncService: LibrarySyncService, _ removeFile: ((URL) throws -> Void)?) throws {
+    private static func removeSyncedPDFRecords(_ context: ModelContext, _ pdfFiles: [PDFFile], _ librarySyncService: LibrarySyncService, _ removeFile: ((URL) throws -> Void)?) throws {
+        
         guard let setting = try LibrarySyncSettings.settings(context), setting.syncEnabled else {
             return
         }
@@ -289,17 +291,17 @@ enum LibraryService {
         } ?? [])
 
         try update(context, "The PDF could not be removed from the library.") {
-            for pdf in pdfs {
+            for pdf in pdfFiles {
                 let path = try files.relativePath((try? pdf.resolveURL()) ?? pdf.url)
 
                 paths.insert(path)
             }
 
-            try LibrarySyncRepository.remove(pdfs, context, setting)
+            try LibrarySyncRepository.remove(pdfFiles, context, setting)
 
             setting.pendingSyncDeletions = paths.isEmpty ? nil : try JSONEncoder().encode(paths.sorted())
 
-            return !pdfs.isEmpty
+            return !pdfFiles.isEmpty
         }
 
         do {
@@ -383,46 +385,47 @@ enum LibraryService {
 @MainActor
 enum LibrarySyncRepository {
     static func syncedPDFs(_ context: ModelContext) throws -> [SyncLocalPDF] {
-        try context.fetch(FetchDescriptor<PDFFile>()).compactMap { pdf in
-            guard let id = pdf.libraryID, let path = pdf.syncRelativePath else {
+        try context.fetch(FetchDescriptor<PDFFile>()).compactMap {
+            pdfFile in
+            guard let id = pdfFile.libraryID, let path = pdfFile.syncRelativePath else {
                 return nil
             }
 
-            return SyncLocalPDF(id: id, url: (try? pdf.resolveURL()) ?? pdf.url, addedAt: pdf.addedAt,
-                                tagNames: [], sharedHash: pdf.syncContentHash, relativePath: path)
+            return SyncLocalPDF(id: id, url: (try? pdfFile.resolveURL()) ?? pdfFile.url, addedAt: pdfFile.addedAt,
+                                tagNames: [], sharedHash: pdfFile.syncContentHash, relativePath: path)
         }
     }
 
-    static func updateLocation(_ pdf: PDFFile, _ url: URL, _ path: String, _ hash: String, _ storageSettings: StorageSettings) throws {
-        guard let id = pdf.libraryID else {
+    static func updateLocation(_ pdfFile: PDFFile, _ url: URL, _ path: String, _ hash: String, _ storageSettings: StorageSettings) throws {
+        guard let id = pdfFile.libraryID else {
             throw SyncStoreError.invalidIndex
         }
 
-        if pdf.syncRelativePath != path || pdf.syncContentHash != hash {
-            let location = SyncPDFLocation(relativePath: path, contentHash: hash, addedAt: pdf.addedAt,
+        if pdfFile.syncRelativePath != path || pdfFile.syncContentHash != hash {
+            let location = SyncPDFLocation(relativePath: path, contentHash: hash, addedAt: pdfFile.addedAt,
                                            stamp: try nextStamp(storageSettings))
 
             try enqueue(SyncPDFRecord(id: id, location: location, tags: nil, deleted: nil), storageSettings)
 
-            if pdf.syncContentHash != hash {
-                pdf.searchableText = nil
-                pdf.contentFingerprint = nil
+            if pdfFile.syncContentHash != hash {
+                pdfFile.searchableText = nil
+                pdfFile.contentFingerprint = nil
             }
 
-            pdf.url = url
-            pdf.syncRelativePath = path
-            pdf.syncContentHash = hash
-            pdf.syncBaselineContentHash = hash
+            pdfFile.url = url
+            pdfFile.syncRelativePath = path
+            pdfFile.syncContentHash = hash
+            pdfFile.syncBaselineContentHash = hash
         }
 
-        pdf.bookmarkData = try URL.securityScopedBookmarkData(url)
+        pdfFile.bookmarkData = try URL.securityScopedBookmarkData(url)
     }
 
-    static func localPDFs(_ pdfs: [PDFFile]) throws -> [SyncLocalPDF] {
-        try pdfs.map {
-            pdf in
+    static func localPDFs(_ pdfFiles: [PDFFile]) throws -> [SyncLocalPDF] {
+        try pdfFiles.map {
+            pdfFile in
             
-            SyncLocalPDF(id: pdf.libraryID!, url: try pdf.resolveURL(), addedAt: pdf.addedAt, tagNames: PDFTagService.tagNames(pdf.tags), sharedHash: pdf.syncBaselineContentHash, baselineTags: try pdf.syncBaselineTags.map {
+            SyncLocalPDF(id: pdfFile.libraryID!, url: try pdfFile.resolveURL(), addedAt: pdfFile.addedAt, tagNames: PDFTagService.tagNames(pdfFile.tags), sharedHash: pdfFile.syncBaselineContentHash, baselineTags: try pdfFile.syncBaselineTags.map {
                 try JSONDecoder().decode([String].self, from: $0)
             })
             
@@ -433,51 +436,51 @@ enum LibrarySyncRepository {
         let entries = try context.fetch( FetchDescriptor<PDFFile>() )
         
         
-        let pdf = entries.first {
+        let pdfFile = entries.first {
             $0.url.standardizedFileURL == url.standardizedFileURL
         } ?? PDFFile( url, nil, Date() )
         
-        if pdf.modelContext == nil {
+        if pdfFile.modelContext == nil {
             
-            context.insert(pdf)
+            context.insert(pdfFile)
         
         }
         
         
-        pdf.libraryID = pdf.libraryID ?? id ?? UUID()
+        pdfFile.libraryID = pdfFile.libraryID ?? id ?? UUID()
         
-        pdf.url = url
+        pdfFile.url = url
         
-        pdf.bookmarkData = try URL.securityScopedBookmarkData(url)
+        pdfFile.bookmarkData = try URL.securityScopedBookmarkData(url)
         
-        pdf.syncRelativePath = path
+        pdfFile.syncRelativePath = path
         
-        pdf.syncContentHash = hash
+        pdfFile.syncContentHash = hash
         
-        pdf.syncBaselineContentHash = pdf.syncContentHash
+        pdfFile.syncBaselineContentHash = pdfFile.syncContentHash
         
-        pdf.syncBaselineTags = try JSONEncoder().encode(PDFTagService.tagNames(pdf.tags))
+        pdfFile.syncBaselineTags = try JSONEncoder().encode(PDFTagService.tagNames(pdfFile.tags))
         
-        pdf.searchableText = nil
+        pdfFile.searchableText = nil
         
-        pdf.contentFingerprint = nil
+        pdfFile.contentFingerprint = nil
         
         let stamp = try nextStamp(storageSettings)
         
-        let record = SyncPDFRecord( id: pdf.libraryID!, location: SyncPDFLocation(relativePath: path, contentHash: pdf.syncContentHash!, addedAt: pdf.addedAt, stamp: stamp ), tags: SyncPDFTags(PDFTagService.tagNames(pdf.tags), stamp), deleted: nil)
+        let record = SyncPDFRecord( id: pdfFile.libraryID!, location: SyncPDFLocation(relativePath: path, contentHash: pdfFile.syncContentHash!, addedAt: pdfFile.addedAt, stamp: stamp ), tags: SyncPDFTags(PDFTagService.tagNames(pdfFile.tags), stamp), deleted: nil)
         
         try enqueue(record, storageSettings)
         
     }
 
-    static func queueTags(_ names: [String], previous: [String], _ pdf: PDFFile, _ storageSettings: StorageSettings) throws {
-        guard let id = pdf.libraryID else {
+    static func queueTags(_ names: [String], previous: [String], _ pdfFile: PDFFile, _ storageSettings: StorageSettings) throws {
+        guard let id = pdfFile.libraryID else {
             return
         }
 
         try enqueue( SyncPDFRecord( id: id, location: nil, tags: SyncPDFTags(editing: names, previous: previous, try nextStamp(storageSettings) ), deleted: nil ), storageSettings)
         
-        pdf.syncBaselineTags = try JSONEncoder().encode(names)
+        pdfFile.syncBaselineTags = try JSONEncoder().encode(names)
         
     }
 
@@ -493,24 +496,25 @@ enum LibrarySyncRepository {
         PDFFileService.remove(pdfs, context)
     }
 
-    static func apply(_ index: SyncIndex, _ context: ModelContext, _ root: URL, _ localURLs: [UUID: URL]? = nil) throws
+    static func apply(_ syncIndex: SyncIndex, _ context: ModelContext, _ root: URL, _ localURLs: [UUID: URL]? = nil) throws
     {
 
         let entries = try context.fetch(FetchDescriptor<PDFFile>())
 
         var byID = Dictionary(entries.compactMap {
-            pdf in
+            pdfFile in
 
-            pdf.libraryID.map { ($0, pdf) }
+            pdfFile.libraryID.map { ($0, pdfFile) }
         }, uniquingKeysWith: {
             first, _ in first
         })
 
-        let deletedIDs = Set(index.files.filter(\.isDeleted).map(\.id))
+        let deletedIDs = Set(syncIndex.files.filter(\.isDeleted).map(\.id))
 
-        let deleted = entries.filter { pdf in
+        let deleted = entries.filter {
+            pdfFile in
 
-            guard let id = pdf.libraryID else {
+            guard let id = pdfFile.libraryID else {
                 return false
             }
 
@@ -519,10 +523,10 @@ enum LibrarySyncRepository {
 
         PDFTagService.deleteTagsOrphanedByDeleting(deleted, context)
 
-        for pdf in deleted {
+        for pdfFile in deleted {
 
-            byID[pdf.libraryID!] = nil
-            context.delete(pdf)
+            byID[pdfFile.libraryID!] = nil
+            context.delete(pdfFile)
 
         }
 
@@ -532,7 +536,7 @@ enum LibrarySyncRepository {
 
         let store = SyncFileStore(root: root)
 
-        for record in index.files where !record.isDeleted {
+        for record in syncIndex.files where !record.isDeleted {
 
             guard let location = record.location else {
                 continue
@@ -540,50 +544,50 @@ enum LibrarySyncRepository {
 
             let url = try localURLs?[record.id] ?? store.fileURL(location.relativePath)
 
-            let pdf = byID[record.id] ?? PDFFile(url, nil, location.addedAt)
+            let pdfFile = byID[record.id] ?? PDFFile(url, nil, location.addedAt)
 
-            if pdf.modelContext == nil {
+            if pdfFile.modelContext == nil {
 
-                context.insert(pdf)
+                context.insert(pdfFile)
 
-                byID[record.id] = pdf
+                byID[record.id] = pdfFile
 
             }
 
-            if pdf.url != url || pdf.syncContentHash != location.contentHash {
+            if pdfFile.url != url || pdfFile.syncContentHash != location.contentHash {
 
-                pdf.url = url
+                pdfFile.url = url
 
-                pdf.bookmarkData = nil
+                pdfFile.bookmarkData = nil
 
-                pdf.searchableText = nil
+                pdfFile.searchableText = nil
 
-                pdf.contentFingerprint = nil
+                pdfFile.contentFingerprint = nil
             }
 
-            pdf.libraryID = record.id
+            pdfFile.libraryID = record.id
 
-            pdf.addedAt = location.addedAt
+            pdfFile.addedAt = location.addedAt
 
-            pdf.syncRelativePath = localURLs == nil ? location.relativePath : nil
+            pdfFile.syncRelativePath = localURLs == nil ? location.relativePath : nil
 
-            pdf.syncContentHash = localURLs == nil ? location.contentHash : nil
+            pdfFile.syncContentHash = localURLs == nil ? location.contentHash : nil
 
-            pdf.syncBaselineContentHash = location.contentHash
+            pdfFile.syncBaselineContentHash = location.contentHash
 
-            pdf.syncBaselineTags = try JSONEncoder().encode(record.tags?.names ?? [])
+            pdfFile.syncBaselineTags = try JSONEncoder().encode(record.tags?.names ?? [])
 
-            if pdf.bookmarkData == nil, FileManager.default.fileExists(atPath: url.path) {
+            if pdfFile.bookmarkData == nil, FileManager.default.fileExists(atPath: url.path) {
 
-                pdf.bookmarkData = try URL.securityScopedBookmarkData(url)
+                pdfFile.bookmarkData = try URL.securityScopedBookmarkData(url)
 
             }
 
             let selectedTags = PDFTagService.resolveTags(record.tags?.names ?? [], context, &tags)
 
-            if pdf.tags.map(\.normalizedName).sorted() != selectedTags.map(\.normalizedName).sorted() {
+            if pdfFile.tags.map(\.normalizedName).sorted() != selectedTags.map(\.normalizedName).sorted() {
 
-                pdf.tags = selectedTags
+                pdfFile.tags = selectedTags
 
             }
         }
@@ -594,8 +598,8 @@ enum LibrarySyncRepository {
 
     }
 
-    static func applyRefresh(_ index: SyncIndex, _ context: ModelContext, _ root: URL, _ storageSettings: StorageSettings, _ sentData: Data?) throws {
-        let merged = index.merging(try pendingChanges(storageSettings))
+    static func applyRefresh(_ syncIndex: SyncIndex, _ context: ModelContext, _ root: URL, _ storageSettings: StorageSettings, _ sentData: Data?) throws {
+        let merged = syncIndex.merging(try pendingChanges(storageSettings))
 
         try apply(merged, context, root)
 
