@@ -145,9 +145,9 @@ nonisolated struct SyncIndexStore: Sendable {
         return synxIndex
     }
 
-    func publish(_ changes: SyncIndex) throws {
+    func publish(_ syncIndex: SyncIndex) throws {
         
-        guard !changes.files.isEmpty else {
+        guard !syncIndex.files.isEmpty else {
             return
         }
         
@@ -160,7 +160,7 @@ nonisolated struct SyncIndexStore: Sendable {
         try FileManager.default.createDirectory( at: directory, withIntermediateDirectories: true)
         
         
-        let stamps = changes.files.flatMap {
+        let stamps = syncIndex.files.flatMap {
             [$0.location?.stamp, $0.tags?.stamp, $0.deleted]
         }.compactMap {
             $0
@@ -175,7 +175,7 @@ nonisolated struct SyncIndexStore: Sendable {
         let url = try files.containedURL("changes/\(stamp.deviceID.uuidString)-\(stamp.operationID.uuidString).json")
         
         
-        let data = try changes.encoded()
+        let data = try syncIndex.encoded()
         
         try SyncFileStore.coordinatedWrite(url) {
             
@@ -215,21 +215,21 @@ nonisolated struct SyncIndexStore: Sendable {
         }
     }
 
-    func writeSnapshot(_ index: SyncIndex, _ cache: inout Cache) throws {
+    func writeSnapshot(_ syncIndex: SyncIndex, _ cache: inout Cache) throws {
         let url = try SyncFileStore(root: root).containedURL("index.json")
 
         if cache.root != root.standardizedFileURL {
             cache = Cache(root: root.standardizedFileURL)
         }
 
-        if cache.root == root.standardizedFileURL, cache.metadata[url] == index,
+        if cache.root == root.standardizedFileURL, cache.metadata[url] == syncIndex,
            let fingerprint = try? Cache.fingerprint(url), cache.fingerprints[url] == fingerprint {
             return
         }
 
-        try writeSnapshot(index)
+        try writeSnapshot(syncIndex)
 
-        cache.metadata[url] = index
+        cache.metadata[url] = syncIndex
 
         cache.fingerprints[url] = nil
 
