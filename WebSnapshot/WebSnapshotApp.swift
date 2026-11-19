@@ -88,7 +88,7 @@ final class WebSnapshotAppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
 
-        safariProgressObservation = safariRequests.$state.sink {
+        safariProgressObservation = safariRequests.$safariRequestState.sink {
             [weak self] _ in
 
             Task {
@@ -150,7 +150,7 @@ final class WebSnapshotAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func updateSafariProgress() {
-        if safariRequests.state.current != nil, safariProgressWindow == nil {
+        if safariRequests.safariRequestState.current != nil, safariProgressWindow == nil {
             safariProgressWindow = SafariCaptureProgressWindow(safariRequests)
         }
 
