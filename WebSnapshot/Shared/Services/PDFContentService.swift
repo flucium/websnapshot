@@ -77,17 +77,17 @@ actor PDFContentService {
         return try await text(page).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private func text(_ page: PDFPage) async throws -> String {
+    private func text(_ pdfPage: PDFPage) async throws -> String {
         
         try Task.checkCancellation()
         
-        let embedded = page.string?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let embedded = pdfPage.string?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         
         if !embedded.isEmpty {
             return embedded
         }
         
-        let recognized = try await recognize(Self.render(page, 300))
+        let recognized = try await recognize(Self.render(pdfPage, 300))
         
         try Task.checkCancellation()
         
@@ -113,11 +113,11 @@ actor PDFContentService {
         return "1:\(modified.timeIntervalSince1970):\(size):\(inode)"
     }
 
-    nonisolated static func render(_ page: PDFPage, _ dpi: CGFloat) throws -> CGImage {
+    nonisolated static func render(_ pdfPage: PDFPage, _ dpi: CGFloat) throws -> CGImage {
 
-        let pageBounds = page.bounds(for: .cropBox)
+        let pageBounds = pdfPage.bounds(for: .cropBox)
 
-        let rotation = (page.rotation % 360 + 360) % 360
+        let rotation = (pdfPage.rotation % 360 + 360) % 360
 
         let swapsDimensions = rotation == 90 || rotation == 270
 
@@ -165,7 +165,7 @@ actor PDFContentService {
 
         context.scaleBy(x: scale, y: scale)
 
-        page.draw(with: .cropBox, to: context)
+        pdfPage.draw(with: .cropBox, to: context)
 
         context.restoreGState()
 
