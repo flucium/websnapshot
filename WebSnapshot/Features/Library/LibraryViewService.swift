@@ -297,7 +297,7 @@ final class LibraryViewService {
                 })
             }
 
-            if librarySyncService.state.isSwitching || LibrarySyncService.isEnabled(modelContext) {
+            if librarySyncService.librarySyncState.isSwitching || LibrarySyncService.isEnabled(modelContext) {
 
                 libraryPDFFileMonitor.stop()
 
@@ -391,7 +391,7 @@ final class LibraryViewService {
                 do {
                     try await librarySyncService.download(pdfFile, modelContext)
 
-                    guard libraryViewState.isCurrentOpenRequest(request), !Task.isCancelled, !pdfFile.isDeleted, pdfFile.modelContext != nil, !librarySyncService.state.isSwitching else {
+                    guard libraryViewState.isCurrentOpenRequest(request), !Task.isCancelled, !pdfFile.isDeleted, pdfFile.modelContext != nil, !librarySyncService.librarySyncState.isSwitching else {
                         return
                     }
 

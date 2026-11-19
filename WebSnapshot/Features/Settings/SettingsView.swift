@@ -15,7 +15,7 @@ struct SettingsView: View {
     
     @Query private var storageSettings: [StorageSettings]
 
-    private var librarySyncState: LibrarySyncState { librarySyncService.state }
+    private var librarySyncState: LibrarySyncState { librarySyncService.librarySyncState }
 
     private var libraryContentState: LibraryContentState { libraryContentService.state }
 

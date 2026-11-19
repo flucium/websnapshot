@@ -137,7 +137,7 @@ final class SettingsViewService {
 
     static func chooseFixedStorage(_ settingsViewState: SettingsViewState,_ modelContext: ModelContext,_ fixedStoragePath: String?, _ librarySyncService: LibrarySyncService) {
         
-        guard !LibrarySyncService.isEnabled(modelContext), !librarySyncService.state.isSwitching else {
+        guard !LibrarySyncService.isEnabled(modelContext), !librarySyncService.librarySyncState.isSwitching else {
             return
         }
         

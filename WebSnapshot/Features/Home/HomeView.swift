@@ -10,7 +10,7 @@ struct HomeView: View {
     
     @Query private var appearanceSettings: [AppearanceSettings]
     
-    private var librarySyncState: LibrarySyncState { librarySyncService.state }
+    private var librarySyncState: LibrarySyncState { librarySyncService.librarySyncState }
 
     private var appearance: AppearanceSettings.Appearance {
         appearance(appearanceSettings)
