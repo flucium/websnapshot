@@ -12,7 +12,8 @@ extension URL{
         
         let candidate: String
         
-        if trimmedInput.contains("://") {
+        if let separator = trimmedInput.range(of: "://"),
+           !trimmedInput[..<separator.lowerBound].contains(where: { "/?#".contains($0) }) {
             candidate = trimmedInput
         } else {
             candidate = "https://" + trimmedInput
