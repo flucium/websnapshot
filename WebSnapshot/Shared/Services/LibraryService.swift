@@ -4,7 +4,7 @@ import SwiftData
 
 @MainActor
 enum LibraryService {
-    static func savePDF(_ data: Data, _ fileName: String, _ context: ModelContext, _ settings: [StorageSettings], _ librarySyncService:LibrarySyncService, chooseDestination: ((String) -> URL?)? = nil) throws -> URL? {
+    static func savePDF(_ data: Data, _ fileName: String, _ context: ModelContext, _ storageSettings: [StorageSettings], _ librarySyncService:LibrarySyncService, chooseDestination: ((String) -> URL?)? = nil) throws -> URL? {
         
         try librarySyncService.requireReady()
         
@@ -12,7 +12,7 @@ enum LibraryService {
             return try saveSyncedPDF(data, fileName, context)
         }
 
-        switch StorageSettingsService.storage(settings) {
+        switch StorageSettingsService.storage(storageSettings) {
         case .flexibility:
             guard let destination = chooseDestination?(fileName) else {
                 return nil
@@ -27,7 +27,7 @@ enum LibraryService {
             return destination
             
         case .fixed:
-            guard let directory = try StorageSettingsService.fixedStorageURL(settings, librarySyncService) else {
+            guard let directory = try StorageSettingsService.fixedStorageURL(storageSettings, librarySyncService) else {
                 throw AppError.error("Choose a storage folder in Settings before saving.")
             }
             
