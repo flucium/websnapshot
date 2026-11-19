@@ -164,26 +164,26 @@ final class LibraryViewService {
         }
     }
 
-    static func translate(_ libraryViewState: LibraryViewState,_ session: TranslationSession,_ request: LibraryViewState.TranslationRequest) async {
+    static func translate(_ libraryViewState: LibraryViewState,_ translationSession: TranslationSession,_ translationRequest: LibraryViewState.TranslationRequest) async {
 
-        guard let text = request.text, libraryViewState.isCurrentTranslation(request), !Task.isCancelled else {
+        guard let text = translationRequest.text, libraryViewState.isCurrentTranslation(translationRequest), !Task.isCancelled else {
             return
         }
 
         do {
-            let translated = try await Translation.translate(session, text)
+            let translated = try await Translation.translate(translationSession, text)
 
             try Task.checkCancellation()
 
-            libraryViewState.completeTranslation(translated, for: request)
+            libraryViewState.completeTranslation(translated, for: translationRequest)
         } catch {
-            guard libraryViewState.isCurrentTranslation(request) else {
+            guard libraryViewState.isCurrentTranslation(translationRequest) else {
                 return
             }
 
-            handle(error, "Translation Could Not Be Completed", "Translate PDF text", libraryViewState, request.url)
+            handle(error, "Translation Could Not Be Completed", "Translate PDF text", libraryViewState, translationRequest.url)
 
-            libraryViewState.finishTranslation(request)
+            libraryViewState.finishTranslation(translationRequest)
         }
     }
 
