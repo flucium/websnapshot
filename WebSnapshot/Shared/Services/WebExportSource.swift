@@ -5,32 +5,32 @@ struct WebExportSource {
     private let url: URL
     private let token = UUID().uuidString
 
-    init(_ page: WebPage) async throws {
+    init(_ webPage: WebPage) async throws {
 
-        guard let url = page.url, url.isSupportedWebURL, !page.isLoading else {
+        guard let url = webPage.url, url.isSupportedWebURL, !webPage.isLoading else {
             throw AppError.invalidLoad("Wait for the webpage to finish loading before saving.")
         }
 
         self.url = url
         
-        _ = try await page.callJavaScript("document.__webSnapshotExportToken = token; return true;", arguments: ["token": token], contentWorld: .defaultClient)
+        _ = try await webPage.callJavaScript("document.__webSnapshotExportToken = token; return true;", arguments: ["token": token], contentWorld: .defaultClient)
         
-        try await validate(page)
+        try await validate(webPage)
     }
 
-    func validate(_ page: WebPage) async throws {
+    func validate(_ webPage: WebPage) async throws {
         
         try Task.checkCancellation()
         
-        guard page.url == url, !page.isLoading else {
+        guard webPage.url == url, !webPage.isLoading else {
             throw navigationError
         }
         
-        let address = try await page.callJavaScript("return document.__webSnapshotExportToken === token ? location.href : null;", arguments: ["token": token], contentWorld: .defaultClient) as? String
+        let address = try await webPage.callJavaScript("return document.__webSnapshotExportToken === token ? location.href : null;", arguments: ["token": token], contentWorld: .defaultClient) as? String
         
         try Task.checkCancellation()
         
-        guard let address, URL(string: address) == url, page.url == url, !page.isLoading else {
+        guard let address, URL(string: address) == url, webPage.url == url, !webPage.isLoading else {
             throw navigationError
         }
     }
