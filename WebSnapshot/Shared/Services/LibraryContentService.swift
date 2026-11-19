@@ -42,14 +42,14 @@ final class LibraryContentService: ObservableObject {
     }
 
     func index(_ pdfFiles: [PDFFile], _ modelContext: ModelContext, pruneFailures: Bool = true) async {
-        guard !Task.isCancelled, !state.isRefreshingCache, !librarySyncService.state.isSwitching else {
+        guard !Task.isCancelled, !state.isRefreshingCache, !librarySyncService.librarySyncState.isSwitching else {
             return
         }
 
         while let indexTask {
             await indexTask.value
 
-            guard !Task.isCancelled, !state.isRefreshingCache, !librarySyncService.state.isSwitching else {
+            guard !Task.isCancelled, !state.isRefreshingCache, !librarySyncService.librarySyncState.isSwitching else {
                 return
             }
         }
@@ -73,7 +73,7 @@ final class LibraryContentService: ObservableObject {
 
     @discardableResult
     func refreshContentCache(_ modelContext: ModelContext) -> Task<Void, Error>? {
-        guard !state.isRefreshingCache, !librarySyncService.state.isSwitching else {
+        guard !state.isRefreshingCache, !librarySyncService.librarySyncState.isSwitching else {
             return nil
         }
 
@@ -154,7 +154,7 @@ final class LibraryContentService: ObservableObject {
 
     private func indexContent(_ pdfFiles: [PDFFile], _ modelContext: ModelContext, pruneFailures: Bool = true) async {
 
-        guard state.isIndexing == false, !librarySyncService.state.isSwitching else {
+        guard state.isIndexing == false, !librarySyncService.librarySyncState.isSwitching else {
             return
         }
 
@@ -185,7 +185,7 @@ final class LibraryContentService: ObservableObject {
 
         for pdfFile in pdfFiles {
 
-            if Task.isCancelled || librarySyncService.state.isSwitching {
+            if Task.isCancelled || librarySyncService.librarySyncState.isSwitching {
                 return
             }
 
@@ -281,7 +281,7 @@ final class LibraryContentService: ObservableObject {
 
                 let text = try await extract(request.url)
 
-                if librarySyncService.state.isSwitching {
+                if librarySyncService.librarySyncState.isSwitching {
                     return
                 }
 

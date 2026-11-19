@@ -5,7 +5,7 @@ import SwiftData
 
 @MainActor
 final class LibrarySyncService: ObservableObject {
-    @Published private(set) var state = LibrarySyncState()
+    @Published private(set) var librarySyncState = LibrarySyncState()
 
     private var isRefreshing = false
 
@@ -22,7 +22,7 @@ final class LibrarySyncService: ObservableObject {
     }
 
     func requireReady() throws {
-        if state.isSwitching {
+        if librarySyncState.isSwitching {
             throw AppError.error("Wait for the library migration to finish before making changes.")
         }
     }
@@ -42,12 +42,12 @@ final class LibrarySyncService: ObservableObject {
 
         indexCache = SyncIndexStore.Cache()
         
-        state.isSwitching = true
+        librarySyncState.isSwitching = true
         
-        state.lastError = nil
+        librarySyncState.lastError = nil
         
         defer {
-            state.isSwitching = false
+            librarySyncState.isSwitching = false
         }
         
         do {
@@ -64,7 +64,7 @@ final class LibrarySyncService: ObservableObject {
         } catch {
             context.rollback()
             
-            state.lastError = AppError(error)
+            librarySyncState.lastError = AppError(error)
             
             throw error
         }
@@ -83,7 +83,7 @@ final class LibrarySyncService: ObservableObject {
 
     func refresh(_ context: ModelContext) async {
         
-        guard Self.isEnabled(context), !state.isSwitching, !isRefreshing else {
+        guard Self.isEnabled(context), !librarySyncState.isSwitching, !isRefreshing else {
             return
         }
         
@@ -156,7 +156,7 @@ final class LibrarySyncService: ObservableObject {
             
             
             
-            guard generation == modeGeneration, !state.isSwitching, Self.isEnabled(context), !Task.isCancelled else {
+            guard generation == modeGeneration, !librarySyncState.isSwitching, Self.isEnabled(context), !Task.isCancelled else {
                 return
             }
 
@@ -174,11 +174,11 @@ final class LibrarySyncService: ObservableObject {
 
             try LibraryService.retrySyncedFileDeletions(context, setting, root)
             
-            state.lastError = nil
+            librarySyncState.lastError = nil
             
         } catch {
             
-            guard generation == modeGeneration, !state.isSwitching, Self.isEnabled(context) else {
+            guard generation == modeGeneration, !librarySyncState.isSwitching, Self.isEnabled(context) else {
                 return
             }
             
@@ -186,11 +186,11 @@ final class LibrarySyncService: ObservableObject {
             
             let error = AppError(error)
             
-            if state.lastError?.diagnosticMessage != error.diagnosticMessage {
+            if librarySyncState.lastError?.diagnosticMessage != error.diagnosticMessage {
                 AppLogger.record(error, "Sync iCloud Drive library")
             }
             
-            state.lastError = error
+            librarySyncState.lastError = error
             
         }
         
@@ -260,7 +260,7 @@ final class LibrarySyncService: ObservableObject {
 
         try Task.checkCancellation()
 
-        guard generation == modeGeneration, pdf.modelContext != nil, !pdf.isDeleted, pdf.url == storedURL, !state.isSwitching, Self.isEnabled(context), try pdf.resolveURL() == url else {
+        guard generation == modeGeneration, pdf.modelContext != nil, !pdf.isDeleted, pdf.url == storedURL, !librarySyncState.isSwitching, Self.isEnabled(context), try pdf.resolveURL() == url else {
             
             throw AppError.error("The library changed during the download. Open the PDF again.")
             
@@ -276,7 +276,7 @@ final class LibrarySyncService: ObservableObject {
     }
 
     func reportError(_ error: Error) {
-        state.lastError = AppError(error)
+        librarySyncState.lastError = AppError(error)
     }
 }
 

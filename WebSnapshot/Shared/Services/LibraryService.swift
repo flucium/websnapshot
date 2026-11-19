@@ -225,7 +225,7 @@ enum LibraryService {
 
     static func deleteMissingFiles(_ context: ModelContext, _ pdfs: [PDFFile], _ librarySyncService: LibrarySyncService,_ confirmedDeletedIDs: Set<PersistentIdentifier> = []) throws {
         
-        guard !librarySyncService.state.isSwitching, !LibrarySyncService.isEnabled(context) else {
+        guard !librarySyncService.librarySyncState.isSwitching, !LibrarySyncService.isEnabled(context) else {
             return
         }
         
