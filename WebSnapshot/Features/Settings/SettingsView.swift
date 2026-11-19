@@ -58,7 +58,8 @@ struct SettingsView: View {
                     refreshCacheView()
 
                     deleteView()
-                    
+
+                    licenseView()
 
                 }
                 .frame(maxWidth: 720)
@@ -444,6 +445,37 @@ struct SettingsView: View {
                 }
             }
             .disabled(libraryContentState.isRefreshingCache)
+        }
+    }
+    
+    private func licenseView() -> some View{
+        SettingsSection("doc.text") {
+            
+            Text("Licenses")
+                .font(.headline)
+
+            ForEach(["LICENSE", "LICENSE_THIRDPARTY"], id: \.self) {
+                name in
+                
+                DisclosureGroup(name) {
+                    if let url = Bundle.main.url(forResource: name, withExtension: nil),
+                
+                        let license = try? String(contentsOf: url, encoding: .utf8) {
+                        
+                        Text(verbatim: license)
+                            .font(.callout)
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        
+                    } else {
+                        
+                        Text("Could not load this license.")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                        
+                    }
+                }
+            }
         }
     }
 }
