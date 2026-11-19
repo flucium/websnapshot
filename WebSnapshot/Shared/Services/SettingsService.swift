@@ -85,37 +85,37 @@ enum AppearanceSettingsService {
 
 enum StorageSettingsService {
 
-    static func storage(_ settings: [StorageSettings]) -> StorageSettings.Storage {
+    static func storage(_ storageSettings: [StorageSettings]) -> StorageSettings.Storage {
         
-        if settings.first?.syncEnabled == true {
+        if storageSettings.first?.syncEnabled == true {
             
             return .fixed
         
         }
         
-        return settings.first?.storage ?? .flexibility
+        return storageSettings.first?.storage ?? .flexibility
     }
 
-    static func fixedStoragePath(_ settings: [StorageSettings]) -> String? {
+    static func fixedStoragePath(_ storageSettings: [StorageSettings]) -> String? {
         
-        if settings.first?.syncEnabled == true {
+        if storageSettings.first?.syncEnabled == true {
             
-            return settings.first?.syncFolderPath
+            return storageSettings.first?.syncFolderPath
         
         }
         
-        return settings.first?.fixedStoragePath
+        return storageSettings.first?.fixedStoragePath
     }
 
-    static func fixedStorageURL(_ settings: [StorageSettings], _ librarySyncService: LibrarySyncService) throws -> URL? {
+    static func fixedStorageURL(_ storageSettings: [StorageSettings], _ librarySyncService: LibrarySyncService) throws -> URL? {
         
-        if let setting = settings.first, setting.syncEnabled {
+        if let setting = storageSettings.first, setting.syncEnabled {
         
             return try librarySyncService.folderURL(setting)
         
         }
         
-        guard let bookmarkData = settings.first?.fixedStorageBookmarkData else {
+        guard let bookmarkData = storageSettings.first?.fixedStorageBookmarkData else {
             return nil
         }
 
@@ -126,7 +126,7 @@ enum StorageSettingsService {
         do {
             url = try URL.resolveSecurityScopedBookmarkData(bookmarkData, &isStale)
         } catch {
-            guard FileIO.isMissingFileError(error), let path = settings.first?.fixedStoragePath else {
+            guard FileIO.isMissingFileError(error), let path = storageSettings.first?.fixedStoragePath else {
                 throw error
             }
 
@@ -134,7 +134,7 @@ enum StorageSettingsService {
         }
 
         if FileIO.isInTrash(url) {
-            return settings.first?.fixedStoragePath.map {
+            return storageSettings.first?.fixedStoragePath.map {
                 URL(fileURLWithPath: $0, isDirectory: true)
             }
         }
@@ -315,9 +315,9 @@ enum LibrarySyncSettings {
         ( try? settings(context) )?.syncEnabled == true
     }
 
-    static func localStorageURL(_ setting: StorageSettings) throws -> URL? {
+    static func localStorageURL(_ storageSettings: StorageSettings) throws -> URL? {
         
-        guard setting.previousStorageRawValue == StorageSettings.Storage.fixed.rawValue, let bookmark = setting.previousFixedStorageBookmarkData else {
+        guard storageSettings.previousStorageRawValue == StorageSettings.Storage.fixed.rawValue, let bookmark = storageSettings.previousFixedStorageBookmarkData else {
             
             return nil
             
@@ -342,9 +342,9 @@ enum LibrarySyncSettings {
         return url
     }
 
-    static func folderURL(_ setting: StorageSettings) throws -> URL {
+    static func folderURL(_ storageSettings: StorageSettings) throws -> URL {
         
-        guard let bookmark = setting.syncFolderBookmarkData else {
+        guard let bookmark = storageSettings.syncFolderBookmarkData else {
         
             throw AppError.permissionDenied("Reconnect the websnapshot folder in Settings to resume Sync.")
         
@@ -355,7 +355,7 @@ enum LibrarySyncSettings {
         
         let root = try URL.resolveSecurityScopedBookmarkData(bookmark, &stale)
         
-        guard root.lastPathComponent == "websnapshot", let savedPath = setting.syncFolderPath, root.resolvingSymlinksInPath().standardizedFileURL == URL(fileURLWithPath: savedPath, isDirectory: true).resolvingSymlinksInPath().standardizedFileURL else {
+        guard root.lastPathComponent == "websnapshot", let savedPath = storageSettings.syncFolderPath, root.resolvingSymlinksInPath().standardizedFileURL == URL(fileURLWithPath: savedPath, isDirectory: true).resolvingSymlinksInPath().standardizedFileURL else {
             
             throw AppError.permissionDenied("Reconnect iCloud Drive/websnapshot in Settings to resume Sync.")
             
