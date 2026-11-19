@@ -19,7 +19,8 @@ struct SettingsView: View {
 //    private var syncState: LibrarySyncState { librarySyncService.state }
     private var librarySyncState: LibrarySyncState { librarySyncService.state }
     
-    private var contentState: LibraryContentState { libraryContentService.state }
+//    private var contentState: LibraryContentState { libraryContentService.state }
+    private var libraryContentState: LibraryContentState { libraryContentService.state }
 
     private var savedAppearance: AppearanceSettings.Appearance {
         AppearanceSettingsService.appearance(appearanceSettings)
@@ -387,14 +388,14 @@ struct SettingsView: View {
                 SettingsViewService
                     .refreshContentCache(settingsViewState, modelContext, libraryContentService )
             }
-            .disabled(contentState.isRefreshingCache)
+            .disabled(libraryContentState.isRefreshingCache)
 
-            if contentState.isRefreshingCache {
+            if libraryContentState.isRefreshingCache {
                 HStack {
                     ProgressView().controlSize(.small)
-                    if contentState.pendingCount > 0 {
+                    if libraryContentState.pendingCount > 0 {
                         Text(
-                            "Refreshing… (\(contentState.pendingCount) PDFs remaining)"
+                            "Refreshing… (\(libraryContentState.pendingCount) PDFs remaining)"
                         )
                     } else {
                         Text("Refreshing…")
@@ -402,7 +403,7 @@ struct SettingsView: View {
                 }
                 .font(.callout)
                 .foregroundStyle(.secondary)
-            } else if let result = contentState.cacheRefreshResult {
+            } else if let result = libraryContentState.cacheRefreshResult {
                 Text(
                     "Refreshed \(result.refreshedCount) PDFs. Removed \(result.removedCount) deleted PDFs."
                 )
@@ -445,7 +446,7 @@ struct SettingsView: View {
                     SettingsViewService.deleteLibrary(settingsViewState, modelContext, librarySyncService, libraryContentService: libraryContentService)
                 }
             }
-            .disabled(contentState.isRefreshingCache)
+            .disabled(libraryContentState.isRefreshingCache)
         }
     }
 }
