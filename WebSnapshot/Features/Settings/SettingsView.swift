@@ -7,7 +7,6 @@ struct SettingsView: View {
     
     @EnvironmentObject private var librarySyncService: LibrarySyncService
     
-//    @EnvironmentObject private var contentService: LibraryContentService
     @EnvironmentObject private var libraryContentService: LibraryContentService
 
     @StateObject private var settingsViewState: SettingsViewState = SettingsViewState()
@@ -16,10 +15,8 @@ struct SettingsView: View {
     
     @Query private var storageSettings: [StorageSettings]
 
-//    private var syncState: LibrarySyncState { librarySyncService.state }
     private var librarySyncState: LibrarySyncState { librarySyncService.state }
-    
-//    private var contentState: LibraryContentState { libraryContentService.state }
+
     private var libraryContentState: LibraryContentState { libraryContentService.state }
 
     private var savedAppearance: AppearanceSettings.Appearance {
