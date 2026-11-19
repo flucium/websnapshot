@@ -27,8 +27,8 @@ final class LibrarySyncService: ObservableObject {
         }
     }
 
-    static func localStorageURL(_ setting: StorageSettings) throws -> URL? {
-        try LibrarySyncSettings.localStorageURL(setting)
+    static func localStorageURL(_ storageSettings: StorageSettings) throws -> URL? {
+        try LibrarySyncSettings.localStorageURL(storageSettings)
     }
 
     func setEnabled(_ enabled: Bool, _ context: ModelContext, drive: URL? = nil, localRoot: URL? = nil) async throws {
@@ -271,8 +271,8 @@ final class LibrarySyncService: ObservableObject {
         try context.save()
     }
 
-    func folderURL(_ setting: StorageSettings) throws -> URL {
-        try LibrarySyncSettings.folderURL(setting)
+    func folderURL(_ storageSettings: StorageSettings) throws -> URL {
+        try LibrarySyncSettings.folderURL(storageSettings)
     }
 
     func reportError(_ error: Error) {
