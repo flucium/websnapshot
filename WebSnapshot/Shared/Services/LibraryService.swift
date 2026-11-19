@@ -291,10 +291,14 @@ enum LibraryService {
         } ?? [])
 
         try update(context, "The PDF could not be removed from the library.") {
-            for pdf in pdfFiles {
-                let path = try files.relativePath((try? pdf.resolveURL()) ?? pdf.url)
+            for pdfFile in pdfFiles {
+                let path = try files.relativePath((try? pdfFile.resolveURL()) ?? pdfFile.url)
 
                 paths.insert(path)
+
+                if let id = pdfFile.libraryID {
+                    paths.insert(SyncFileStore.versionDirectory(id))
+                }
             }
 
             try LibrarySyncRepository.remove(pdfFiles, context, setting)
@@ -331,24 +335,34 @@ enum LibraryService {
 
         var firstError: Error?
 
-        for path in paths {
-            do {
-                let url = try SyncFileStore(root: root).fileURL(path)
+        let files = SyncFileStore(root: root)
 
-                if let removeFile {
-                    try removeFile(url)
-                } else if storageSettings.moveDeletedFilesToTrash {
-                    try SyncFileStore.coordinatedWrite(url) {
-                        if FileIO.exists($0) {
-                            try FileIO.moveToTrash($0)
+        SyncFileStore.withVersionLock {
+            var removed: Set<URL> = []
+
+            for path in paths {
+                do {
+                    for url in try files.deletionURLs(path) where !removed.contains(url) {
+                        if let removeFile {
+                            try removeFile(url)
+                        } else if try SyncFileStore.isPresent(url) {
+                            if storageSettings.moveDeletedFilesToTrash {
+                                try SyncFileStore.coordinatedWrite(url) {
+                                    if FileIO.exists($0) {
+                                        try FileIO.moveToTrash($0)
+                                    }
+                                }
+                            } else {
+                                try SyncFileStore.remove(url)
+                            }
                         }
+
+                        removed.insert(url)
                     }
-                } else {
-                    try SyncFileStore.remove(url)
+                } catch {
+                    remaining.append(path)
+                    firstError = firstError ?? error
                 }
-            } catch {
-                remaining.append(path)
-                firstError = firstError ?? error
             }
         }
 
@@ -484,16 +498,16 @@ enum LibrarySyncRepository {
         
     }
 
-    static func remove(_ pdfs: [PDFFile], _ context: ModelContext, _ storageSettings: StorageSettings) throws {
-        for pdf in pdfs {
-            guard let id = pdf.libraryID else {
+    static func remove(_ pdfFiles: [PDFFile], _ context: ModelContext, _ storageSettings: StorageSettings) throws {
+        for pdfFile in pdfFiles {
+            guard let id = pdfFile.libraryID else {
                 continue
             }
 
             try enqueue(SyncPDFRecord(id: id, location: nil, tags: nil, deleted: try nextStamp(storageSettings)), storageSettings)
         }
 
-        PDFFileService.remove(pdfs, context)
+        PDFFileService.remove(pdfFiles, context)
     }
 
     static func apply(_ syncIndex: SyncIndex, _ context: ModelContext, _ root: URL, _ localURLs: [UUID: URL]? = nil) throws
@@ -509,7 +523,9 @@ enum LibrarySyncRepository {
             first, _ in first
         })
 
-        let deletedIDs = Set(syncIndex.files.filter(\.isDeleted).map(\.id))
+        let removedIDs = Set(syncIndex.files.filter {
+            $0.isDeleted || (localURLs != nil && localURLs?[$0.id] == nil)
+        }.map(\.id))
 
         let deleted = entries.filter {
             pdfFile in
@@ -518,7 +534,7 @@ enum LibrarySyncRepository {
                 return false
             }
 
-            return deletedIDs.contains(id)
+            return removedIDs.contains(id)
         }
 
         PDFTagService.deleteTagsOrphanedByDeleting(deleted, context)
@@ -536,7 +552,7 @@ enum LibrarySyncRepository {
 
         let store = SyncFileStore(root: root)
 
-        for record in syncIndex.files where !record.isDeleted {
+        for record in syncIndex.files where !removedIDs.contains(record.id) {
 
             guard let location = record.location else {
                 continue

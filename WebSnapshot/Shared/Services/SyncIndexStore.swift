@@ -261,6 +261,8 @@ nonisolated struct SyncIndexStore: Sendable {
 nonisolated struct SyncFileStore: Sendable {
     var root: URL
 
+    private static let versionLock = NSLock()
+
     static var defaultCloudDriveURL: URL {
         let home = FileManager.default.homeDirectory(forUser: NSUserName()) ?? FileManager.default.homeDirectoryForCurrentUser
         
@@ -421,8 +423,12 @@ nonisolated struct SyncFileStore: Sendable {
         
     }
 
+    static func versionDirectory(_ id: UUID) -> String {
+        "PDFs/\(id.uuidString)"
+    }
+
     static func relativePath(_ id: UUID, _ hash: String, _ fileName: String) -> String {
-        "PDFs/\(id.uuidString)/\(hash)/\(URL(fileURLWithPath: fileName).lastPathComponent)"
+        "\(versionDirectory(id))/\(hash)/\(URL(fileURLWithPath: fileName).lastPathComponent)"
     }
 
     func relativePath(_ url: URL) throws -> String {
@@ -459,24 +465,97 @@ nonisolated struct SyncFileStore: Sendable {
     }
 
     func versionedURL(_ id: UUID, _ source: URL, _ hash: String) throws -> URL {
-        let path = Self.relativePath(id, hash, source.lastPathComponent)
+        try Self.withVersionLock {
+            let path = Self.relativePath(id, hash, source.lastPathComponent)
 
-        var destination = try fileURL(path)
+            var destination = try fileURL(path)
 
-        var suffix = 2
+            var suffix = 2
 
-        while try Self.isPresent(destination) {
-            if try Self.contentHash(destination) == hash {
-                return destination
+            while try Self.isPresent(destination) {
+                if try Self.contentHash(destination) == hash {
+                    return destination
+                }
+
+                destination = try fileURL(Self.relativePath(id, hash, URL.pdfFileName(source.lastPathComponent, nil, " \(suffix)")))
+                suffix += 1
             }
 
-            destination = try fileURL(Self.relativePath(id, hash, URL.pdfFileName(source.lastPathComponent, nil, " \(suffix)")))
-            suffix += 1
+            try Self.copy(source, to: destination, expectedHash: hash)
+
+            return destination
+        }
+    }
+
+    static func withVersionLock<T>(_ operation: () throws -> T) rethrows -> T {
+        versionLock.lock()
+
+        defer {
+            versionLock.unlock()
         }
 
-        try Self.copy(source, to: destination, expectedHash: hash)
+        return try operation()
+    }
 
-        return destination
+    func deletionURLs(_ relativePath: String) throws -> [URL] {
+        let components = relativePath.split(separator: "/", omittingEmptySubsequences: false)
+
+        guard components.count == 2, components[0] == "PDFs",
+              let id = UUID(uuidString: String(components[1])), relativePath == Self.versionDirectory(id) else {
+            return [try fileURL(relativePath)]
+        }
+
+        let directory = try containedURL(relativePath)
+        let parent = directory.deletingLastPathComponent()
+
+        guard try !Self.isPresent(parent) || parent.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink != true else {
+            return []
+        }
+
+        var paths: Set<String> = []
+
+        for version in try Self.versionDirectoryContents(directory) {
+            let hash = version.lastPathComponent
+
+            guard hash.count == 64, hash.allSatisfy({ "0123456789abcdef".contains($0) }) else {
+                continue
+            }
+
+            for file in try Self.versionDirectoryContents(version) {
+                let values = try file.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
+
+                guard values.isRegularFile == true, values.isSymbolicLink != true else {
+                    continue
+                }
+
+                let name = file.lastPathComponent
+                let pdfName = name.hasPrefix(".") && name.hasSuffix(".icloud") ? String(name.dropFirst().dropLast(".icloud".count)) : name
+
+                if pdfName.lowercased().hasSuffix(".pdf") {
+                    paths.insert("\(relativePath)/\(hash)/\(pdfName)")
+                }
+            }
+        }
+
+        return try paths.sorted().map { try fileURL($0) }
+    }
+
+    private static func versionDirectoryContents(_ directory: URL) throws -> [URL] {
+        do {
+            let values = try directory.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
+
+            guard values.isDirectory == true, values.isSymbolicLink != true else {
+                return []
+            }
+
+            return try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
+        } catch {
+            guard FileIO.isMissingFileError(error) else {
+                throw error
+            }
+
+            return []
+        }
     }
 
     private static func isLocallyAvailable(_ url: URL) -> Bool {
@@ -523,6 +602,8 @@ nonisolated struct SyncFileStore: Sendable {
         try coordinatedWrite(url) {
             if FileManager.default.fileExists(atPath: $0.path) {
                 try FileManager.default.removeItem(at: $0)
+            } else if try isPresent($0) {
+                throw SyncStoreError.unavailableFile
             }
         }
     }
@@ -646,7 +727,7 @@ nonisolated struct SyncFileStore: Sendable {
             
             return true
         
-        } catch let error as CocoaError where error.code == .fileReadNoSuchFile || error.code == .fileNoSuchFile {
+        } catch where FileIO.isMissingFileError(error) {
             
             guard ["json", "pdf"].contains(url.pathExtension.lowercased()) else {
                 return false
@@ -660,7 +741,7 @@ nonisolated struct SyncFileStore: Sendable {
                 
                 return true
             
-            }catch let error as CocoaError where error.code == .fileReadNoSuchFile || error.code == .fileNoSuchFile {
+            } catch where FileIO.isMissingFileError(error) {
                 return false
             }
             
