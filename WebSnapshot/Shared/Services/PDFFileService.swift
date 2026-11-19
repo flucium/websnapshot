@@ -35,10 +35,10 @@ enum PDFFileService {
         }
     }
 
-    static func remove(_ pdfs: [PDFFile], _ context: ModelContext) {
-        PDFTagService.deleteTagsOrphanedByDeleting(pdfs, context)
+    static func remove(_ pdfFiles: [PDFFile], _ context: ModelContext) {
+        PDFTagService.deleteTagsOrphanedByDeleting(pdfFiles, context)
         
-        for pdf in pdfs {
+        for pdf in pdfFiles {
             context.delete(pdf)
         }
     }
@@ -47,9 +47,9 @@ enum PDFFileService {
         try updateLocations(context.fetch(FetchDescriptor<PDFFile>()))
     }
 
-    static func deleteMissingFiles(_ context: ModelContext, _ pdfs: [PDFFile], _ confirmedDeletedIDs: Set<PersistentIdentifier> = [] ) -> Bool {
+    static func deleteMissingFiles(_ context: ModelContext, _ pdfFiles: [PDFFile], _ confirmedDeletedIDs: Set<PersistentIdentifier> = [] ) -> Bool {
         
-        let missing = pdfs.filter {
+        let missing = pdfFiles.filter {
             $0.availability == .missing || (confirmedDeletedIDs.contains($0.persistentModelID) && !FileIO.exists($0.resolvedURL))
         }
         
@@ -58,25 +58,25 @@ enum PDFFileService {
         return !missing.isEmpty
     }
 
-    private static func updateLocations(_ entries: [PDFFile]) throws -> Bool {
+    private static func updateLocations(_ pdfFiles: [PDFFile]) throws -> Bool {
         var changed = false
         
-        for entry in entries {
-            guard let resolvedURL = try? entry.resolveURL() else {
+        for file in pdfFiles {
+            guard let resolvedURL = try? file.resolveURL() else {
                 continue
             }
         
             let currentURL = resolvedURL.standardizedFileURL
             
-            guard entry.url != currentURL else {
+            guard file.url != currentURL else {
                 continue
             }
             
             let bookmark = try URL.securityScopedBookmarkData(resolvedURL)
             
-            entry.url = currentURL
+            file.url = currentURL
             
-            entry.bookmarkData = bookmark
+            file.bookmarkData = bookmark
             
             changed = true
         }
