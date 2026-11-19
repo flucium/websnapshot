@@ -4,8 +4,8 @@ import SwiftData
 
 enum AppearanceSettingsService {
     
-    static func appearance(_ settings: [AppearanceSettings]) -> AppearanceSettings.Appearance {
-        settings.first?.appearance ?? .system
+    static func appearance(_ appearanceSettings: [AppearanceSettings]) -> AppearanceSettings.Appearance {
+        appearanceSettings.first?.appearance ?? .system
     }
     
     static func title(_ appearance: AppearanceSettings.Appearance) -> String {
