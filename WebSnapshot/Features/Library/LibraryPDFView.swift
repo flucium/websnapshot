@@ -28,9 +28,9 @@ struct LibraryPDFView: NSViewRepresentable {
         return view
     }
 
-    func updateNSView(_ view: PDFView, context: Context) {
+    func updateNSView(_ pdfView: PDFView, context: Context) {
         guard let data = libraryViewState.displayedPDFData, libraryViewState.displayedPDFURL == url else {
-            view.document = nil
+            pdfView.document = nil
             return
         }
 
@@ -49,13 +49,13 @@ struct LibraryPDFView: NSViewRepresentable {
         do {
             let document = try Self.document(data)
 
-            view.document = document
+            pdfView.document = document
 
             if let page = document.page(at: min(pageIndex, max(0, document.pageCount - 1))) {
-                view.go(to: page)
+                pdfView.go(to: page)
             }
         } catch {
-            view.document = nil
+            pdfView.document = nil
 
             let appError = AppError(error)
             
