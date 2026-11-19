@@ -1,22 +1,22 @@
 import Foundation
 
 enum LibrarySearch {
-    static func matches(_ pdf: PDFFile, _ input: String, _ librarySerchMode: LibrarySearchMode, title: String? = nil) -> Bool {
+    static func matches(_ pdfFile: PDFFile, _ input: String, _ librarySerchMode: LibrarySearchMode, title: String? = nil) -> Bool {
         let text = input.trimmingCharacters(in: .whitespacesAndNewlines)
     
         guard !text.isEmpty else {
             return true
         }
         
-        let titleMatches = (title ?? pdf.resolvedURL.lastPathComponent).localizedCaseInsensitiveContains(text)
+        let titleMatches = (title ?? pdfFile.resolvedURL.lastPathComponent).localizedCaseInsensitiveContains(text)
         
-        let tagMatches = pdf.tags.contains {
+        let tagMatches = pdfFile.tags.contains {
             $0.name.localizedCaseInsensitiveContains(text)
         }
         
         switch librarySerchMode {
         case .all:
-            return titleMatches || tagMatches || (pdf.searchableText?.localizedCaseInsensitiveContains(text) ?? false)
+            return titleMatches || tagMatches || (pdfFile.searchableText?.localizedCaseInsensitiveContains(text) ?? false)
         case .title:
             return titleMatches
         case .tag:
