@@ -26,7 +26,7 @@ struct LibraryView:View {
     }
 
     
-    private var contentState: LibraryContentState { libraryContentService.state }
+    private var libraryContentState: LibraryContentState { libraryContentService.state }
 
     
     var body: some View {
@@ -58,7 +58,7 @@ struct LibraryView:View {
             while Task.isCancelled == false {
                 await LibraryViewService.synchronizeLibraryFilesAfterViewUpdate(libraryViewState, modelContext, libraryPDFFileMonitor, librarySyncService, libraryContentService)
 
-                if !contentState.isIndexing {
+                if !libraryContentState.isIndexing {
                     Task(priority: .utility) {
                         await libraryContentService.index(pdfFiles, modelContext)
                     }
@@ -124,15 +124,15 @@ struct LibraryView:View {
                 }
                 .padding(.horizontal)
 
-                if contentState.pendingCount > 0 {
+                if libraryContentState.pendingCount > 0 {
                     HStack {
                         ProgressView().controlSize(.small)
-                        Text("Preparing content search… (\(contentState.pendingCount) PDFs remaining)")
+                        Text("Preparing content search… (\(libraryContentState.pendingCount) PDFs remaining)")
                             .font(.caption)
                         Spacer()
                     }
                     .padding(.horizontal)
-                } else if contentState.failedCount > 0 {
+                } else if libraryContentState.failedCount > 0 {
                     HStack {
                         Text("Content search is unavailable for some PDFs.")
                             .font(.caption)
