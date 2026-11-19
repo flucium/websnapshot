@@ -7,7 +7,8 @@ struct SettingsView: View {
     
     @EnvironmentObject private var librarySyncService: LibrarySyncService
     
-    @EnvironmentObject private var contentService: LibraryContentService
+//    @EnvironmentObject private var contentService: LibraryContentService
+    @EnvironmentObject private var libraryContentService: LibraryContentService
 
     @StateObject private var settingsViewState: SettingsViewState = SettingsViewState()
     
@@ -15,10 +16,9 @@ struct SettingsView: View {
     
     @Query private var storageSettings: [StorageSettings]
 
-    
     private var syncState: LibrarySyncState { librarySyncService.state }
     
-    private var contentState: LibraryContentState { contentService.state }
+    private var contentState: LibraryContentState { libraryContentService.state }
 
     private var savedAppearance: AppearanceSettings.Appearance {
         AppearanceSettingsService.appearance(appearanceSettings)
@@ -180,7 +180,7 @@ struct SettingsView: View {
         }
         .confirmationDialog(savedMoveToTrash ? "Move All Library Files to Trash and Delete All Tags?" : "Delete All Library Files and Tags?", isPresented: $settingsViewState.showDeleteLibraryConfirmation, titleVisibility: .visible) {
             Button(savedMoveToTrash ? "Move to Trash" : "Delete All", role: .destructive) {
-                SettingsViewService.deleteLibrary(settingsViewState, modelContext, librarySyncService, contentService: contentService)
+                SettingsViewService.deleteLibrary(settingsViewState, modelContext, librarySyncService, libraryContentService: libraryContentService)
             }
             Button("Cancel", role: .cancel) {}
         } message: {
@@ -384,11 +384,7 @@ struct SettingsView: View {
 
             Button("Refresh Cache") {
                 SettingsViewService
-                    .refreshContentCache(
-                        settingsViewState,
-                        modelContext,
-                        contentService
-                    )
+                    .refreshContentCache(settingsViewState, modelContext, libraryContentService )
             }
             .disabled(contentState.isRefreshingCache)
 
@@ -445,7 +441,7 @@ struct SettingsView: View {
                 if savedDeletionConfirmation {
                     settingsViewState.showDeleteLibraryConfirmation = true
                 } else {
-                    SettingsViewService.deleteLibrary(settingsViewState, modelContext, librarySyncService, contentService: contentService)
+                    SettingsViewService.deleteLibrary(settingsViewState, modelContext, librarySyncService, libraryContentService: libraryContentService)
                 }
             }
             .disabled(contentState.isRefreshingCache)
@@ -489,9 +485,9 @@ private struct SettingsSection<Content: View>: View {
 
 #Preview {
     let librarySyncService = LibrarySyncService()
-    let contentService = LibraryContentService(librarySyncService)
+    let libraryContentService = LibraryContentService(librarySyncService)
 
     SettingsView()
-        .environmentObject(contentService)
+        .environmentObject(libraryContentService)
         .environmentObject(librarySyncService)
 }

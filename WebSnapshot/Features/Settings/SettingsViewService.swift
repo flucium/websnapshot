@@ -175,14 +175,14 @@ final class SettingsViewService {
     }
 
     @discardableResult
-    static func deleteLibrary(_ state: SettingsViewState, _ context: ModelContext, _ librarySyncService: LibrarySyncService, contentService: LibraryContentService) -> Bool {
-        guard !contentService.state.isRefreshingCache else {
+    static func deleteLibrary(_ state: SettingsViewState, _ context: ModelContext, _ librarySyncService: LibrarySyncService, libraryContentService: LibraryContentService) -> Bool {
+        guard !libraryContentService.state.isRefreshingCache else {
             return false
         }
 
         do {
             try LibraryService.deleteAll(context, librarySyncService)
-            contentService.libraryDidClear()
+            libraryContentService.libraryDidClear()
             clearError(state)
             return true
         } catch {
