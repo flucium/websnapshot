@@ -3,7 +3,7 @@ import SwiftData
 
 @MainActor
 final class SettingsViewService {
-    static func changeSync(_ state: SettingsViewState, _ context: ModelContext, _ enabled: Bool, _ librarySyncService: LibrarySyncService, chooseDirectory: @MainActor (URL?, String, String) -> URL? = directoryPanel) async -> Bool {
+    static func changeSync(_ settingsViewState: SettingsViewState, _ context: ModelContext, _ enabled: Bool, _ librarySyncService: LibrarySyncService, chooseDirectory: @MainActor (URL?, String, String) -> URL? = directoryPanel) async -> Bool {
         
         do {
             try librarySyncService.requireReady()
@@ -49,19 +49,19 @@ final class SettingsViewService {
             }
             
             
-            clearError(state)
+            clearError(settingsViewState)
             
             return true
         } catch {
             
-            handle(error, "Sync Could Not Be Changed", "Change library sync", state)
+            handle(error, "Sync Could Not Be Changed", "Change library sync", settingsViewState)
             
             return false
         }
         
     }
 
-    static func reconnectSync(_ state: SettingsViewState, _ context: ModelContext, _ librarySyncService: LibrarySyncService) {
+    static func reconnectSync(_ settingsViewState: SettingsViewState, _ context: ModelContext, _ librarySyncService: LibrarySyncService) {
         
         guard let selected = directoryPanel(SyncFileStore.defaultCloudDriveURL, "Reconnect iCloud Drive", "Reconnect") else {
             return
@@ -70,14 +70,14 @@ final class SettingsViewService {
         do {
             try librarySyncService.reconnect(selected, context)
             
-            clearError(state)
+            clearError(settingsViewState)
         } catch {
-            handle(error, "Sync Folder Could Not Be Reconnected", "Reconnect sync folder", state)
+            handle(error, "Sync Folder Could Not Be Reconnected", "Reconnect sync folder", settingsViewState)
         }
     }
     
     @discardableResult
-    static func saveAppearance(_ state: SettingsViewState,_ modelContext: ModelContext,_ appearance: AppearanceSettings.Appearance) -> Bool {
+    static func saveAppearance(_ settingsViewState: SettingsViewState,_ modelContext: ModelContext,_ appearance: AppearanceSettings.Appearance) -> Bool {
         do {
             guard try AppearanceSettingsService.load(modelContext).appearance != appearance else {
                 return true
@@ -85,18 +85,18 @@ final class SettingsViewService {
 
             try AppearanceSettingsService.save(modelContext, appearance)
             
-            clearError(state)
+            clearError(settingsViewState)
             
             return true
         } catch {
-            handle(error, "Appearance Could Not Be Changed", "Save appearance setting", state)
+            handle(error, "Appearance Could Not Be Changed", "Save appearance setting", settingsViewState)
             
             return false
         }
     }
 
     @discardableResult
-    static func saveStorage(_ state: SettingsViewState,_ modelContext: ModelContext,_ storage: StorageSettings.Storage, _ librarySyncService: LibrarySyncService) -> Bool {
+    static func saveStorage(_ settingsViewState: SettingsViewState,_ modelContext: ModelContext,_ storage: StorageSettings.Storage, _ librarySyncService: LibrarySyncService) -> Bool {
         do {
             guard try StorageSettingsService.load(modelContext).storage != storage else {
                 return true
@@ -104,18 +104,18 @@ final class SettingsViewService {
 
             try StorageSettingsService.save(modelContext, storage, librarySyncService)
             
-            clearError(state)
+            clearError(settingsViewState)
             
             return true
         } catch {
-            handle(error, "Storage Could Not Be Changed", "Save storage setting", state)
+            handle(error, "Storage Could Not Be Changed", "Save storage setting", settingsViewState)
             
             return false
         }
     }
 
     @discardableResult
-    static func saveDeletion(_ state: SettingsViewState, _ modelContext: ModelContext, _ confirmBeforeDeleting: Bool, _ moveDeletedFilesToTrash: Bool) -> Bool {
+    static func saveDeletion(_ settingsViewState: SettingsViewState, _ modelContext: ModelContext, _ confirmBeforeDeleting: Bool, _ moveDeletedFilesToTrash: Bool) -> Bool {
         do {
             let settings = try StorageSettingsService.load(modelContext)
 
@@ -125,17 +125,17 @@ final class SettingsViewService {
 
             try StorageSettingsService.saveDeletion(modelContext, confirmBeforeDeleting, moveDeletedFilesToTrash)
 
-            clearError(state)
+            clearError(settingsViewState)
 
             return true
         } catch {
-            handle(error, "Deletion Settings Could Not Be Changed", "Save deletion settings", state)
+            handle(error, "Deletion Settings Could Not Be Changed", "Save deletion settings", settingsViewState)
 
             return false
         }
     }
 
-    static func chooseFixedStorage(_ state: SettingsViewState,_ modelContext: ModelContext,_ fixedStoragePath: String?, _ librarySyncService: LibrarySyncService) {
+    static func chooseFixedStorage(_ settingsViewState: SettingsViewState,_ modelContext: ModelContext,_ fixedStoragePath: String?, _ librarySyncService: LibrarySyncService) {
         
         guard !LibrarySyncService.isEnabled(modelContext), !librarySyncService.state.isSwitching else {
             return
@@ -152,30 +152,30 @@ final class SettingsViewService {
         do {
             try StorageSettingsService.saveFixedStorage(modelContext, selectedURL, librarySyncService)
             
-            clearError(state)
+            clearError(settingsViewState)
         } catch {
-            handle(error,"Storage Folder Could Not Be Changed","Save fixed storage folder",state,selectedURL)
+            handle(error,"Storage Folder Could Not Be Changed","Save fixed storage folder",settingsViewState,selectedURL)
         }
     }
 
-    static func refreshContentCache(_ state: SettingsViewState, _ modelContext: ModelContext, _ contentService: LibraryContentService) {
+    static func refreshContentCache(_ settingsViewState: SettingsViewState, _ modelContext: ModelContext, _ contentService: LibraryContentService) {
         guard let task = contentService.refreshContentCache(modelContext) else {
             return
         }
         
-        clearError(state)
+        clearError(settingsViewState)
 
         Task { @MainActor in
             do {
                 try await task.value
             } catch {
-                handle(error, "Search Cache Could Not Be Refreshed", "Refresh content search cache", state)
+                handle(error, "Search Cache Could Not Be Refreshed", "Refresh content search cache", settingsViewState)
             }
         }
     }
 
     @discardableResult
-    static func deleteLibrary(_ state: SettingsViewState, _ context: ModelContext, _ librarySyncService: LibrarySyncService, libraryContentService: LibraryContentService) -> Bool {
+    static func deleteLibrary(_ settingsViewState: SettingsViewState, _ context: ModelContext, _ librarySyncService: LibrarySyncService, libraryContentService: LibraryContentService) -> Bool {
         guard !libraryContentService.state.isRefreshingCache else {
             return false
         }
@@ -183,10 +183,10 @@ final class SettingsViewService {
         do {
             try LibraryService.deleteAll(context, librarySyncService)
             libraryContentService.libraryDidClear()
-            clearError(state)
+            clearError(settingsViewState)
             return true
         } catch {
-            handle(error, "Library Could Not Be Deleted", "Delete all library files and tags", state)
+            handle(error, "Library Could Not Be Deleted", "Delete all library files and tags", settingsViewState)
             return false
         }
     }
