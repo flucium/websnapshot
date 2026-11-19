@@ -1,6 +1,5 @@
 import Combine
 import Foundation
-import PDFKit
 import SwiftData
 
 @MainActor
@@ -433,10 +432,6 @@ enum LibrarySyncMigration {
         
         try LibrarySyncRepository.apply(index, context,  root, urls)
         
-        if storage == .fixed {
-            try importFixedStorage(context, destination)
-        }
-        
         setting.storage = storage
         
         setting.fixedStoragePath = storage == .fixed ? destination.path : setting.previousFixedStoragePath
@@ -456,28 +451,6 @@ enum LibrarySyncMigration {
         setting.syncCounter = max(setting.syncCounter, index.counter)
         
         try context.save()
-    }
-
-    private static func importFixedStorage(_ context: ModelContext, _ directory: URL) throws {
-        let urls = try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: [.isRegularFileKey, .isSymbolicLinkKey], options: [.skipsHiddenFiles])
-        
-        for url in urls where url.pathExtension.lowercased() == "pdf" {
-            let values = try url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
-            
-            guard values.isRegularFile == true, values.isSymbolicLink != true else {
-                continue
-            }
-            
-            guard try PDFFileService.entries(context, matching: url).isEmpty else {
-                continue
-            }
-            
-            guard let document = PDFDocument(url: url), document.pageCount > 0 || document.isLocked else {
-                continue
-            }
-            
-            try PDFFileService.register(context, url)
-        }
     }
 }
 
@@ -652,8 +625,20 @@ nonisolated struct SyncMigration: Sendable {
             }
             
             let source = try SyncFileStore(root: root).fileURL(location.relativePath)
+
+            guard try SyncFileStore.isPresent(source) else {
+                continue
+            }
             
-            location.contentHash = try SyncFileStore.contentHash(source)
+            do {
+                location.contentHash = try SyncFileStore.contentHash(source)
+            } catch {
+                guard FileIO.isMissingFileError(error), try !SyncFileStore.isPresent(source) else {
+                    throw error
+                }
+                
+                continue
+            }
             
             index.files[offset].location = location
             
