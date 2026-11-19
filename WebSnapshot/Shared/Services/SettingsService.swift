@@ -364,8 +364,8 @@ enum LibrarySyncSettings {
         return root
     }
 
-    static func driveURL(_ setting: StorageSettings) throws -> URL {
-        guard let bookmark = setting.syncDriveBookmarkData, let savedPath = setting.syncDrivePath else {
+    static func driveURL(_ storageSettings: StorageSettings) throws -> URL {
+        guard let bookmark = storageSettings.syncDriveBookmarkData, let savedPath = storageSettings.syncDrivePath else {
             throw AppError.permissionDenied("Allow access to iCloud Drive in Settings to turn on Sync.")
         }
         
