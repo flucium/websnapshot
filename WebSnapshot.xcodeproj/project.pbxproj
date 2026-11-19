@@ -14,6 +14,8 @@
 		B20000000000000000000005 /* background.js in Resources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000014 /* background.js */; };
 		B20000000000000000000006 /* images in Resources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000015 /* images */; };
 		B20000000000000000000007 /* WebSnapshotSafariExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = B20000000000000000000018 /* WebSnapshotSafariExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		C30000000000000000000001 /* LICENSE in Resources */ = {isa = PBXBuildFile; fileRef = C30000000000000000000011 /* LICENSE */; };
+		C30000000000000000000002 /* LICENSE_THIRDPARTY in Resources */ = {isa = PBXBuildFile; fileRef = C30000000000000000000012 /* LICENSE_THIRDPARTY */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -58,6 +60,8 @@
 		B20000000000000000000016 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		B20000000000000000000017 /* WebSnapshotSafariExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = WebSnapshotSafariExtension.entitlements; sourceTree = "<group>"; };
 		B20000000000000000000018 /* WebSnapshotSafariExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; path = WebSnapshotSafariExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		C30000000000000000000011 /* LICENSE */ = {isa = PBXFileReference; lastKnownFileType = text; path = LICENSE; sourceTree = "<group>"; };
+		C30000000000000000000012 /* LICENSE_THIRDPARTY */ = {isa = PBXFileReference; lastKnownFileType = text; path = LICENSE_THIRDPARTY; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -118,6 +122,8 @@
 				B20000000000000000000020 /* WebSnapshotSafariExtension */,
 				B20000000000000000000022 /* SafariExtensionShared */,
 				A10000022FB5000000000002 /* WebSnapshotTests */,
+				C30000000000000000000011 /* LICENSE */,
+				C30000000000000000000012 /* LICENSE_THIRDPARTY */,
 				9E3A516D2FB4497700602CC6 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -273,6 +279,8 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				C30000000000000000000001 /* LICENSE in Resources */,
+				C30000000000000000000002 /* LICENSE_THIRDPARTY in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
