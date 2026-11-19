@@ -12,7 +12,7 @@ final class LibraryTagEditorViewServiceTests: XCTestCase {
         let context = container.mainContext
         let pdfFile = PDFFile(URL(fileURLWithPath: "/tmp/Article.pdf"))
         context.insert(pdfFile)
-        try LibraryService.replaceTags(["Original"], pdfFile, context, sync: sync)
+        try LibraryService.replaceTags(["Original"], pdfFile, context, sync)
         let state = LibraryViewState()
         state.presentTagEditor(pdfFile)
         let editor = state.libraryTagEditorViewState
@@ -27,7 +27,7 @@ final class LibraryTagEditorViewServiceTests: XCTestCase {
         XCTAssertTrue(editor.newTagName.isEmpty)
         XCTAssertEqual(PDFTagService.tagNames(pdfFile.tags), ["Original"])
 
-        XCTAssertTrue(LibraryTagEditorViewService.save(editor, pdfFile, context, sync: sync))
+        XCTAssertTrue(LibraryTagEditorViewService.save(editor, pdfFile, context, sync))
         XCTAssertEqual(PDFTagService.tagNames(pdfFile.tags), ["Research"])
         XCTAssertEqual(state.tagEditorPDFFile?.persistentModelID, pdfFile.persistentModelID)
 
@@ -45,7 +45,7 @@ final class LibraryTagEditorViewServiceTests: XCTestCase {
         let context = container.mainContext
         let pdfFile = PDFFile(URL(fileURLWithPath: "/tmp/Article.pdf"))
         context.insert(pdfFile)
-        try LibraryService.replaceTags(["Original"], pdfFile, context, sync: sync)
+        try LibraryService.replaceTags(["Original"], pdfFile, context, sync)
         let state = LibraryViewState()
         state.presentTagEditor(pdfFile)
         let editor = state.libraryTagEditorViewState
@@ -77,7 +77,7 @@ final class LibraryTagEditorViewServiceTests: XCTestCase {
         editor.tagNames = ["Draft"]
         editor.newTagName = "Unfinished"
 
-        XCTAssertFalse(LibraryTagEditorViewService.save(editor, pdfFile, container.mainContext, sync: sync))
+        XCTAssertFalse(LibraryTagEditorViewService.save(editor, pdfFile, container.mainContext, sync))
 
         XCTAssertEqual(state.tagEditorPDFFile?.persistentModelID, pdfFile.persistentModelID)
         XCTAssertEqual(editor.tagNames, ["Draft"])
@@ -91,14 +91,14 @@ final class LibraryTagEditorViewServiceTests: XCTestCase {
         let context = container.mainContext
         let pdfFile = PDFFile(URL(fileURLWithPath: "/tmp/Article.pdf"))
         context.insert(pdfFile)
-        try LibraryService.replaceTags(["Original", "Remove"], pdfFile, context, sync: sync)
+        try LibraryService.replaceTags(["Original", "Remove"], pdfFile, context, sync)
         let editor = LibraryTagEditorViewState()
         editor.prepare(pdfFile)
         editor.tagNames = ["Original", "Local"]
 
-        try LibraryService.replaceTags(["Original", "Remove", "Remote"], pdfFile, context, sync: sync)
+        try LibraryService.replaceTags(["Original", "Remove", "Remote"], pdfFile, context, sync)
 
-        XCTAssertTrue(LibraryTagEditorViewService.save(editor, pdfFile, context, sync: sync))
+        XCTAssertTrue(LibraryTagEditorViewService.save(editor, pdfFile, context, sync))
         let stored = ModelContext(container)
         let saved = try XCTUnwrap(stored.fetch(FetchDescriptor<PDFFile>()).first)
         XCTAssertEqual(Set(PDFTagService.tagNames(saved.tags)), ["Original", "Local", "Remote"])
@@ -109,14 +109,14 @@ final class LibraryTagEditorViewServiceTests: XCTestCase {
         let context = container.mainContext
         let pdfFile = PDFFile(URL(fileURLWithPath: "/tmp/Article.pdf"))
         context.insert(pdfFile)
-        try LibraryService.replaceTags(["Original", "Keep"], pdfFile, context, sync: sync)
+        try LibraryService.replaceTags(["Original", "Keep"], pdfFile, context, sync)
         let editor = LibraryTagEditorViewState()
         editor.prepare(pdfFile)
         editor.tagNames = ["Original", "Keep", "Local"]
 
-        try LibraryService.replaceTags(["Keep"], pdfFile, context, sync: sync)
+        try LibraryService.replaceTags(["Keep"], pdfFile, context, sync)
 
-        XCTAssertTrue(LibraryTagEditorViewService.save(editor, pdfFile, context, sync: sync))
+        XCTAssertTrue(LibraryTagEditorViewService.save(editor, pdfFile, context, sync))
         let stored = ModelContext(container)
         let saved = try XCTUnwrap(stored.fetch(FetchDescriptor<PDFFile>()).first)
         XCTAssertEqual(Set(PDFTagService.tagNames(saved.tags)), ["Keep", "Local"])

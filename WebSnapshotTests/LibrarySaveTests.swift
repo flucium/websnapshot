@@ -13,7 +13,7 @@ final class LibrarySaveTests: XCTestCase {
         let container = try makeContainer()
         let directory = try makeDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
-        try StorageSettingsService.saveFixedStorage(container.mainContext, directory, sync: sync)
+        try StorageSettingsService.saveFixedStorage(container.mainContext, directory, sync)
         let settings = try container.mainContext.fetch(FetchDescriptor<StorageSettings>())
         let document = try makePDF()
 
@@ -21,7 +21,7 @@ final class LibrarySaveTests: XCTestCase {
             LibraryService.savePDF(
                 document.data, URL.pdfFileName("Article", nil),
                 container.mainContext, settings,
-                sync: sync,
+                sync,
                 chooseDestination: { _ in
                     XCTFail("Fixed storage must not open a panel")
                     return nil
@@ -29,7 +29,7 @@ final class LibrarySaveTests: XCTestCase {
         let second = try XCTUnwrap(
             LibraryService.savePDF(
                 document.data, URL.pdfFileName("Article", nil),
-                container.mainContext, settings, sync: sync))
+                container.mainContext, settings, sync))
 
         XCTAssertNotEqual(first, second)
         XCTAssertEqual(
@@ -49,7 +49,7 @@ final class LibrarySaveTests: XCTestCase {
         var panelWasOpened = false
         let result = try LibraryService.savePDF(
             document.data, URL.pdfFileName("Article", nil),
-            container.mainContext, [], sync: sync
+            container.mainContext, [], sync
         ) { fileName in
             panelWasOpened = true
             XCTAssertEqual(fileName, "Article.pdf")
@@ -68,7 +68,7 @@ final class LibrarySaveTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: directory) }
         let storage = directory.appendingPathComponent("Storage", isDirectory: true)
         try FileManager.default.createDirectory(at: storage, withIntermediateDirectories: true)
-        try StorageSettingsService.saveFixedStorage(container.mainContext, storage, sync: sync)
+        try StorageSettingsService.saveFixedStorage(container.mainContext, storage, sync)
         let settings = try container.mainContext.fetch(FetchDescriptor<StorageSettings>())
         try FileManager.default.removeItem(at: storage)
         let document = try makePDF()
@@ -77,7 +77,7 @@ final class LibrarySaveTests: XCTestCase {
             LibraryService.savePDF(
                 document.data, URL.pdfFileName("Article", nil),
                 container.mainContext, settings,
-                sync: sync,
+                sync,
                 chooseDestination: { _ in
                     XCTFail("Fixed storage must not open a panel")
                     return nil
@@ -96,7 +96,7 @@ final class LibrarySaveTests: XCTestCase {
         let parent = directory.appendingPathComponent("Parent", isDirectory: true)
         let storage = parent.appendingPathComponent("Storage", isDirectory: true)
         try FileManager.default.createDirectory(at: storage, withIntermediateDirectories: true)
-        try StorageSettingsService.saveFixedStorage(container.mainContext, storage, sync: sync)
+        try StorageSettingsService.saveFixedStorage(container.mainContext, storage, sync)
         let settings = try container.mainContext.fetch(FetchDescriptor<StorageSettings>())
         try FileManager.default.removeItem(at: parent)
         let document = try makePDF()
@@ -104,7 +104,7 @@ final class LibrarySaveTests: XCTestCase {
         let destination = try XCTUnwrap(
             LibraryService.savePDF(
                 document.data, URL.pdfFileName("Article", nil),
-                container.mainContext, settings, sync: sync))
+                container.mainContext, settings, sync))
 
         XCTAssertEqual(
             destination.deletingLastPathComponent().resolvingSymlinksInPath(), storage.resolvingSymlinksInPath())
@@ -119,7 +119,7 @@ final class LibrarySaveTests: XCTestCase {
         let parent = directory.appendingPathComponent("Parent", isDirectory: true)
         let storage = parent.appendingPathComponent("Storage", isDirectory: true)
         try FileManager.default.createDirectory(at: storage, withIntermediateDirectories: true)
-        try StorageSettingsService.saveFixedStorage(container.mainContext, storage, sync: sync)
+        try StorageSettingsService.saveFixedStorage(container.mainContext, storage, sync)
         let settings = try container.mainContext.fetch(FetchDescriptor<StorageSettings>())
         try FileManager.default.removeItem(at: parent)
         let data = Data("Existing file".utf8)
@@ -128,7 +128,7 @@ final class LibrarySaveTests: XCTestCase {
         XCTAssertThrowsError(
             try LibraryService.savePDF(
                 makePDF().data, URL.pdfFileName("Article", nil),
-                container.mainContext, settings, sync: sync))
+                container.mainContext, settings, sync))
 
         XCTAssertEqual(try Data(contentsOf: parent), data)
         XCTAssertTrue(try container.mainContext.fetch(FetchDescriptor<PDFFile>()).isEmpty)
@@ -146,7 +146,7 @@ final class LibrarySaveTests: XCTestCase {
             at: trash.deletingLastPathComponent(), withIntermediateDirectories: true)
         let existing = Data("Existing PDF".utf8)
         try existing.write(to: storage.appendingPathComponent("Article.pdf"))
-        try StorageSettingsService.saveFixedStorage(container.mainContext, storage, sync: sync)
+        try StorageSettingsService.saveFixedStorage(container.mainContext, storage, sync)
         let settings = try container.mainContext.fetch(FetchDescriptor<StorageSettings>())
         try FileManager.default.moveItem(at: storage, to: trash)
         let document = try makePDF()
@@ -154,11 +154,11 @@ final class LibrarySaveTests: XCTestCase {
         let first = try XCTUnwrap(
             LibraryService.savePDF(
                 document.data, URL.pdfFileName("Article", nil),
-                container.mainContext, settings, sync: sync))
+                container.mainContext, settings, sync))
         let second = try XCTUnwrap(
             LibraryService.savePDF(
                 document.data, URL.pdfFileName("Article", nil),
-                container.mainContext, settings, sync: sync))
+                container.mainContext, settings, sync))
 
         XCTAssertEqual(first.deletingLastPathComponent().resolvingSymlinksInPath(), storage.resolvingSymlinksInPath())
         XCTAssertEqual(second.deletingLastPathComponent().resolvingSymlinksInPath(), storage.resolvingSymlinksInPath())
@@ -177,7 +177,7 @@ final class LibrarySaveTests: XCTestCase {
         let storage = directory.appendingPathComponent("Storage", isDirectory: true)
         let renamed = directory.appendingPathComponent("Renamed", isDirectory: true)
         try FileManager.default.createDirectory(at: storage, withIntermediateDirectories: true)
-        try StorageSettingsService.saveFixedStorage(container.mainContext, storage, sync: sync)
+        try StorageSettingsService.saveFixedStorage(container.mainContext, storage, sync)
         let settings = try container.mainContext.fetch(FetchDescriptor<StorageSettings>())
         try FileManager.default.moveItem(at: storage, to: renamed)
         let document = try makePDF()
@@ -185,7 +185,7 @@ final class LibrarySaveTests: XCTestCase {
         let destination = try XCTUnwrap(
             LibraryService.savePDF(
                 document.data, URL.pdfFileName("Article", nil),
-                container.mainContext, settings, sync: sync))
+                container.mainContext, settings, sync))
 
         XCTAssertEqual(
             destination.deletingLastPathComponent().resolvingSymlinksInPath(), renamed.resolvingSymlinksInPath())
@@ -198,7 +198,7 @@ final class LibrarySaveTests: XCTestCase {
         let result = try LibraryService.savePDF(
             makePDF().data, URL.pdfFileName("Article", nil),
             container.mainContext, [],
-            sync: sync, chooseDestination: { _ in nil })
+            sync, chooseDestination: { _ in nil })
         XCTAssertNil(result)
         XCTAssertTrue(try container.mainContext.fetch(FetchDescriptor<PDFFile>()).isEmpty)
     }
@@ -209,7 +209,7 @@ final class LibrarySaveTests: XCTestCase {
             try LibraryService.savePDF(
                 makePDF().data, URL.pdfFileName("Article", nil),
                 container.mainContext, [StorageSettings(.fixed)],
-                sync: sync,
+                sync,
                 chooseDestination: { _ in
                     XCTFail("Must report the missing folder")
                     return nil

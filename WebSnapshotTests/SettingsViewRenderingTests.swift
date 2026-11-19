@@ -22,7 +22,7 @@ final class SettingsViewRenderingTests: XCTestCase {
         container.mainContext.insert(StorageSettings(.fixed))
         try container.mainContext.save()
 
-        let contentService = LibraryContentService(sync: sync)
+        let contentService = LibraryContentService(sync)
         let hostingView = NSHostingView(rootView: SettingsView()
             .environmentObject(contentService)
             .environmentObject(sync)

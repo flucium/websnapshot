@@ -16,14 +16,14 @@ final class LibraryFileSynchronizationTests: XCTestCase {
         let container = try makeContainer()
         let context = container.mainContext
         context.autosaveEnabled = false
-        try LibraryService.registerPDF(context, url, sync: sync)
+        try LibraryService.registerPDF(context, url, sync)
         let pdf = try XCTUnwrap(context.fetch(FetchDescriptor<PDFFile>()).first)
         let originalDate = pdf.addedAt
         pdf.addedAt = Date(timeIntervalSince1970: 1)
 
-        try LibraryService.refreshLocations(context, sync: sync)
-        try LibraryService.deleteMissingFiles(context, [pdf], sync: sync)
-        try LibraryService.removePDFRecords(context, directory.appendingPathComponent("Other.pdf"), sync: sync)
+        try LibraryService.refreshLocations(context, sync)
+        try LibraryService.deleteMissingFiles(context, [pdf], sync)
+        try LibraryService.removePDFRecords(context, directory.appendingPathComponent("Other.pdf"), sync)
 
         XCTAssertTrue(context.hasChanges)
         let persisted = try XCTUnwrap(ModelContext(container).fetch(FetchDescriptor<PDFFile>()).first)
@@ -42,14 +42,14 @@ final class LibraryFileSynchronizationTests: XCTestCase {
         let context = container.mainContext
         let entry = PDFFile(url)
         context.insert(entry)
-        try LibraryService.replaceTags(["Keep"], entry, context, sync: sync)
+        try LibraryService.replaceTags(["Keep"], entry, context, sync)
 
         XCTAssertEqual(entry.availability, .unavailable)
-        try LibraryService.deleteMissingFiles(context, [entry], sync: sync)
+        try LibraryService.deleteMissingFiles(context, [entry], sync)
         XCTAssertEqual(try context.fetchCount(FetchDescriptor<PDFFile>()), 1)
         XCTAssertEqual(try context.fetchCount(FetchDescriptor<PDFTag>()), 1)
 
-        try LibraryService.deleteMissingFiles(context, [entry], sync: sync, [entry.persistentModelID])
+        try LibraryService.deleteMissingFiles(context, [entry], sync, [entry.persistentModelID])
         XCTAssertEqual(try context.fetchCount(FetchDescriptor<PDFFile>()), 1)
         XCTAssertEqual(try context.fetchCount(FetchDescriptor<PDFTag>()), 1)
         XCTAssertEqual(entry.tags.map(\.name), ["Keep"])
@@ -66,13 +66,13 @@ final class LibraryFileSynchronizationTests: XCTestCase {
 
         let container = try makeContainer()
         let context = container.mainContext
-        try LibraryService.registerPDF(context, original, sync: sync)
+        try LibraryService.registerPDF(context, original, sync)
         let entry = try XCTUnwrap(context.fetch(FetchDescriptor<PDFFile>()).first)
-        try LibraryService.replaceTags(["Keep"], entry, context, sync: sync)
+        try LibraryService.replaceTags(["Keep"], entry, context, sync)
         try FileManager.default.moveItem(at: original, to: renamed)
 
         XCTAssertEqual(try entry.resolveURL().standardizedFileURL, renamed.standardizedFileURL)
-        try LibraryService.deleteMissingFiles(context, [entry], sync: sync)
+        try LibraryService.deleteMissingFiles(context, [entry], sync)
 
         XCTAssertEqual(try context.fetchCount(FetchDescriptor<PDFFile>()), 1)
         XCTAssertEqual(try context.fetchCount(FetchDescriptor<PDFTag>()), 1)
@@ -87,9 +87,9 @@ final class LibraryFileSynchronizationTests: XCTestCase {
             Data([0, 1])
         )
         context.insert(entry)
-        try LibraryService.replaceTags(["Keep"], entry, context, sync: sync)
+        try LibraryService.replaceTags(["Keep"], entry, context, sync)
 
-        try LibraryService.deleteMissingFiles(context, [entry], sync: sync)
+        try LibraryService.deleteMissingFiles(context, [entry], sync)
 
         XCTAssertEqual(entry.availability, .unavailable)
         XCTAssertEqual(try context.fetchCount(FetchDescriptor<PDFFile>()), 1)
@@ -104,12 +104,12 @@ final class LibraryFileSynchronizationTests: XCTestCase {
         try Data("fixture".utf8).write(to: url)
         let container = try makeContainer()
         let context = container.mainContext
-        try LibraryService.registerPDF(context, url, sync: sync)
+        try LibraryService.registerPDF(context, url, sync)
         let entry = try XCTUnwrap(context.fetch(FetchDescriptor<PDFFile>()).first)
-        try LibraryService.replaceTags(["Temporary"], entry, context, sync: sync)
+        try LibraryService.replaceTags(["Temporary"], entry, context, sync)
 
         try FileManager.default.removeItem(at: url)
-        try LibraryService.deleteMissingFiles(context, [entry], sync: sync)
+        try LibraryService.deleteMissingFiles(context, [entry], sync)
 
         XCTAssertEqual(try context.fetchCount(FetchDescriptor<PDFFile>()), 0)
         XCTAssertEqual(try context.fetchCount(FetchDescriptor<PDFTag>()), 0)
@@ -127,12 +127,12 @@ final class LibraryFileSynchronizationTests: XCTestCase {
         try Data("fixture".utf8).write(to: url)
         let container = try makeContainer()
         let context = container.mainContext
-        try LibraryService.registerPDF(context, url, sync: sync)
+        try LibraryService.registerPDF(context, url, sync)
         let entry = try XCTUnwrap(context.fetch(FetchDescriptor<PDFFile>()).first)
-        try LibraryService.replaceTags(["Temporary"], entry, context, sync: sync)
+        try LibraryService.replaceTags(["Temporary"], entry, context, sync)
 
         try FileManager.default.trashItem(at: url, resultingItemURL: &trashedURL)
-        try LibraryService.deleteMissingFiles(context, [entry], sync: sync)
+        try LibraryService.deleteMissingFiles(context, [entry], sync)
 
         XCTAssertEqual(try context.fetchCount(FetchDescriptor<PDFFile>()), 0)
         XCTAssertEqual(try context.fetchCount(FetchDescriptor<PDFTag>()), 0)
@@ -150,7 +150,7 @@ final class LibraryFileSynchronizationTests: XCTestCase {
         let context = container.mainContext
         let entry = PDFFile(url)
         context.insert(entry)
-        try LibraryService.replaceTags(["Temporary"], entry, context, sync: sync)
+        try LibraryService.replaceTags(["Temporary"], entry, context, sync)
         let monitor = LibraryPDFFileMonitor()
         defer { monitor.stop() }
         let deleted = expectation(description: "The file monitor reports the external deletion")
@@ -158,7 +158,7 @@ final class LibraryFileSynchronizationTests: XCTestCase {
             guard change.wasDeleted else { return }
             do {
                 try LibraryService.deleteMissingFiles(
-                    context, [entry], sync: sync, [change.fileID]
+                    context, [entry], sync, [change.fileID]
                 )
             } catch {
                 XCTFail("Synchronization failed: \(error)")
@@ -212,10 +212,10 @@ final class LibraryFileSynchronizationTests: XCTestCase {
         let context = container.mainContext
         let entry = PDFFile(url)
         context.insert(entry)
-        try LibraryService.replaceTags(["Keep"], entry, context, sync: sync)
+        try LibraryService.replaceTags(["Keep"], entry, context, sync)
 
         try LibraryService.deleteMissingFiles(
-            context, [entry], sync: sync, [entry.persistentModelID]
+            context, [entry], sync, [entry.persistentModelID]
         )
 
         XCTAssertEqual(try context.fetchCount(FetchDescriptor<PDFFile>()), 1)
@@ -266,24 +266,24 @@ final class LibraryFileSynchronizationTests: XCTestCase {
         try Data("fixture".utf8).write(to: original)
         let container = try makeContainer()
         let context = container.mainContext
-        try LibraryService.registerPDF(context, original, sync: sync)
+        try LibraryService.registerPDF(context, original, sync)
         let pdf = try XCTUnwrap(context.fetch(FetchDescriptor<PDFFile>()).first)
         let id = pdf.persistentModelID
         let state = LibraryViewState()
         let monitor = LibraryPDFFileMonitor()
         defer { monitor.stop() }
 
-        LibraryViewService.synchronizeLibraryFiles(state, context, monitor, sync: sync)
+        LibraryViewService.synchronizeLibraryFiles(state, context, monitor, sync)
         XCTAssertEqual(state.fileURL(pdf).standardizedFileURL, original.standardizedFileURL)
         XCTAssertEqual(state.fileAvailability(pdf), .available)
 
         try FileManager.default.moveItem(at: original, to: renamed)
-        LibraryViewService.synchronizeLibraryFiles(state, context, monitor, sync: sync)
+        LibraryViewService.synchronizeLibraryFiles(state, context, monitor, sync)
         XCTAssertEqual(state.fileURL(pdf).standardizedFileURL, renamed.standardizedFileURL)
         XCTAssertTrue(LibrarySearch.matches(pdf, "Renamed", .title, title: state.fileURL(pdf).lastPathComponent))
 
         try FileManager.default.removeItem(at: renamed)
-        LibraryViewService.synchronizeLibraryFiles(state, context, monitor, sync: sync)
+        LibraryViewService.synchronizeLibraryFiles(state, context, monitor, sync)
         XCTAssertNil(state.fileLocations[id])
         XCTAssertEqual(try context.fetchCount(FetchDescriptor<PDFFile>()), 0)
     }

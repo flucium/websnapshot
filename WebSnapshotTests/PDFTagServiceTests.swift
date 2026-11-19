@@ -40,7 +40,7 @@ final class PDFTagServiceTests: XCTestCase {
         try LibraryService.replaceTags(
             ["  Work  Notes ", "work notes", "資料"],
             pdfFile,
-            context, sync: sync
+            context, sync
         )
 
         XCTAssertEqual(pdfFile.tags.count, 2)
@@ -61,21 +61,21 @@ final class PDFTagServiceTests: XCTestCase {
         context.insert(secondPDFFile)
         try context.save()
 
-        try LibraryService.replaceTags(["Research"], firstPDFFile, context, sync: sync)
-        try LibraryService.replaceTags(["research"], secondPDFFile, context, sync: sync)
+        try LibraryService.replaceTags(["Research"], firstPDFFile, context, sync)
+        try LibraryService.replaceTags(["research"], secondPDFFile, context, sync)
 
         var storedTags = try context.fetch(FetchDescriptor<PDFTag>())
         XCTAssertEqual(storedTags.count, 1)
         XCTAssertEqual(storedTags.first?.pdfFiles.count, 2)
 
-        try LibraryService.replaceTags([], firstPDFFile, context, sync: sync)
+        try LibraryService.replaceTags([], firstPDFFile, context, sync)
 
         storedTags = try context.fetch(FetchDescriptor<PDFTag>())
         XCTAssertEqual(storedTags.count, 1)
         XCTAssertEqual(storedTags.first?.pdfFiles.count, 1)
         XCTAssertTrue(storedTags.first?.pdfFiles.first === secondPDFFile)
 
-        try LibraryService.replaceTags([], secondPDFFile, context, sync: sync)
+        try LibraryService.replaceTags([], secondPDFFile, context, sync)
 
         storedTags = try context.fetch(FetchDescriptor<PDFTag>())
         XCTAssertTrue(storedTags.isEmpty)
@@ -90,9 +90,9 @@ final class PDFTagServiceTests: XCTestCase {
 
         context.insert(pdfFile)
         try context.save()
-        try LibraryService.replaceTags(["Temporary"], pdfFile, context, sync: sync)
+        try LibraryService.replaceTags(["Temporary"], pdfFile, context, sync)
 
-        try LibraryService.removePDFRecords(context, url, sync: sync)
+        try LibraryService.removePDFRecords(context, url, sync)
 
         XCTAssertTrue(try context.fetch(FetchDescriptor<PDFFile>()).isEmpty)
         XCTAssertTrue(try context.fetch(FetchDescriptor<PDFTag>()).isEmpty)

@@ -94,11 +94,11 @@ final class LibrarySyncRepositoryTests: XCTestCase {
         let pdf = try XCTUnwrap(context.fetch(FetchDescriptor<PDFFile>()).first)
         let sync = LibrarySyncService()
 
-        try LibraryService.replaceTags(["Original", "Sent"], pdf, context, sync: sync)
+        try LibraryService.replaceTags(["Original", "Sent"], pdf, context, sync)
         let sentData = try XCTUnwrap(setting.pendingSyncChanges)
         let sentIndex = try SyncIndex(files: [initial]).merging(SyncIndex.decode(sentData))
 
-        try LibraryService.replaceTags(["Original", "Sent", "Later"], pdf, context, sync: sync)
+        try LibraryService.replaceTags(["Original", "Sent", "Later"], pdf, context, sync)
         let pendingData = try XCTUnwrap(setting.pendingSyncChanges)
 
         try LibrarySyncRepository.applyRefresh(sentIndex, context, root, setting, sentData)
@@ -122,7 +122,7 @@ final class LibrarySyncRepositoryTests: XCTestCase {
         try context.save()
         let pdf = try XCTUnwrap(context.fetch(FetchDescriptor<PDFFile>()).first)
 
-        try LibraryService.replaceTags(["Sent"], pdf, context, sync: LibrarySyncService())
+        try LibraryService.replaceTags(["Sent"], pdf, context, LibrarySyncService())
         let sentData = try XCTUnwrap(setting.pendingSyncChanges)
         let sentIndex = try SyncIndex(files: [initial]).merging(SyncIndex.decode(sentData))
 

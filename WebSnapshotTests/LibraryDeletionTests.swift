@@ -23,10 +23,10 @@ final class LibraryDeletionTests: XCTestCase {
         context.insert(AppearanceSettings(.dark))
         for url in urls {
             try Data("fixture".utf8).write(to: url)
-            try LibraryService.registerPDF(context, url, sync: sync)
+            try LibraryService.registerPDF(context, url, sync)
         }
         for pdf in try context.fetch(FetchDescriptor<PDFFile>()) {
-            try LibraryService.replaceTags(["Shared"], pdf, context, sync: sync)
+            try LibraryService.replaceTags(["Shared"], pdf, context, sync)
             pdf.searchableText = "cached content"
             pdf.contentFingerprint = "fingerprint"
         }
@@ -35,7 +35,7 @@ final class LibraryDeletionTests: XCTestCase {
         context.insert(PDFTag("Unused", normalizedName: "unused"))
         try context.save()
 
-        try LibraryService.deleteAll(context, sync: sync)
+        try LibraryService.deleteAll(context, sync)
 
         try assertEmpty(container)
         XCTAssertTrue(urls.allSatisfy { !FileManager.default.fileExists(atPath: $0.path) })
@@ -55,12 +55,12 @@ final class LibraryDeletionTests: XCTestCase {
         let context = container.mainContext
         for url in [original, missing] {
             try Data("fixture".utf8).write(to: url)
-            try LibraryService.registerPDF(context, url, sync: sync)
+            try LibraryService.registerPDF(context, url, sync)
         }
         try FileManager.default.moveItem(at: original, to: renamed)
         try FileManager.default.removeItem(at: missing)
 
-        try LibraryService.deleteAll(context, sync: sync)
+        try LibraryService.deleteAll(context, sync)
 
         try assertEmpty(container)
         XCTAssertFalse(FileManager.default.fileExists(atPath: renamed.path))
@@ -75,9 +75,9 @@ final class LibraryDeletionTests: XCTestCase {
         let context = container.mainContext
         let pdf = PDFFile(url)
         context.insert(pdf)
-        try LibraryService.replaceTags(["Keep"], pdf, context, sync: sync)
+        try LibraryService.replaceTags(["Keep"], pdf, context, sync)
 
-        XCTAssertThrowsError(try LibraryService.deleteAll(context, sync: sync) { _ in
+        XCTAssertThrowsError(try LibraryService.deleteAll(context, sync) { _ in
             throw CocoaError(.fileWriteNoPermission)
         })
 
@@ -92,8 +92,8 @@ final class LibraryDeletionTests: XCTestCase {
         container.mainContext.insert(PDFTag("Unused", normalizedName: "unused"))
         try container.mainContext.save()
 
-        try LibraryService.deleteAll(container.mainContext, sync: sync)
-        try LibraryService.deleteAll(container.mainContext, sync: sync)
+        try LibraryService.deleteAll(container.mainContext, sync)
+        try LibraryService.deleteAll(container.mainContext, sync)
 
         try assertEmpty(container)
     }
@@ -108,10 +108,10 @@ final class LibraryDeletionTests: XCTestCase {
         try await sync.setEnabled(true, context, drive: drive)
         var urls: [URL] = []
         for name in ["First.pdf", "Second.pdf"] {
-            urls.append(try XCTUnwrap(LibraryService.savePDF(Data(name.utf8), name, context, [], sync: sync)))
+            urls.append(try XCTUnwrap(LibraryService.savePDF(Data(name.utf8), name, context, [], sync)))
         }
         for pdf in try context.fetch(FetchDescriptor<PDFFile>()) {
-            try LibraryService.replaceTags(["Shared"], pdf, context, sync: sync)
+            try LibraryService.replaceTags(["Shared"], pdf, context, sync)
         }
         await sync.refresh(context)
         let other = try makeContainer()
@@ -119,7 +119,7 @@ final class LibraryDeletionTests: XCTestCase {
         try await otherSync.setEnabled(true, other.mainContext, drive: drive)
         XCTAssertEqual(try other.mainContext.fetchCount(FetchDescriptor<PDFFile>()), 2)
 
-        try LibraryService.deleteAll(context, sync: sync)
+        try LibraryService.deleteAll(context, sync)
 
         try assertEmpty(container)
         XCTAssertTrue(urls.allSatisfy { !FileManager.default.fileExists(atPath: $0.path) })
@@ -144,10 +144,10 @@ final class LibraryDeletionTests: XCTestCase {
         try await sync.setEnabled(true, context, drive: drive)
         var urls: [URL] = []
         for name in ["First.pdf", "Second.pdf"] {
-            urls.append(try XCTUnwrap(LibraryService.savePDF(Data(name.utf8), name, context, [], sync: sync)))
+            urls.append(try XCTUnwrap(LibraryService.savePDF(Data(name.utf8), name, context, [], sync)))
         }
 
-        XCTAssertThrowsError(try LibraryService.deleteAll(context, sync: sync) { _ in
+        XCTAssertThrowsError(try LibraryService.deleteAll(context, sync) { _ in
             throw CocoaError(.fileWriteNoPermission)
         })
 
@@ -158,7 +158,7 @@ final class LibraryDeletionTests: XCTestCase {
         XCTAssertEqual(paths.count, 2)
         XCTAssertTrue(urls.allSatisfy { FileManager.default.fileExists(atPath: $0.path) })
 
-        try LibraryService.deleteAll(saved, sync: LibrarySyncService())
+        try LibraryService.deleteAll(saved, LibrarySyncService())
 
         try assertEmpty(container)
         XCTAssertNil(setting.pendingSyncDeletions)
@@ -174,13 +174,13 @@ final class LibraryDeletionTests: XCTestCase {
         let context = container.mainContext
         context.insert(PDFFile(url))
         try context.save()
-        let content = LibraryContentService(sync: sync, { _ in "searchable text" })
+        let content = LibraryContentService(sync, { _ in "searchable text" })
         try await XCTUnwrap(content.refreshContentCache(context)).value
         XCTAssertNotNil(content.state.cacheRefreshResult)
         let state = SettingsViewState()
         state.appError = .error("Previous failure")
 
-        XCTAssertTrue(SettingsViewService.deleteLibrary(state, context, sync: sync, contentService: content))
+        XCTAssertTrue(SettingsViewService.deleteLibrary(state, context, sync, contentService: content))
 
         try assertEmpty(container)
         XCTAssertNil(state.appError)
@@ -199,7 +199,7 @@ final class LibraryDeletionTests: XCTestCase {
         try context.save()
         let state = SettingsViewState()
 
-        XCTAssertFalse(SettingsViewService.deleteLibrary(state, context, sync: sync, contentService: LibraryContentService(sync: sync)))
+        XCTAssertFalse(SettingsViewService.deleteLibrary(state, context, sync, contentService: LibraryContentService(sync)))
 
         XCTAssertNotNil(state.appError)
         XCTAssertEqual(state.errorTitle, "Library Could Not Be Deleted")
@@ -221,7 +221,7 @@ final class LibraryDeletionTests: XCTestCase {
         state.selectedPDFFile = pdf
         state.currentPageIndex = 3
 
-        LibraryViewService.requestDeletion(state, context, pdf, sync: sync)
+        LibraryViewService.requestDeletion(state, context, pdf, sync)
 
         XCTAssertTrue(state.showDeleteConfirmation)
         XCTAssertEqual(state.pendingDeletionPDFFile?.persistentModelID, pdf.persistentModelID)
@@ -244,9 +244,9 @@ final class LibraryDeletionTests: XCTestCase {
         try context.save()
         let pdf = try XCTUnwrap(context.fetch(FetchDescriptor<PDFFile>()).first { $0.url == urls[0] })
         let state = LibraryViewState()
-        LibraryViewService.requestDeletion(state, context, pdf, sync: sync)
+        LibraryViewService.requestDeletion(state, context, pdf, sync)
 
-        LibraryViewService.confirmDeletion(state, context, sync: sync)
+        LibraryViewService.confirmDeletion(state, context, sync)
 
         XCTAssertFalse(state.showDeleteConfirmation)
         XCTAssertNil(state.pendingDeletionPDFFile)
@@ -269,7 +269,7 @@ final class LibraryDeletionTests: XCTestCase {
         try StorageSettingsService.saveDeletion(context, false, false)
         let state = LibraryViewState()
 
-        LibraryViewService.requestDeletion(state, context, pdf, sync: sync)
+        LibraryViewService.requestDeletion(state, context, pdf, sync)
 
         XCTAssertFalse(state.showDeleteConfirmation)
         XCTAssertNil(state.pendingDeletionPDFFile)

@@ -23,12 +23,12 @@ final class LibraryContentCacheTests: XCTestCase {
             entry.contentFingerprint = "Old fingerprint"
             context.insert(entry)
         }
-        try LibraryService.replaceTags(["Keep", "Shared"], existing, context, sync: sync)
-        try LibraryService.replaceTags(["Remove", "Shared"], deleted, context, sync: sync)
-        try LibraryService.replaceTags(["Offline"], unavailable, context, sync: sync)
+        try LibraryService.replaceTags(["Keep", "Shared"], existing, context, sync)
+        try LibraryService.replaceTags(["Remove", "Shared"], deleted, context, sync)
+        try LibraryService.replaceTags(["Offline"], unavailable, context, sync)
         XCTAssertEqual(unavailable.availability, .unavailable)
 
-        let service = LibraryContentService(sync: sync, { _ in throw AppError.error("Extraction unavailable") })
+        let service = LibraryContentService(sync, { _ in throw AppError.error("Extraction unavailable") })
         let task = try XCTUnwrap(service.refreshContentCache(context))
         try await task.value
 
@@ -54,7 +54,7 @@ final class LibraryContentCacheTests: XCTestCase {
         container.mainContext.insert(PDFFile(fixture.directory.appendingPathComponent("Deleted.pdf")))
         try container.mainContext.save()
 
-        let service = LibraryContentService(sync: sync)
+        let service = LibraryContentService(sync)
         let task = try XCTUnwrap(service.refreshContentCache(container.mainContext))
         XCTAssertTrue(service.state.isRefreshingCache)
         try await task.value
@@ -80,7 +80,7 @@ final class LibraryContentCacheTests: XCTestCase {
         container.mainContext.insert(PDFFile(invalidURL))
         try container.mainContext.save()
         let probe = CacheRefreshProbe()
-        let service = LibraryContentService(sync: sync, { try await probe.read($0) })
+        let service = LibraryContentService(sync, { try await probe.read($0) })
 
         for _ in 0..<2 {
             let task = try XCTUnwrap(service.refreshContentCache(container.mainContext))
@@ -104,7 +104,7 @@ final class LibraryContentCacheTests: XCTestCase {
         container.mainContext.insert(entry)
         try container.mainContext.save()
 
-        let service = LibraryContentService(sync: sync)
+        let service = LibraryContentService(sync)
         let task = try XCTUnwrap(service.refreshContentCache(container.mainContext))
         task.cancel()
         do {
@@ -126,10 +126,10 @@ final class LibraryContentCacheTests: XCTestCase {
         let container = try makeContainer()
         let entry = PDFFile(fixture.url)
         container.mainContext.insert(entry)
-        try LibraryService.replaceTags(["Temporary"], entry, container.mainContext, sync: sync)
+        try LibraryService.replaceTags(["Temporary"], entry, container.mainContext, sync)
         let started = expectation(description: "Refresh extraction started")
         let gate = CacheRefreshGate(started)
-        let service = LibraryContentService(sync: sync, { _ in await gate.read() })
+        let service = LibraryContentService(sync, { _ in await gate.read() })
 
         let task = try XCTUnwrap(service.refreshContentCache(container.mainContext))
         await fulfillment(of: [started], timeout: 3)
@@ -158,7 +158,7 @@ final class LibraryContentCacheTests: XCTestCase {
         let started = expectation(description: "Extraction started")
         let joined = expectation(description: "Second request started")
         let gate = CacheRefreshGate(started)
-        let service = LibraryContentService(sync: sync, { _ in await gate.read() })
+        let service = LibraryContentService(sync, { _ in await gate.read() })
 
         var published: [LibraryContentState] = []
         let observation = service.$state.sink { published.append($0) }
@@ -202,7 +202,7 @@ final class LibraryContentCacheTests: XCTestCase {
         try container.mainContext.save()
         let started = expectation(description: "Extraction started")
         let gate = CacheRefreshGate(started)
-        let service = LibraryContentService(sync: sync, { _ in await gate.read() })
+        let service = LibraryContentService(sync, { _ in await gate.read() })
 
         let indexing = Task { await service.index([entry], container.mainContext) }
         await fulfillment(of: [started], timeout: 3)

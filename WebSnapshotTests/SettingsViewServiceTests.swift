@@ -18,7 +18,7 @@ final class SettingsViewServiceTests: XCTestCase {
         defer { subscription.cancel() }
 
         XCTAssertTrue(SettingsViewService.saveAppearance(state, context, .system))
-        XCTAssertTrue(SettingsViewService.saveStorage(state, context, .flexibility, sync: sync))
+        XCTAssertTrue(SettingsViewService.saveStorage(state, context, .flexibility, sync))
         XCTAssertTrue(SettingsViewService.saveDeletion(state, context, true, true))
 
         XCTAssertTrue(try context.fetch(FetchDescriptor<AppearanceSettings>()).isEmpty)
@@ -50,7 +50,7 @@ final class SettingsViewServiceTests: XCTestCase {
         defer { subscription.cancel() }
 
         XCTAssertTrue(SettingsViewService.saveAppearance(state, context, .dark))
-        XCTAssertTrue(SettingsViewService.saveStorage(state, context, .fixed, sync: sync))
+        XCTAssertTrue(SettingsViewService.saveStorage(state, context, .fixed, sync))
         XCTAssertTrue(SettingsViewService.saveDeletion(state, context, true, true))
 
         XCTAssertTrue(context.hasChanges)
@@ -98,8 +98,8 @@ final class SettingsViewServiceTests: XCTestCase {
         }
         defer { subscription.cancel() }
 
-        XCTAssertTrue(SettingsViewService.saveStorage(state, context, .fixed, sync: sync))
-        XCTAssertTrue(SettingsViewService.saveStorage(state, context, .flexibility, sync: sync))
+        XCTAssertTrue(SettingsViewService.saveStorage(state, context, .fixed, sync))
+        XCTAssertTrue(SettingsViewService.saveStorage(state, context, .flexibility, sync))
 
         let readContext = ModelContext(container)
         let settings = try readContext.fetch(FetchDescriptor<StorageSettings>())
@@ -141,7 +141,7 @@ final class SettingsViewServiceTests: XCTestCase {
         }
         defer { subscription.cancel() }
 
-        XCTAssertTrue(SettingsViewService.saveStorage(state, context, .fixed, sync: sync))
+        XCTAssertTrue(SettingsViewService.saveStorage(state, context, .fixed, sync))
 
         XCTAssertNil(state.appError)
         XCTAssertEqual(publicationCount, 1)
@@ -197,8 +197,8 @@ final class SettingsViewServiceTests: XCTestCase {
         let state = SettingsViewState()
 
         XCTAssertTrue(SettingsViewService.saveDeletion(state, context, false, true))
-        XCTAssertTrue(SettingsViewService.saveStorage(state, context, .fixed, sync: sync))
-        try StorageSettingsService.reset(context, sync: sync)
+        XCTAssertTrue(SettingsViewService.saveStorage(state, context, .fixed, sync))
+        try StorageSettingsService.reset(context, sync)
 
         let settings = try ModelContext(container).fetch(FetchDescriptor<StorageSettings>())
         XCTAssertEqual(settings.count, 1)
