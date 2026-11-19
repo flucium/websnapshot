@@ -12,15 +12,15 @@ enum PDFFileService {
         _ = try updateLocations(entries)
         
 
-        if let pdf = entries.first(where: {
+        if let pdfFile = entries.first(where: {
             normalizedURL($0.url) == normalizedURL(url)
         }) {
         
-            pdf.bookmarkData = bookmark
+            pdfFile.bookmarkData = bookmark
             
-            pdf.searchableText = nil
+            pdfFile.searchableText = nil
             
-            pdf.contentFingerprint = nil
+            pdfFile.contentFingerprint = nil
             
         } else {
             context.insert(PDFFile(url, bookmark, Date()))
@@ -38,8 +38,8 @@ enum PDFFileService {
     static func remove(_ pdfFiles: [PDFFile], _ context: ModelContext) {
         PDFTagService.deleteTagsOrphanedByDeleting(pdfFiles, context)
         
-        for pdf in pdfFiles {
-            context.delete(pdf)
+        for pdfFile in pdfFiles {
+            context.delete(pdfFile)
         }
     }
 
@@ -61,22 +61,22 @@ enum PDFFileService {
     private static func updateLocations(_ pdfFiles: [PDFFile]) throws -> Bool {
         var changed = false
         
-        for file in pdfFiles {
-            guard let resolvedURL = try? file.resolveURL() else {
+        for pdfFile in pdfFiles {
+            guard let resolvedURL = try? pdfFile.resolveURL() else {
                 continue
             }
         
             let currentURL = resolvedURL.standardizedFileURL
             
-            guard file.url != currentURL else {
+            guard pdfFile.url != currentURL else {
                 continue
             }
             
             let bookmark = try URL.securityScopedBookmarkData(resolvedURL)
             
-            file.url = currentURL
+            pdfFile.url = currentURL
             
-            file.bookmarkData = bookmark
+            pdfFile.bookmarkData = bookmark
             
             changed = true
         }
