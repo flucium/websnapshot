@@ -439,8 +439,8 @@ nonisolated struct SyncFileStore: Sendable {
         return path
     }
 
-    func currentLocation(_ location: SyncPDFLocation, preferredURL: URL? = nil, cache: inout SyncIndexStore.Cache) throws -> SyncPDFLocation? {
-        let expected = try fileURL(location.relativePath)
+    func currentLocation(_ syncPDFLocation: SyncPDFLocation, preferredURL: URL? = nil, cache: inout SyncIndexStore.Cache) throws -> g? {
+        let expected = try fileURL(syncPDFLocation.relativePath)
 
         var source = expected
 
@@ -450,7 +450,7 @@ nonisolated struct SyncFileStore: Sendable {
             return nil
         }
 
-        var current = location
+        var current = syncPDFLocation
 
         current.relativePath = try relativePath(source)
         current.contentHash = try cache.contentHash(source)
