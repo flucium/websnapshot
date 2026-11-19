@@ -310,8 +310,8 @@ enum LibraryService {
         }
     }
 
-    static func retrySyncedFileDeletions(_ context: ModelContext, _ setting: StorageSettings, _ root: URL, _ removeFile: ((URL) throws -> Void)? = nil) throws {
-        guard let data = setting.pendingSyncDeletions else {
+    static func retrySyncedFileDeletions(_ context: ModelContext, _ storageSettings: StorageSettings, _ root: URL, _ removeFile: ((URL) throws -> Void)? = nil) throws {
+        guard let data = storageSettings.pendingSyncDeletions else {
             return
         }
 
@@ -335,7 +335,7 @@ enum LibraryService {
 
                 if let removeFile {
                     try removeFile(url)
-                } else if setting.moveDeletedFilesToTrash {
+                } else if storageSettings.moveDeletedFilesToTrash {
                     try SyncFileStore.coordinatedWrite(url) {
                         if FileIO.exists($0) {
                             try FileIO.moveToTrash($0)
@@ -351,7 +351,7 @@ enum LibraryService {
         }
 
         if remaining != paths {
-            setting.pendingSyncDeletions = remaining.isEmpty ? nil : try JSONEncoder().encode(remaining)
+            storageSettings.pendingSyncDeletions = remaining.isEmpty ? nil : try JSONEncoder().encode(remaining)
             try context.save()
         }
 
@@ -393,16 +393,16 @@ enum LibrarySyncRepository {
         }
     }
 
-    static func updateLocation(_ pdf: PDFFile, _ url: URL, _ path: String, _ hash: String, _ setting: StorageSettings) throws {
+    static func updateLocation(_ pdf: PDFFile, _ url: URL, _ path: String, _ hash: String, _ storageSettings: StorageSettings) throws {
         guard let id = pdf.libraryID else {
             throw SyncStoreError.invalidIndex
         }
 
         if pdf.syncRelativePath != path || pdf.syncContentHash != hash {
             let location = SyncPDFLocation(relativePath: path, contentHash: hash, addedAt: pdf.addedAt,
-                                           stamp: try nextStamp(setting))
+                                           stamp: try nextStamp(storageSettings))
 
-            try enqueue(SyncPDFRecord(id: id, location: location, tags: nil, deleted: nil), setting)
+            try enqueue(SyncPDFRecord(id: id, location: location, tags: nil, deleted: nil), storageSettings)
 
             if pdf.syncContentHash != hash {
                 pdf.searchableText = nil
@@ -429,7 +429,7 @@ enum LibrarySyncRepository {
         }
     }
 
-    static func registerPDF(_ url: URL, _ context: ModelContext, _ setting: StorageSettings, _ path: String, _ hash: String, id: UUID? = nil) throws {
+    static func registerPDF(_ url: URL, _ context: ModelContext, _ storageSettings: StorageSettings, _ path: String, _ hash: String, id: UUID? = nil) throws {
         let entries = try context.fetch( FetchDescriptor<PDFFile>() )
         
         
@@ -462,32 +462,32 @@ enum LibrarySyncRepository {
         
         pdf.contentFingerprint = nil
         
-        let stamp = try nextStamp(setting)
+        let stamp = try nextStamp(storageSettings)
         
         let record = SyncPDFRecord( id: pdf.libraryID!, location: SyncPDFLocation(relativePath: path, contentHash: pdf.syncContentHash!, addedAt: pdf.addedAt, stamp: stamp ), tags: SyncPDFTags(PDFTagService.tagNames(pdf.tags), stamp), deleted: nil)
         
-        try enqueue(record, setting)
+        try enqueue(record, storageSettings)
         
     }
 
-    static func queueTags(_ names: [String], previous: [String], _ pdf: PDFFile, _ setting: StorageSettings) throws {
+    static func queueTags(_ names: [String], previous: [String], _ pdf: PDFFile, _ storageSettings: StorageSettings) throws {
         guard let id = pdf.libraryID else {
             return
         }
 
-        try enqueue( SyncPDFRecord( id: id, location: nil, tags: SyncPDFTags(editing: names, previous: previous, try nextStamp(setting) ), deleted: nil ), setting)
+        try enqueue( SyncPDFRecord( id: id, location: nil, tags: SyncPDFTags(editing: names, previous: previous, try nextStamp(storageSettings) ), deleted: nil ), storageSettings)
         
         pdf.syncBaselineTags = try JSONEncoder().encode(names)
         
     }
 
-    static func remove(_ pdfs: [PDFFile], _ context: ModelContext, _ setting: StorageSettings) throws {
+    static func remove(_ pdfs: [PDFFile], _ context: ModelContext, _ storageSettings: StorageSettings) throws {
         for pdf in pdfs {
             guard let id = pdf.libraryID else {
                 continue
             }
 
-            try enqueue(SyncPDFRecord(id: id, location: nil, tags: nil, deleted: try nextStamp(setting)), setting)
+            try enqueue(SyncPDFRecord(id: id, location: nil, tags: nil, deleted: try nextStamp(storageSettings)), storageSettings)
         }
 
         PDFFileService.remove(pdfs, context)
@@ -594,38 +594,38 @@ enum LibrarySyncRepository {
 
     }
 
-    static func applyRefresh(_ index: SyncIndex, _ context: ModelContext, _ root: URL, _ setting: StorageSettings, _ sentData: Data?) throws {
-        let merged = index.merging(try pendingChanges(setting))
+    static func applyRefresh(_ index: SyncIndex, _ context: ModelContext, _ root: URL, _ storageSettings: StorageSettings, _ sentData: Data?) throws {
+        let merged = index.merging(try pendingChanges(storageSettings))
 
         try apply(merged, context, root)
 
-        setting.syncCounter = max(setting.syncCounter, merged.counter)
+        storageSettings.syncCounter = max(storageSettings.syncCounter, merged.counter)
 
-        if setting.pendingSyncChanges == sentData {
-            setting.pendingSyncChanges = nil
+        if storageSettings.pendingSyncChanges == sentData {
+            storageSettings.pendingSyncChanges = nil
         }
     }
 
-    static func pendingChanges(_ setting: StorageSettings) throws -> SyncIndex {
-        try setting.pendingSyncChanges.map(SyncIndex.decode) ?? SyncIndex()
+    static func pendingChanges(_ storageSettings: StorageSettings) throws -> SyncIndex {
+        try storageSettings.pendingSyncChanges.map(SyncIndex.decode) ?? SyncIndex()
     }
 
-    private static func enqueue(_ record: SyncPDFRecord, _ setting: StorageSettings) throws {
-        setting.pendingSyncChanges = try pendingChanges(setting).merging( SyncIndex( files: [record] ) ).encoded()
+    private static func enqueue(_ record: SyncPDFRecord, _ storageSettings: StorageSettings) throws {
+        storageSettings.pendingSyncChanges = try pendingChanges(storageSettings).merging( SyncIndex( files: [record] ) ).encoded()
     }
 
-    private static func nextStamp(_ setting: StorageSettings) throws -> SyncStamp {
+    private static func nextStamp(_ storageSettings: StorageSettings) throws -> SyncStamp {
         
-        guard setting.syncCounter < Int64.max - 1 else {
+        guard storageSettings.syncCounter < Int64.max - 1 else {
             throw SyncStoreError.invalidIndex
         }
         
-        if setting.syncDeviceID == nil {
-            setting.syncDeviceID = UUID()
+        if storageSettings.syncDeviceID == nil {
+            storageSettings.syncDeviceID = UUID()
         }
         
-        setting.syncCounter += 1
+        storageSettings.syncCounter += 1
         
-        return SyncStamp( counter: setting.syncCounter, deviceID: setting.syncDeviceID!, operationID: UUID() )
+        return SyncStamp( counter: storageSettings.syncCounter, deviceID: storageSettings.syncDeviceID!, operationID: UUID() )
     }
 }
