@@ -567,9 +567,9 @@ private struct PDFTagBadge: View {
 
 #Preview {
     let librarySyncService = LibrarySyncService()
-    let contentService = LibraryContentService(librarySyncService)
+    let libraryContentService = LibraryContentService(librarySyncService)
 
     LibraryView()
-        .environmentObject(contentService)
+        .environmentObject(libraryContentService)
         .environmentObject(librarySyncService)
 }
