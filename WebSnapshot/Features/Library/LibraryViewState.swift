@@ -12,6 +12,42 @@ final class LibraryViewState:ObservableObject{
         case tag(String)
     }
     
+    
+    struct FileSource: Equatable {
+        let id: PersistentIdentifier
+        let url: URL
+        let bookmarkData: Data?
+        let syncRelativePath: String?
+
+        init(_ pdfFile: PDFFile) {
+            id = pdfFile.persistentModelID
+            url = pdfFile.url
+            bookmarkData = pdfFile.bookmarkData
+            syncRelativePath = pdfFile.syncRelativePath
+        }
+    }
+
+    struct FileLocation: Equatable {
+        let source: FileSource
+        let url: URL
+        let availability: FileIO.Availability
+    }
+    
+    
+    struct TranslationRequest: Identifiable {
+        let id = UUID()
+        let pdfFileID: PersistentIdentifier
+        let url: URL
+        let pageIndex: Int
+        let data: Data?
+        let version: UUID
+        let configuration: TranslationSession.Configuration
+        var text: String?
+    }
+
+    
+
+    
     @Published var appError:AppError?
 
     @Published var errorTitle = "Library Operation Could Not Be Completed"
@@ -34,37 +70,11 @@ final class LibraryViewState:ObservableObject{
 
     @Published private(set) var fileLocations: [PersistentIdentifier: FileLocation] = [:]
 
-    struct FileSource: Equatable {
-        let id: PersistentIdentifier
-        let url: URL
-        let bookmarkData: Data?
-        let syncRelativePath: String?
-
-        init(_ pdfFile: PDFFile) {
-            id = pdfFile.persistentModelID
-            url = pdfFile.url
-            bookmarkData = pdfFile.bookmarkData
-            syncRelativePath = pdfFile.syncRelativePath
-        }
-    }
-
-    struct FileLocation: Equatable {
-        let source: FileSource
-        let url: URL
-        let availability: FileIO.Availability
-    }
-
     @Published private(set) var displayedPDFData: Data?
 
     @Published private(set) var displayedPDFVersion = UUID()
 
-    private(set) var displayedPDFURL: URL?
-
-    private(set) var displayedPDFFingerprint: String?
-
-    private var openRequestID: UUID?
-
-    var openPDFTask: Task<Void, Never>?
+ 
     
     @Published var tagEditorPDFFile: PDFFile?
     
@@ -91,22 +101,17 @@ final class LibraryViewState:ObservableObject{
         }
     }
     
+    private(set) var displayedPDFURL: URL?
+
+    private(set) var displayedPDFFingerprint: String?
+
+    private var openRequestID: UUID?
+
+    var openPDFTask: Task<Void, Never>?
     
     let libraryTagEditorViewState = LibraryTagEditorViewState()
     
     var translationPreparationTask: Task<Void, Never>?
-    
-    struct TranslationRequest: Identifiable {
-        let id = UUID()
-        let pdfFileID: PersistentIdentifier
-        let url: URL
-        let pageIndex: Int
-        let data: Data?
-        let version: UUID
-        let configuration: TranslationSession.Configuration
-        var text: String?
-    }
-
     
 
     func beginTranslation(_ pdfFile: PDFFile, _ translationLanguage: TranslationLanguage) -> TranslationRequest {
@@ -121,28 +126,28 @@ final class LibraryViewState:ObservableObject{
         return request
     }
 
-    func isCurrentTranslation(_ request: TranslationRequest) -> Bool {
+    func isCurrentTranslation(_ translationRequest: TranslationRequest) -> Bool {
         
-        translationRequest?.id == request.id && selectedPDFFile?.persistentModelID == request.pdfFileID && displayedPDFVersion == request.version
+        self.translationRequest?.id == translationRequest.id && selectedPDFFile?.persistentModelID == translationRequest.pdfFileID && displayedPDFVersion == translationRequest.version
         
     }
 
-    func prepareTranslation(_ text: String,  for  request: TranslationRequest) {
+    func prepareTranslation(_ text: String,  for  translationRequest: TranslationRequest) {
         
-        guard isCurrentTranslation(request) else {
+        guard isCurrentTranslation(translationRequest) else {
             return
         }
         
-        var prepared = request
+        var prepared = translationRequest
         
         prepared.text = text
         
-        translationRequest = prepared
+        self.translationRequest = prepared
     }
 
-    func completeTranslation(_ text: String, for request: TranslationRequest) {
+    func completeTranslation(_ text: String, for translationRequest: TranslationRequest) {
         
-        guard isCurrentTranslation(request) else {
+        guard isCurrentTranslation(translationRequest) else {
             return
         }
         
@@ -150,16 +155,16 @@ final class LibraryViewState:ObservableObject{
         
         isTranslationPresented = true
         
-        finishTranslation(request)
+        finishTranslation(translationRequest)
     }
 
-    func finishTranslation(_ request: TranslationRequest) {
+    func finishTranslation(_ translationRequest: TranslationRequest) {
         
-        guard isCurrentTranslation(request) else {
+        guard isCurrentTranslation(translationRequest) else {
             return
         }
         
-        translationRequest = nil
+        self.translationRequest = nil
         
         translationPreparationTask = nil
         
@@ -256,9 +261,9 @@ final class LibraryViewState:ObservableObject{
         tagEditorPDFFile = pdfFile
     }
 
-    func updateFileLocations(_ locations: [PersistentIdentifier: FileLocation]) {
-        if fileLocations != locations {
-            fileLocations = locations
+    func updateFileLocations(_ fileLocations: [PersistentIdentifier: FileLocation]) {
+        if self.fileLocations != fileLocations {
+            self.fileLocations = fileLocations
         }
     }
 
@@ -271,11 +276,11 @@ final class LibraryViewState:ObservableObject{
     }
 
     private func fileLocation(_ pdfFile: PDFFile) -> FileLocation? {
-        guard let location = fileLocations[pdfFile.persistentModelID], location.source == FileSource(pdfFile) else {
+        guard let fileLocation = fileLocations[pdfFile.persistentModelID], fileLocation.source == FileSource(pdfFile) else {
             return nil
         }
 
-        return location
+        return fileLocation
     }
     
 
