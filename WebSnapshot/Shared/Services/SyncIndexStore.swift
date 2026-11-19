@@ -439,7 +439,7 @@ nonisolated struct SyncFileStore: Sendable {
         return path
     }
 
-    func currentLocation(_ syncPDFLocation: SyncPDFLocation, preferredURL: URL? = nil, cache: inout SyncIndexStore.Cache) throws -> g? {
+    func currentLocation(_ syncPDFLocation: SyncPDFLocation, preferredURL: URL? = nil, cache: inout SyncIndexStore.Cache) throws -> SyncPDFLocation? {
         let expected = try fileURL(syncPDFLocation.relativePath)
 
         var source = expected
