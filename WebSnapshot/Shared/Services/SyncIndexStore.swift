@@ -27,7 +27,7 @@ nonisolated struct SyncIndexStore: Sendable {
 
         fileprivate var fingerprints: [URL: String] = [:]
 
-        fileprivate var index = SyncIndex()
+        fileprivate var synxIndex = SyncIndex()
 
         fileprivate var contents: [URL: (fingerprint: String, hash: String)] = [:]
 
@@ -126,9 +126,9 @@ nonisolated struct SyncIndexStore: Sendable {
             changed = true
         }
 
-        let index = changed ? SyncIndex(files: metadata.values.flatMap(\.files)).merging(SyncIndex()) : cache.index
+        let synxIndex = changed ? SyncIndex(files: metadata.values.flatMap(\.files)).merging(SyncIndex()) : cache.synxIndex
         
-        for record in index.files {
+        for record in synxIndex.files {
         
             if let path = record.location?.relativePath {
                 _ = try SyncFileStore(root: root).fileURL(path)
@@ -140,9 +140,9 @@ nonisolated struct SyncIndexStore: Sendable {
 
         cache.fingerprints = fingerprints
 
-        cache.index = index
+        cache.synxIndex = synxIndex
         
-        return index
+        return synxIndex
     }
 
     func publish(_ changes: SyncIndex) throws {
@@ -200,11 +200,11 @@ nonisolated struct SyncIndexStore: Sendable {
         
     }
 
-    func writeSnapshot(_ index: SyncIndex) throws {
+    func writeSnapshot(_ synxIndex: SyncIndex) throws {
         
         let url = try SyncFileStore(root: root).containedURL("index.json")
         
-        let data = try index.encoded()
+        let data = try synxIndex.encoded()
         
         if try SyncFileStore.isPresent(url), try read(url) == data {
             return
@@ -233,7 +233,7 @@ nonisolated struct SyncIndexStore: Sendable {
 
         cache.fingerprints[url] = nil
 
-        cache.index = SyncIndex(files: cache.metadata.values.flatMap(\.files)).merging(SyncIndex())
+        cache.synxIndex = SyncIndex(files: cache.metadata.values.flatMap(\.files)).merging(SyncIndex())
     }
 
     private static func metadataURL(_ url: URL) -> URL? {
