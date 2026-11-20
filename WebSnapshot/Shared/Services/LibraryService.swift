@@ -83,7 +83,7 @@ enum LibraryService {
             
         }
         
-        guard source.pathExtension.lowercased() == "pdf", let document = PDFDocument(url: source), document.pageCount > 0 || document.isLocked else {
+        guard isImportablePDF(source) else {
             throw AppError.invalidFileType("Choose a valid PDF file to import.")
         }
         
@@ -112,6 +112,14 @@ enum LibraryService {
         } catch {
             throw AppError(error)
         }
+    }
+
+    nonisolated static func isImportablePDF(_ url: URL) -> Bool {
+        guard url.pathExtension.lowercased() == "pdf", let document = PDFDocument(url: url) else {
+            return false
+        }
+
+        return document.pageCount > 0 || document.isLocked
     }
 
     static func exportPDF(_ source: URL, _ destination: URL) throws {
@@ -292,9 +300,16 @@ enum LibraryService {
 
         try update(context, "The PDF could not be removed from the library.") {
             for pdfFile in pdfFiles {
-                let path = try files.relativePath((try? pdfFile.resolveURL()) ?? pdfFile.url)
+                
+                let path = try pdfFile.syncRelativePath ?? files.relativePath(pdfFile.url)
+                
+                _ = try files.fileURL(path)
 
                 paths.insert(path)
+
+                if let url = try? pdfFile.resolveURL(), let resolvedPath = try? files.relativePath(url) {
+                    paths.insert(resolvedPath)
+                }
 
                 if let id = pdfFile.libraryID {
                     paths.insert(SyncFileStore.versionDirectory(id))
