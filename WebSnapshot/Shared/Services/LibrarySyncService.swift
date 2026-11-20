@@ -412,10 +412,15 @@ enum LibrarySyncMigration {
         
         let destinationBookmark = try storage == .fixed ? URL.securityScopedBookmarkData(destination) : nil
         
-        let (index, urls) = try await Task.detached(priority: .userInitiated) {
+        let importFixedStoragePDFs = storage == .fixed
+
+        let (index, urls, localPDFs) = try await Task.detached(priority: .userInitiated) {
             
-            try SyncMigration(root: root).prepareDisable(pending, destination, pdfFiles, deviceID, counter)
+            let (index, urls) = try SyncMigration(root: root).prepareDisable(pending, destination, pdfFiles, deviceID, counter)
             
+            let localPDFs = try importFixedStoragePDFs ? SyncMigration.fixedStoragePDFs(destination, excluding: Set(urls.values)) : []
+            
+            return (index, urls, localPDFs)
         }.value
         
         try Task.checkCancellation()
@@ -431,6 +436,8 @@ enum LibrarySyncMigration {
         }
         
         try LibrarySyncRepository.apply(index, context,  root, urls)
+        
+        try PDFFileService.registerUntracked(localPDFs, context)
         
         setting.storage = storage
         
@@ -627,17 +634,13 @@ nonisolated struct SyncMigration: Sendable {
             let source = try SyncFileStore(root: root).fileURL(location.relativePath)
 
             guard try SyncFileStore.isPresent(source) else {
-                continue
+                throw SyncStoreError.unavailableFile
             }
             
             do {
                 location.contentHash = try SyncFileStore.contentHash(source)
-            } catch {
-                guard FileIO.isMissingFileError(error), try !SyncFileStore.isPresent(source) else {
-                    throw error
-                }
-                
-                continue
+            } catch where FileIO.isMissingFileError(error) {
+                throw SyncStoreError.unavailableFile
             }
             
             index.files[offset].location = location
@@ -670,5 +673,24 @@ nonisolated struct SyncMigration: Sendable {
         
         return (index, destinations)
         
+    }
+
+    static func fixedStoragePDFs(_ directory: URL, excluding copied: Set<URL>) throws -> [URL] {
+        
+        let keys: Set<URLResourceKey> = [.isRegularFileKey, .isSymbolicLinkKey]
+        
+        let copiedPaths = Set(copied.map(\.standardizedFileURL))
+        
+        let files = try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: Array(keys), options: [.skipsHiddenFiles])
+
+        return try files.filter { url in
+            guard url.pathExtension.lowercased() == "pdf", !copiedPaths.contains(url.standardizedFileURL) else {
+                return false
+            }
+
+            let values = try url.resourceValues(forKeys: keys)
+        
+            return values.isRegularFile == true && values.isSymbolicLink != true && LibraryService.isImportablePDF(url)
+        }
     }
 }
