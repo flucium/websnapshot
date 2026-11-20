@@ -126,7 +126,7 @@ enum StorageSettingsService {
         do {
             url = try URL.resolveSecurityScopedBookmarkData(bookmarkData, &isStale)
         } catch {
-            guard FileIO.isMissingFileError(error), let path = storageSettings.first?.fixedStoragePath else {
+            guard URL.bookmarkTargetIsMissing(bookmarkData, error), let path = storageSettings.first?.fixedStoragePath else {
                 throw error
             }
 
