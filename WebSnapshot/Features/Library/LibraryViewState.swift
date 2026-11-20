@@ -55,8 +55,6 @@ final class LibraryViewState:ObservableObject{
     @Published var pendingDeletionPDFFile: PDFFile?
 
     @Published var showDeleteConfirmation = false
-
-    @Published var currentPageIndex = 0
     
     @Published var searchText:String = String()
     
@@ -73,11 +71,8 @@ final class LibraryViewState:ObservableObject{
     @Published private(set) var displayedPDFData: Data?
 
     @Published private(set) var displayedPDFVersion = UUID()
-
- 
     
     @Published var tagEditorPDFFile: PDFFile?
-    
     
     @Published  var translatedText = String()
     
@@ -97,6 +92,14 @@ final class LibraryViewState:ObservableObject{
                 displayedPDFURL = nil
                 displayedPDFFingerprint = nil
                 displayedPDFVersion = UUID()
+            }
+        }
+    }
+    
+    @Published var currentPageIndex = 0 {
+        didSet {
+            if oldValue != currentPageIndex, isTranslating || isTranslationPresented {
+                cancelTranslation()
             }
         }
     }
