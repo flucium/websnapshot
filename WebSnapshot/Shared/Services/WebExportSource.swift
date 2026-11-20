@@ -3,6 +3,7 @@ import WebKit
 @MainActor
 struct WebExportSource {
     private let url: URL
+    
     private let token = UUID().uuidString
 
     init(_ webPage: WebPage) async throws {
@@ -11,7 +12,7 @@ struct WebExportSource {
             throw AppError.invalidLoad("Wait for the webpage to finish loading before saving.")
         }
 
-        self.url = url
+        self.url = Self.documentURL(url)
         
         _ = try await webPage.callJavaScript("document.__webSnapshotExportToken = token; return true;", arguments: ["token": token], contentWorld: .defaultClient)
         
@@ -22,7 +23,7 @@ struct WebExportSource {
         
         try Task.checkCancellation()
         
-        guard webPage.url == url, !webPage.isLoading else {
+        guard webPage.url.map(Self.documentURL) == url, !webPage.isLoading else {
             throw navigationError
         }
         
@@ -30,9 +31,18 @@ struct WebExportSource {
         
         try Task.checkCancellation()
         
-        guard let address, URL(string: address) == url, webPage.url == url, !webPage.isLoading else {
+        guard let address, let addressURL = URL(string: address), Self.documentURL(addressURL) == url,
+              webPage.url.map(Self.documentURL) == url, !webPage.isLoading else {
             throw navigationError
         }
+    }
+
+    private static func documentURL(_ url: URL) -> URL {
+        var components = URLComponents(url: url, resolvingAgainstBaseURL: true)
+        
+        components?.fragment = nil
+        
+        return components?.url ?? url
     }
 
     private var navigationError: AppError {
