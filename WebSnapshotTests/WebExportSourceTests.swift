@@ -55,6 +55,25 @@ final class WebExportSourceTests: XCTestCase {
         XCTAssertEqual(page.mediaType, .print)
     }
 
+    func testExportAllowsFragmentUpdatesDuringPagePreparation() async throws {
+        let page = WebPage()
+        try await load(page, "https://example.com/article")
+        _ = try await page.callJavaScript("""
+            const scroll = window.scrollTo.bind(window);
+            window.scrollTo = function(x, y) {
+                history.replaceState({}, '', '#section');
+                scroll(x, y);
+            };
+            return true;
+            """)
+
+        let document = try await WebPDFService.export(page)
+        let fragment = try await page.callJavaScript("return location.hash;") as? String
+
+        XCTAssertFalse(document.data.isEmpty)
+        XCTAssertEqual(fragment, "#section")
+    }
+
     func testExportUsesScreenStylesAndRestoresOriginalMediaType() async throws {
         let page = WebPage()
         page.mediaType = .print

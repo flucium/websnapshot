@@ -123,7 +123,9 @@ nonisolated final class SyncIndexStoreTests: XCTestCase {
             let index = SyncIndex(files: [record(UUID(), counter: 1)])
             try store.publish(index)
             try store.writeSnapshot(index)
-            XCTAssertThrowsError(try SyncMigration(root: store.root).prepareDisable(SyncIndex(), directory.appendingPathComponent("local")))
+            XCTAssertThrowsError(try SyncMigration(root: store.root).prepareDisable(SyncIndex(), directory.appendingPathComponent("local"))) {
+                XCTAssertEqual($0 as? SyncStoreError, .unavailableFile)
+            }
             XCTAssertEqual(try store.load(), index)
         }
     }

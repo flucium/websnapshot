@@ -129,8 +129,8 @@ final class LibraryDeletionTests: XCTestCase {
         await sync.refresh(context)
         await otherSync.refresh(other.mainContext)
         try assertEmpty(other)
-        XCTAssertNil(sync.state.lastError)
-        XCTAssertNil(otherSync.state.lastError)
+        XCTAssertNil(sync.librarySyncState.lastError)
+        XCTAssertNil(otherSync.librarySyncState.lastError)
         XCTAssertTrue(setting.syncEnabled)
     }
 
@@ -142,9 +142,15 @@ final class LibraryDeletionTests: XCTestCase {
         let container = try makeContainer()
         let context = container.mainContext
         try await sync.setEnabled(true, context, drive: drive)
+        try StorageSettingsService.saveDeletion(context, true, false)
         var urls: [URL] = []
         for name in ["First.pdf", "Second.pdf"] {
             urls.append(try XCTUnwrap(LibraryService.savePDF(Data(name.utf8), name, context, [], sync)))
+        }
+
+        let records = try context.fetch(FetchDescriptor<PDFFile>())
+        let expectedPaths = try records.flatMap { pdf in
+            [try XCTUnwrap(pdf.syncRelativePath), SyncFileStore.versionDirectory(try XCTUnwrap(pdf.libraryID))]
         }
 
         XCTAssertThrowsError(try LibraryService.deleteAll(context, sync) { _ in
@@ -155,7 +161,7 @@ final class LibraryDeletionTests: XCTestCase {
         saved.autosaveEnabled = false
         let setting = try XCTUnwrap(LibrarySyncService.settings(saved))
         let paths = try JSONDecoder().decode([String].self, from: XCTUnwrap(setting.pendingSyncDeletions))
-        XCTAssertEqual(paths.count, 2)
+        XCTAssertEqual(Set(paths), Set(expectedPaths))
         XCTAssertTrue(urls.allSatisfy { FileManager.default.fileExists(atPath: $0.path) })
 
         try LibraryService.deleteAll(saved, LibrarySyncService())
@@ -163,6 +169,33 @@ final class LibraryDeletionTests: XCTestCase {
         try assertEmpty(container)
         XCTAssertNil(setting.pendingSyncDeletions)
         XCTAssertTrue(urls.allSatisfy { !FileManager.default.fileExists(atPath: $0.path) })
+    }
+
+    func testSyncedDeletionPreservesPDFMovedOutsideSyncFolder() async throws {
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let drive = directory.appendingPathComponent("Mobile Documents/com~apple~CloudDocs")
+        try FileManager.default.createDirectory(at: drive, withIntermediateDirectories: true)
+        let container = try makeContainer()
+        let context = container.mainContext
+        try await sync.setEnabled(true, context, drive: drive)
+
+        let data = Data("fixture".utf8)
+        let original = try XCTUnwrap(LibraryService.savePDF(data, "Article.pdf", context, [], sync))
+        let pdf = try XCTUnwrap(context.fetch(FetchDescriptor<PDFFile>()).first)
+        let id = try XCTUnwrap(pdf.libraryID)
+        let moved = directory.appendingPathComponent("Moved.pdf")
+        try FileManager.default.moveItem(at: original, to: moved)
+        XCTAssertEqual(try pdf.resolveURL().standardizedFileURL, moved.standardizedFileURL)
+
+        var removalURLs: [URL] = []
+        try LibraryService.delete(context, pdf.url, pdf.resolvedURL, sync) { removalURLs.append($0) }
+
+        XCTAssertEqual(removalURLs.map(\.standardizedFileURL), [original.standardizedFileURL])
+        XCTAssertEqual(try Data(contentsOf: moved), data)
+        XCTAssertEqual(try context.fetchCount(FetchDescriptor<PDFFile>()), 0)
+        let setting = try XCTUnwrap(LibrarySyncService.settings(context))
+        XCTAssertTrue(try LibrarySyncRepository.pendingChanges(setting).files.contains { $0.id == id && $0.isDeleted })
     }
 
     func testSettingsDeletionClearsCacheResultsAndPreviousError() async throws {
@@ -180,7 +213,7 @@ final class LibraryDeletionTests: XCTestCase {
         let state = SettingsViewState()
         state.appError = .error("Previous failure")
 
-        XCTAssertTrue(SettingsViewService.deleteLibrary(state, context, sync, contentService: content))
+        XCTAssertTrue(SettingsViewService.deleteLibrary(state, context, sync, libraryContentService: content))
 
         try assertEmpty(container)
         XCTAssertNil(state.appError)
@@ -199,7 +232,7 @@ final class LibraryDeletionTests: XCTestCase {
         try context.save()
         let state = SettingsViewState()
 
-        XCTAssertFalse(SettingsViewService.deleteLibrary(state, context, sync, contentService: LibraryContentService(sync)))
+        XCTAssertFalse(SettingsViewService.deleteLibrary(state, context, sync, libraryContentService: LibraryContentService(sync)))
 
         XCTAssertNotNil(state.appError)
         XCTAssertEqual(state.errorTitle, "Library Could Not Be Deleted")

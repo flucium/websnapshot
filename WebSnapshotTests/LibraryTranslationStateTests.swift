@@ -77,6 +77,29 @@ final class LibraryTranslationStateTests: XCTestCase {
         XCTAssertFalse(state.isTranslating)
     }
 
+    func testPageChangeCancelsPendingAndDisplayedTranslations() {
+        let state = LibraryViewState()
+        let pdf = PDFFile(URL(fileURLWithPath: "/tmp/document.pdf"))
+        state.selectedPDFFile = pdf
+        let pending = state.beginTranslation(pdf, .japanese)
+
+        state.currentPageIndex = 1
+        state.completeTranslation("Previous page", for: pending)
+
+        XCTAssertNil(state.translationRequest)
+        XCTAssertFalse(state.isTranslating)
+        XCTAssertFalse(state.isTranslationPresented)
+
+        let current = state.beginTranslation(pdf, .japanese)
+        state.completeTranslation("Current page", for: current)
+        XCTAssertTrue(state.isTranslationPresented)
+
+        state.currentPageIndex = 2
+
+        XCTAssertFalse(state.isTranslationPresented)
+        XCTAssertTrue(state.translatedText.isEmpty)
+    }
+
     func testSlowerOpenCannotReplaceTheLatestPDF() {
         let state = LibraryViewState()
         let first = PDFFile(URL(fileURLWithPath: "/tmp/first.pdf"))

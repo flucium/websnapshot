@@ -14,24 +14,24 @@ final class LibrarySyncServiceTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: directory) }
         let container = try makeContainer()
         let other = LibrarySyncService()
-        let initialState = sync.state
+        let initialState = sync.librarySyncState
         var published: [LibrarySyncState] = []
-        let observation = sync.$state.sink { published.append($0) }
+        let observation = sync.$librarySyncState.sink { published.append($0) }
         defer { observation.cancel() }
 
         do {
             try await sync.setEnabled(true, container.mainContext, drive: directory)
             XCTFail("An invalid iCloud Drive location must fail")
         } catch {
-            XCTAssertNotNil(sync.state.lastError)
+            XCTAssertNotNil(sync.librarySyncState.lastError)
         }
 
         XCTAssertTrue(published.contains { $0.isSwitching })
         XCTAssertNotNil(published.last?.lastError)
-        XCTAssertFalse(sync.state.isSwitching)
+        XCTAssertFalse(sync.librarySyncState.isSwitching)
         XCTAssertNil(initialState.lastError)
-        XCTAssertNil(other.state.lastError)
-        XCTAssertFalse(other.state.isSwitching)
+        XCTAssertNil(other.librarySyncState.lastError)
+        XCTAssertFalse(other.librarySyncState.isSwitching)
         XCTAssertNoThrow(try other.requireReady())
     }
 
@@ -58,7 +58,7 @@ final class LibrarySyncServiceTests: XCTestCase {
         XCTAssertEqual(pdf.libraryID, id)
         XCTAssertEqual(pdf.tags.map(\.name), ["Keep"])
         XCTAssertEqual(try context.fetchCount(FetchDescriptor<PDFFile>()), 1)
-        XCTAssertNil(sync.state.lastError)
+        XCTAssertNil(sync.librarySyncState.lastError)
     }
 
     func testRenamedSyncedPDFReachesAnotherDeviceAndCanTurnSyncOff() async throws {
@@ -78,7 +78,7 @@ final class LibrarySyncServiceTests: XCTestCase {
 
         await sync.refresh(context)
 
-        XCTAssertNil(sync.state.lastError)
+        XCTAssertNil(sync.librarySyncState.lastError)
         XCTAssertEqual(pdf.url.resolvingSymlinksInPath().standardizedFileURL, renamed.resolvingSymlinksInPath().standardizedFileURL)
         XCTAssertTrue(pdf.syncRelativePath?.hasSuffix("After.pdf") == true)
         let other = try makeContainer()
@@ -132,9 +132,11 @@ final class LibrarySyncServiceTests: XCTestCase {
         let context = container.mainContext
         let drive = try makeDrive(directory)
         try await sync.setEnabled(true, context, drive: drive)
+        try StorageSettingsService.saveDeletion(context, true, false)
         let cloudPDF = try XCTUnwrap(LibraryService.savePDF(Data("fixture".utf8), "Article.pdf", context, [], sync))
         let pdf = try XCTUnwrap(context.fetch(FetchDescriptor<PDFFile>()).first)
         let path = try XCTUnwrap(pdf.syncRelativePath)
+        let versionDirectory = SyncFileStore.versionDirectory(try XCTUnwrap(pdf.libraryID))
 
         XCTAssertThrowsError(try LibraryService.delete(context, pdf.url, pdf.resolvedURL, sync) { _ in
             throw CocoaError(.fileWriteNoPermission)
@@ -146,12 +148,12 @@ final class LibrarySyncServiceTests: XCTestCase {
         stored.autosaveEnabled = false
         let setting = try XCTUnwrap(LibrarySyncService.settings(stored))
         let deletions = try JSONDecoder().decode([String].self, from: XCTUnwrap(setting.pendingSyncDeletions))
-        XCTAssertEqual(deletions, [path])
+        XCTAssertEqual(Set(deletions), Set([path, versionDirectory]))
         let restarted = LibrarySyncService()
 
         await restarted.refresh(stored)
 
-        XCTAssertNil(restarted.state.lastError)
+        XCTAssertNil(restarted.librarySyncState.lastError)
         XCTAssertNil(setting.pendingSyncDeletions)
         XCTAssertFalse(FileManager.default.fileExists(atPath: cloudPDF.path))
         XCTAssertEqual(try stored.fetchCount(FetchDescriptor<PDFFile>()), 0)
@@ -649,7 +651,7 @@ final class LibrarySyncServiceTests: XCTestCase {
         XCTAssertEqual(setting.previousStorageRawValue, StorageSettings.Storage.flexibility.rawValue)
         XCTAssertEqual(setting.pendingSyncChanges, pending)
         XCTAssertEqual(try context.fetch(FetchDescriptor<PDFFile>()).first?.url, cloudPDF)
-        XCTAssertFalse(sync.state.isSwitching)
+        XCTAssertFalse(sync.librarySyncState.isSwitching)
     }
 
     func testFixedWithoutFolderAsksAndRemembersChosenDestination() async throws {
@@ -716,7 +718,7 @@ final class LibrarySyncServiceTests: XCTestCase {
         XCTAssertFalse(LibrarySyncService.isEnabled(container.mainContext))
         XCTAssertEqual(try container.mainContext.fetchCount(FetchDescriptor<PDFFile>()), 1)
         XCTAssertNil(pdf.syncRelativePath)
-        XCTAssertFalse(sync.state.isSwitching)
+        XCTAssertFalse(sync.librarySyncState.isSwitching)
     }
 
     func testFailedDisableKeepsSyncAndDoesNotRestoreStorageEarly() async throws {
@@ -737,7 +739,9 @@ final class LibrarySyncServiceTests: XCTestCase {
         do {
             try await sync.setEnabled(false, context, localRoot: directory.appendingPathComponent("local"))
             XCTFail("Turning Sync off must finish copying every active PDF")
-        } catch {}
+        } catch {
+            XCTAssertEqual(error as? SyncStoreError, .unavailableFile)
+        }
         XCTAssertTrue(LibrarySyncService.isEnabled(context))
         XCTAssertEqual(try LibrarySyncService.settings(context)?.storage, .fixed)
         XCTAssertEqual(try LibrarySyncService.settings(context)?.fixedStoragePath, cloud.path)

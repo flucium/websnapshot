@@ -115,15 +115,12 @@ final class LibraryFileSynchronizationTests: XCTestCase {
         XCTAssertEqual(try context.fetchCount(FetchDescriptor<PDFTag>()), 0)
     }
 
-    func testTrashedBookmarkedPDFRemovesEntryWithoutDeletingTrashedFile() throws {
+    func testPDFMovedToICloudTrashRemovesEntryAndPreservesTheFile() throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        var trashedURL: NSURL?
-        defer {
-            if let trashedURL { try? FileManager.default.removeItem(at: trashedURL as URL) }
-            try? FileManager.default.removeItem(at: directory)
-        }
-        let url = directory.appendingPathComponent("websnapshot-fixture-\(UUID().uuidString).pdf")
+        let trash = directory.appendingPathComponent("Mobile Documents/.Trash", isDirectory: true)
+        try FileManager.default.createDirectory(at: trash, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("Article.pdf")
         try Data("fixture".utf8).write(to: url)
         let container = try makeContainer()
         let context = container.mainContext
@@ -131,12 +128,12 @@ final class LibraryFileSynchronizationTests: XCTestCase {
         let entry = try XCTUnwrap(context.fetch(FetchDescriptor<PDFFile>()).first)
         try LibraryService.replaceTags(["Temporary"], entry, context, sync)
 
-        try FileManager.default.trashItem(at: url, resultingItemURL: &trashedURL)
+        let destination = trash.appendingPathComponent(url.lastPathComponent)
+        try FileManager.default.moveItem(at: url, to: destination)
         try LibraryService.deleteMissingFiles(context, [entry], sync)
 
         XCTAssertEqual(try context.fetchCount(FetchDescriptor<PDFFile>()), 0)
         XCTAssertEqual(try context.fetchCount(FetchDescriptor<PDFTag>()), 0)
-        let destination = try XCTUnwrap(trashedURL) as URL
         XCTAssertTrue(FileManager.default.fileExists(atPath: destination.path))
     }
 

@@ -208,12 +208,18 @@ final class LibraryContentCacheTests: XCTestCase {
         await fulfillment(of: [started], timeout: 3)
         let refreshing = try XCTUnwrap(service.refreshContentCache(container.mainContext))
         XCTAssertNil(service.refreshContentCache(container.mainContext))
-        await service.index([entry], container.mainContext)
+        let ignored = expectation(description: "Index request returns during a cache refresh")
+        let duplicate = Task {
+            await service.index([entry], container.mainContext)
+            ignored.fulfill()
+        }
+        await fulfillment(of: [ignored], timeout: 3)
         XCTAssertTrue(service.state.isRefreshingCache)
         let pendingReads = await gate.reads
         XCTAssertEqual(pendingReads, 1)
         await gate.finish()
         await indexing.value
+        await duplicate.value
         try await refreshing.value
 
         let reads = await gate.reads
@@ -248,7 +254,7 @@ private actor CacheRefreshProbe {
 
 private actor CacheRefreshGate {
     let started: XCTestExpectation
-    private var continuation: CheckedContinuation<String, Never>?
+    private var continuations: [CheckedContinuation<String, Never>] = []
     private var finished = false
     var reads = 0
 
@@ -258,14 +264,18 @@ private actor CacheRefreshGate {
         reads += 1
         if finished { return "Extracted text" }
         return await withCheckedContinuation { continuation in
-            self.continuation = continuation
-            started.fulfill()
+            continuations.append(continuation)
+            if reads == 1 {
+                started.fulfill()
+            }
         }
     }
 
     func finish() {
         finished = true
-        continuation?.resume(returning: "Extracted text")
-        continuation = nil
+        for continuation in continuations {
+            continuation.resume(returning: "Extracted text")
+        }
+        continuations.removeAll()
     }
 }

@@ -192,25 +192,25 @@ final class LibraryStartupServiceTests: XCTestCase {
         let first = try makeRequest("https://example.com/first")
         let second = try makeRequest("https://example.com/second")
         delegate.application(NSApplication.shared, open: [first.openURL])
-        XCTAssertEqual(requests.state.pending, [first])
+        XCTAssertEqual(requests.safariRequestState.pending, [first])
         XCTAssertTrue(capturedURLs.isEmpty)
 
         await delegate.openLibrary()
         delegate.application(NSApplication.shared, open: [second.openURL])
-        XCTAssertEqual(requests.state.pending, [first, second])
+        XCTAssertEqual(requests.safariRequestState.pending, [first, second])
         XCTAssertTrue(capturedURLs.isEmpty)
 
         await delegate.openLibrary()
-        try await waitUntil { requests.state.pending.isEmpty && requests.state.current == nil }
+        try await waitUntil { requests.safariRequestState.pending.isEmpty && requests.safariRequestState.current == nil }
         await delegate.openLibrary()
 
         XCTAssertEqual(attempts, 2)
         XCTAssertEqual(capturedURLs, [first.url, second.url])
-        XCTAssertNil(requests.state.appError)
+        XCTAssertNil(requests.safariRequestState.appError)
 
         let third = try makeRequest("https://example.com/third")
         delegate.application(NSApplication.shared, open: [third.openURL])
-        try await waitUntil { requests.state.pending.isEmpty && requests.state.current == nil }
+        try await waitUntil { requests.safariRequestState.pending.isEmpty && requests.safariRequestState.current == nil }
         XCTAssertEqual(capturedURLs, [first.url, second.url, third.url])
     }
 
