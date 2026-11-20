@@ -78,7 +78,7 @@ extension PDFFile {
             return FileIO.availability( try resolveURL() )
         } catch {
             
-            if FileIO.isMissingFileError(error) {
+            if let bookmarkData, URL.bookmarkTargetIsMissing(bookmarkData, error) {
                 return FileIO.availability(url)
             }
             
