@@ -27,6 +27,23 @@ enum PDFFileService {
         }
     }
 
+    static func registerUntracked(_ urls: [URL], _ context: ModelContext) throws {
+        guard !urls.isEmpty else {
+            return
+        }
+
+        let entries = try context.fetch(FetchDescriptor<PDFFile>())
+        
+        var registered = Set(entries.filter { !$0.isDeleted }.map {
+            normalizedURL((try? $0.resolveURL()) ?? $0.url)
+        })
+
+        for url in urls where registered.insert(normalizedURL(url)).inserted {
+            let bookmark = try URL.securityScopedBookmarkData(url)
+            context.insert(PDFFile(url, bookmark, Date()))
+        }
+    }
+
     static func entries(_ context: ModelContext, matching url: URL) throws -> [PDFFile] {
         let fileURL = normalizedURL(url)
         
