@@ -76,21 +76,25 @@ private struct AboutView: View {
 
     private func aboutView() -> some View {
         VStack(spacing: 12) {
+            // Application icon
             Image(nsImage: NSApp.applicationIconImage)
                 .resizable()
                 .frame(width: 88, height: 88)
                 .accessibilityHidden(true)
 
+            // Application name
             Text("WebSnapshot")
                 .font(.title)
                 .fontWeight(.semibold)
 
+            // Application version
             if let version {
                 Text("Version \(version)")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
 
+            // Copyright
             if let copyright = Bundle.main.object(forInfoDictionaryKey: "NSHumanReadableCopyright") as? String,
                !copyright.isEmpty {
                 TimelineView(.everyMinute) { context in
@@ -100,7 +104,11 @@ private struct AboutView: View {
                         .multilineTextAlignment(.center)
                 }
             }
-
+            
+            // Author URL
+            authorURLView()
+            
+            // License
             Button("Licenses…") {
                 showLicenses = true
             }
@@ -122,6 +130,18 @@ private struct AboutView: View {
         }
 
         return "\(notice[..<yearEnd])-\(currentYear)\(notice[yearEnd...])"
+    }
+    
+    private func authorURLView() -> some View{
+        VStack(alignment: .leading) {
+            HStack(spacing: 14){
+                // WebSite
+                Text("[www.flucium.net](https://www.flucium.net)")
+                
+                // GitHub
+                Text("[github.com/flucium/websnapshot](https://github.com/flucium/websnapshot)")
+            }
+        }
     }
 
     
