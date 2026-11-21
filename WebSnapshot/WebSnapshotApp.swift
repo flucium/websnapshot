@@ -93,10 +93,12 @@ private struct AboutView: View {
 
             if let copyright = Bundle.main.object(forInfoDictionaryKey: "NSHumanReadableCopyright") as? String,
                !copyright.isEmpty {
-                Text(verbatim: copyright)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
+                TimelineView(.everyMinute) { context in
+                    Text(verbatim: copyrightNotice(copyright, on: context.date))
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                }
             }
 
             Button("Licenses…") {
@@ -105,6 +107,24 @@ private struct AboutView: View {
         }
     }
 
+    private func copyrightNotice(_ notice: String, on date: Date) -> String {
+        let prefix = "Copyright © "
+        
+        let yearAndHolder = notice.dropFirst(prefix.count)
+        
+        let currentYear = Calendar(identifier: .gregorian).component(.year, from: date)
+
+        guard notice.hasPrefix(prefix),
+                let yearEnd = yearAndHolder.firstIndex(of: " "),
+                let startYear = Int(yearAndHolder[..<yearEnd]),
+              currentYear > startYear else {
+            return notice
+        }
+
+        return "\(notice[..<yearEnd])-\(currentYear)\(notice[yearEnd...])"
+    }
+
+    
     private func licensesView() -> some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
