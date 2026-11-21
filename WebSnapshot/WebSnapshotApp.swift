@@ -8,14 +8,15 @@ struct WebSnapshotApp: App {
     @NSApplicationDelegateAdaptor(WebSnapshotAppDelegate.self) private var appDelegate
 
     var body: some Scene {
-        WindowGroup {
-            WebSnapshotRootView(libraryStartupService: appDelegate.libraryStartupService, appDelegate: appDelegate)
-                .frame(minWidth: 980, minHeight: 400)
+        WindowGroup(for: MainWindowRequest.self) {
+            $request in
+            WebSnapshotRootView(libraryStartupService: appDelegate.libraryStartupService, mainWindowRequest: $request, appDelegate: appDelegate )
+            .frame(minWidth: 980, minHeight: 400)
         }
         .defaultSize(width: 1000, height: 600)
         .windowResizability(.contentMinSize)
         .commands {
-            AboutCommands()
+            AppCommands(appDelegate: appDelegate)
         }
 
         Window("About WebSnapshot", id: AboutView.windowID) {
@@ -27,13 +28,26 @@ struct WebSnapshotApp: App {
     }
 }
 
-private struct AboutCommands: Commands {
+private enum MainWindowRequest: Codable, Hashable {
+    case settings
+}
+
+private struct AppCommands: Commands {
     @Environment(\.openWindow) private var openWindow
+    
+    let appDelegate: WebSnapshotAppDelegate
 
     var body: some Commands {
         CommandGroup(replacing: .appInfo) {
             Button("About WebSnapshot") {
                 openWindow(id: AboutView.windowID)
+            }
+        }
+        CommandGroup(replacing: .appSettings) {
+            Button("Settings") {
+                if !appDelegate.showSettingsInExistingWindow() {
+                    openWindow(value: MainWindowRequest.settings)
+                }
             }
         }
     }
@@ -190,19 +204,74 @@ private struct AboutView: View {
 private struct WebSnapshotRootView: View {
     @ObservedObject var libraryStartupService: LibraryStartupService
     
+    @Binding var mainWindowRequest: MainWindowRequest?
+    
+    @State private var settingsRequested = false
+    
     let appDelegate: WebSnapshotAppDelegate
-
+    
     var body: some View {
-        if let modelContainer = libraryStartupService.modelContainer {
-            HomeView()
-                .environmentObject(appDelegate.content)
-                .environmentObject(appDelegate.librarySyncService)
-                .modelContainer(modelContainer)
-        } else {
-            DatabaseRecoveryView(libraryStartupService: libraryStartupService) {
-                Task {
-                    await appDelegate.openLibrary()
+        Group {
+            if let modelContainer = libraryStartupService.modelContainer {
+                HomeView(settingsRequested: $settingsRequested)
+                    .environmentObject(appDelegate.content)
+                    .environmentObject(appDelegate.librarySyncService)
+                    .modelContainer(modelContainer)
+                
+            } else {
+                DatabaseRecoveryView(libraryStartupService: libraryStartupService) {
+                    Task {
+                        await appDelegate.openLibrary()
+                    }
                 }
+            }
+        }
+        .background {
+            MainWindowObserver(settingsRequested: $settingsRequested, onAttach: appDelegate.registerMainWindow)
+            .allowsHitTesting(false)
+        }
+        .onChange(of: mainWindowRequest, initial: true) {
+            guard mainWindowRequest == .settings else {
+                return
+            }
+            
+            settingsRequested = true
+            
+            mainWindowRequest = nil
+        }
+    }
+}
+
+private struct MainWindowObserver: NSViewRepresentable {
+    let settingsRequested: Binding<Bool>
+    
+    let onAttach: @MainActor (NSWindow, WindowView) -> Void
+
+    func makeNSView(context: Context) -> WindowView {
+        let view = WindowView()
+        
+        updateNSView(view, context: context)
+        
+        return view
+    }
+
+    func updateNSView(_ windowView: WindowView, context: Context) {
+        windowView.settingsRequested = settingsRequested
+        
+        windowView.onAttach = onAttach
+    }
+
+    final class WindowView: NSView {
+        var settingsRequested: Binding<Bool> = .constant(false)
+        
+        var onAttach: (@MainActor (NSWindow, WindowView) -> Void)?
+
+        override func viewDidMoveToWindow() {
+            
+            super.viewDidMoveToWindow()
+            
+            if let window {
+                onAttach?(window, self)
             }
         }
     }
@@ -217,6 +286,8 @@ final class WebSnapshotAppDelegate: NSObject, NSApplicationDelegate {
     let content: LibraryContentService
     
     let safariRequests: SafariRequestService
+    
+    private let mainWindowObservers = NSMapTable<NSWindow, MainWindowObserver.WindowView>.weakToWeakObjects()
 
     private var syncTask: Task<Void, Never>?
 
@@ -255,6 +326,39 @@ final class WebSnapshotAppDelegate: NSObject, NSApplicationDelegate {
         super.init()
     }
     
+
+    fileprivate func registerMainWindow(_ window: NSWindow, observer: MainWindowObserver.WindowView) {
+        mainWindowObservers.setObject(observer, forKey: window)
+    }
+
+    fileprivate func showSettingsInExistingWindow() -> Bool {
+        let application = NSApplication.shared
+        
+        let activeWindows = [application.keyWindow, application.mainWindow].compactMap {
+            $0
+        }
+        
+        let windows = activeWindows + application.orderedWindows + application.windows.filter(\.isMiniaturized)
+
+        for window in windows where window.isVisible || window.isMiniaturized {
+            
+            guard let observer = mainWindowObservers.object(forKey: window) else {
+                continue
+            }
+            
+            observer.settingsRequested.wrappedValue = true
+            
+            if window.isMiniaturized {
+                window.deminiaturize(nil)
+            }
+            
+            window.makeKeyAndOrderFront(nil)
+            
+            return true
+        }
+        
+        return false
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
 

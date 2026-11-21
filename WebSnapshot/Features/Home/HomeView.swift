@@ -10,6 +10,8 @@ struct HomeView: View {
     
     @Query private var appearanceSettings: [AppearanceSettings]
     
+    @Binding var settingsRequested: Bool
+    
     private var librarySyncState: LibrarySyncState { librarySyncService.librarySyncState }
 
     private var appearance: AppearanceSettings.Appearance {
@@ -78,14 +80,26 @@ struct HomeView: View {
             _, changedAppearance in
             updateApplicationAppearance(changedAppearance)
         }
+        .onChange(of: settingsRequested, initial: true) {
+            
+            guard settingsRequested else {
+                return
+            }
+
+            homeViewState.navigationDestination = .settings
+            
+            settingsRequested = false
+            
+        }
     }
 }
 
 #Preview {
     let librarySyncService = LibrarySyncService()
-    let contentService = LibraryContentService(librarySyncService)
+    
+    let libraryContentService = LibraryContentService(librarySyncService)
 
-    HomeView()
-        .environmentObject(contentService)
+    HomeView(settingsRequested: .constant(false))
+        .environmentObject(libraryContentService)
         .environmentObject(librarySyncService)
 }
