@@ -385,8 +385,16 @@ struct LibraryView:View {
             }
         }
         .contextMenu {
+            //
+            // Right click menu
+            //
+            
             Button("Open PDF") {
                 LibraryViewService.openPDF(libraryViewState, modelContext, pdfFile, librarySyncService)
+            }
+            
+            Button("Preview"){
+                
             }
             
             Button("Edit Tags…") {
