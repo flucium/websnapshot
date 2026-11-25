@@ -7,11 +7,19 @@ import SwiftData
 struct WebSnapshotApp: App {
     @NSApplicationDelegateAdaptor(WebSnapshotAppDelegate.self) private var appDelegate
 
+    @State private var pdfPreviewRequest: PDFPreviewRequest?
+
     var body: some Scene {
+        //
+        // ===
+        //
         WindowGroup(for: MainWindowRequest.self) {
             $request in
             WebSnapshotRootView(libraryStartupService: appDelegate.libraryStartupService, mainWindowRequest: $request, appDelegate: appDelegate )
             .frame(minWidth: 980, minHeight: 400)
+            .environment(\.requestPDFPreview, { request in
+                pdfPreviewRequest = request
+            })
         }
         .defaultSize(width: 1000, height: 600)
         .windowResizability(.contentMinSize)
@@ -19,11 +27,33 @@ struct WebSnapshotApp: App {
             AppCommands(appDelegate: appDelegate)
         }
 
+        // About window
         Window("About WebSnapshot", id: AboutView.windowID) {
             AboutView()
         }
         .defaultSize(width: 540, height: 400)
         .windowResizability(.contentMinSize)
+        .commandsRemoved()
+
+        // Preview Window
+        Window("PDF Preview", id: PDFPreviewView.windowID) {
+            ZStack {
+                
+                if let pdfPreviewRequest {
+                
+                    PDFPreviewView(pdfPreviewRequest)
+                        .id(pdfPreviewRequest.id)
+                }
+                
+            }
+            .frame(minWidth: 320, minHeight: 400)
+            .onDisappear {
+                pdfPreviewRequest = nil
+            }
+        }
+        .defaultSize(width: 820, height: 900)
+        .windowResizability(.contentMinSize)
+        .restorationBehavior(.disabled)
         .commandsRemoved()
     }
 }
