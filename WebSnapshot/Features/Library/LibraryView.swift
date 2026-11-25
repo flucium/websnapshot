@@ -15,6 +15,10 @@ struct LibraryView:View {
 
     @Environment(\.modelContext) private var modelContext
 
+    @Environment(\.openWindow) private var openWindow
+
+    @Environment(\.requestPDFPreview) private var requestPDFPreview
+
     @Query private var pdfFiles: [PDFFile]
     
     @Query private var pdfTags: [PDFTag]
@@ -353,7 +357,7 @@ struct LibraryView:View {
                 
             } else if pdfFile.syncRelativePath != nil, libraryViewState.fileAvailability(pdfFile) != .available {
                 
-                Text("In iCloud — open to download").font(.caption).foregroundStyle(.secondary)
+                Text("In iCloud — open or preview to download").font(.caption).foregroundStyle(.secondary)
                 
             }
 
@@ -393,9 +397,16 @@ struct LibraryView:View {
                 LibraryViewService.openPDF(libraryViewState, modelContext, pdfFile, librarySyncService)
             }
             
-            Button("Preview"){
+            Button("Preview") {
+                guard let requestPDFPreview else {
+                    return
+                }
+
+                requestPDFPreview( PDFPreviewRequest(pdfFile, storageSettings.first) )
                 
+                openWindow(id: PDFPreviewView.windowID)
             }
+            .disabled(requestPDFPreview == nil)
             
             Button("Edit Tags…") {
                 editTags(pdfFile)
