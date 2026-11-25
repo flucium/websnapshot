@@ -55,9 +55,6 @@ struct PDFPreviewRequest: Identifiable {
     }
 }
 
-extension EnvironmentValues {
-    @Entry var requestPDFPreview: (@MainActor (PDFPreviewRequest) -> Void)? = nil
-}
 
 struct PDFPreviewView: View {
 
