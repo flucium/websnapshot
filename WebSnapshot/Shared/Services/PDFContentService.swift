@@ -113,7 +113,7 @@ actor PDFContentService {
         return "1:\(modified.timeIntervalSince1970):\(size):\(inode)"
     }
 
-    nonisolated static func render(_ pdfPage: PDFPage, _ dpi: CGFloat) throws -> CGImage {
+    nonisolated static func render(_ pdfPage: PDFPage, _ dpi: CGFloat, maximumHeightRatio: CGFloat = .infinity) throws -> CGImage {
 
         let pageBounds = pdfPage.bounds(for: .cropBox)
 
@@ -123,9 +123,11 @@ actor PDFContentService {
 
         let pageWidth = swapsDimensions ? pageBounds.height : pageBounds.width
 
-        let pageHeight = swapsDimensions ? pageBounds.width : pageBounds.height
+        let fullPageHeight = swapsDimensions ? pageBounds.width : pageBounds.height
 
-        guard pageWidth.isFinite, pageHeight.isFinite, pageWidth > 0, pageHeight > 0, dpi.isFinite, dpi > 0 else {
+        let pageHeight = min(fullPageHeight, pageWidth * maximumHeightRatio)
+
+        guard pageWidth.isFinite, fullPageHeight.isFinite, pageWidth > 0, pageHeight > 0, dpi.isFinite, dpi > 0, maximumHeightRatio > 0 else {
             throw AppError.textRecognitionFailed("The PDF page has an invalid image size.")
         }
 
@@ -164,6 +166,8 @@ actor PDFContentService {
         context.saveGState()
 
         context.scaleBy(x: scale, y: scale)
+
+        context.translateBy(x: 0, y: pageHeight - fullPageHeight)
 
         pdfPage.draw(with: .cropBox, to: context)
 
