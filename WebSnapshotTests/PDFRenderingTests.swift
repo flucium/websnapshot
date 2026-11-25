@@ -33,7 +33,7 @@ final class PDFRenderingTests: XCTestCase {
         }
     }
 
-    func testRotatedAndCroppedPagesKeepBothCornerMarkers() throws {
+    func testRotatedAndCroppedPagesRenderExpectedCornerMarkers() throws {
         let data = NSMutableData()
         var mediaBox = CGRect(x: 0, y: 0, width: 612, height: 792)
         let consumer = try XCTUnwrap(CGDataConsumer(data: data))
@@ -61,6 +61,16 @@ final class PDFRenderingTests: XCTestCase {
             XCTAssertGreaterThan(counts.red, 3_400, "Red marker clipped at \(rotation) degrees")
             XCTAssertGreaterThan(counts.blue, 3_400, "Blue marker clipped at \(rotation) degrees")
         }
+
+        page.rotation = 0
+
+        let pageTop = try PDFContentService.render(page, 72, maximumHeightRatio: 1)
+        let counts = try markerPixelCounts(pageTop)
+
+        XCTAssertEqual(pageTop.width, 512)
+        XCTAssertEqual(pageTop.height, 512)
+        XCTAssertEqual(counts.red, 0)
+        XCTAssertGreaterThan(counts.blue, 3_400)
     }
 
     private func markerPixelCounts(_ image: CGImage) throws -> (red: Int, blue: Int) {
