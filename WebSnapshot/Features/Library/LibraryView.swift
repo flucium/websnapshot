@@ -8,7 +8,7 @@ struct LibraryView:View {
     @StateObject private var libraryViewState = LibraryViewState()
     
     @StateObject private var libraryPDFFileMonitor = LibraryPDFFileMonitor()
-    
+
     @EnvironmentObject private var libraryContentService: LibraryContentService
 
     @EnvironmentObject private var librarySyncService: LibrarySyncService
@@ -28,11 +28,9 @@ struct LibraryView:View {
     private var moveDeletedFilesToTrash: Bool {
         storageSettings.first?.moveDeletedFilesToTrash ?? true
     }
-
     
     private var libraryContentState: LibraryContentState { libraryContentService.state }
 
-    
     var body: some View {
         Group {
             if libraryViewState.selectedPDFFile == nil {
@@ -94,21 +92,27 @@ struct LibraryView:View {
             AlertModal.show(libraryViewState.errorTitle, appError)
         }
         .confirmationDialog(moveDeletedFilesToTrash ? "Move PDF to Trash?" : "Delete PDF?", isPresented: $libraryViewState.showDeleteConfirmation, titleVisibility: .visible) {
+            
             Button(moveDeletedFilesToTrash ? "Move to Trash" : "Delete", role: .destructive) {
                 LibraryViewService.confirmDeletion(libraryViewState, modelContext, librarySyncService)
             }
+            
             Button("Cancel", role: .cancel) {
                 libraryViewState.pendingDeletionPDFFile = nil
             }
+            
         } message: {
+            
             if let pdfFile = libraryViewState.pendingDeletionPDFFile {
                 Text(moveDeletedFilesToTrash
                      ? "\(pdfFile.resolvedURL.lastPathComponent) will be moved to Trash."
                      : "\(pdfFile.resolvedURL.lastPathComponent) will be permanently deleted. This cannot be undone.")
             }
+            
             if storageSettings.first?.syncEnabled == true {
                 Text("This deletion will also sync to your other devices.")
             }
+            
         }
         .sheet(item: $libraryViewState.tagEditorPDFFile,onDismiss: libraryViewState.closeTagEditor) {
             pdfFile in
@@ -121,12 +125,7 @@ struct LibraryView:View {
             tagSidebar()
 
             VStack {
-                HStack {
-                    searchTextFieldView()
-
-                    searchTextModeView()
-                }
-                .padding(.horizontal)
+                searchControlsView()
 
                 if libraryContentState.pendingCount > 0 {
                     HStack {
@@ -176,6 +175,37 @@ struct LibraryView:View {
                 }
             }
             .frame(minWidth: 300, maxWidth: .infinity, maxHeight: .infinity)
+
+            snapshotHistorySidebar(selectedPDFRow)
+        }
+    }
+
+    private func snapshotHistorySidebar(_ pdfFile: PDFFile?) -> some View {
+        Group {
+            if let pdfFile {
+                let snapshotHistoryViewState = SnapshotHistoryViewService.makeState(pdfFile, existingPDFFiles)
+
+                snapshotHistoryView(snapshotHistoryViewState, .sidebar)
+            } else {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Version History")
+                        .font(.headline)
+
+                    Text("Select a PDF to see its version history.")
+                        .foregroundStyle(.secondary)
+                }
+                .padding(12)
+            }
+        }
+        .frame(minWidth: 215, idealWidth: 250, maxWidth: 304, maxHeight: .infinity, alignment: .topLeading)
+        .background(Color(nsColor: .windowBackgroundColor))
+    }
+
+    private func snapshotHistoryView(_ snapshotHistoryViewState: SnapshotHistoryViewState, _ placement: SnapshotHistoryView.Placement) -> some View {
+        SnapshotHistoryView(snapshotHistoryViewState, placement) {
+            pdfFile in
+
+            SnapshotHistoryViewService.openVersion(libraryViewState, modelContext, pdfFile, librarySyncService)
         }
     }
 
@@ -194,7 +224,9 @@ struct LibraryView:View {
         pdfFiles.map {
             LibraryViewState.FileSource($0)
         }
-        .sorted { $0.url.absoluteString < $1.url.absoluteString }
+        .sorted {
+            $0.url.absoluteString < $1.url.absoluteString
+        }
     }
 
     private var existingPDFFiles: [PDFFile] {
@@ -206,10 +238,16 @@ struct LibraryView:View {
     private var availableTags: [PDFTag] {
         let existingFileIDs = Set(existingPDFFiles.map(\.persistentModelID))
 
-        return pdfTags.filter { tag in
-            tag.pdfFiles.contains { existingFileIDs.contains($0.persistentModelID) }
+        return pdfTags.filter {
+            tag in
+            
+            tag.pdfFiles.contains {
+                existingFileIDs.contains($0.persistentModelID)
+            }
         }
-        .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+        .sorted {
+            $0.name.localizedStandardCompare($1.name) == .orderedAscending
+        }
     }
 
     private var availableTagNames: [String] {
@@ -226,7 +264,9 @@ struct LibraryView:View {
             case .untagged:
                 pdfFile.tags.isEmpty
             case .tag(let name):
-                pdfFile.tags.contains { $0.normalizedName == name }
+                pdfFile.tags.contains {
+                    $0.normalizedName == name
+                }
             }
 
             return matchesSelectedTag && LibrarySearch.matches(pdfFile,libraryViewState.searchText,libraryViewState.selectedSearchMode, title: libraryViewState.fileURL(pdfFile).lastPathComponent)
@@ -266,15 +306,33 @@ struct LibraryView:View {
         .background(Color(nsColor: .windowBackgroundColor))
     }
 
-    private func searchTextFieldView() -> some View{
-        HStack{
-            TextField("Search", text:$libraryViewState.searchText)
-                .textFieldStyle(.roundedBorder)
+    private func searchControlsView() -> some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 8) {
+                searchTextFieldView()
+                    .frame(minWidth: 160, maxWidth: .infinity)
+
+                searchTextModeView()
+                    .fixedSize(horizontal: true, vertical: false)
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                searchTextFieldView()
+
+                searchTextModeView()
+            }
         }
-        .padding(.top,10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal)
+        .padding(.top, 10)
     }
 
-    private func searchTextModeView() -> some View{
+    private func searchTextFieldView() -> some View {
+        TextField("Search", text: $libraryViewState.searchText)
+            .textFieldStyle(.roundedBorder)
+    }
+
+    private func searchTextModeView() -> some View {
         Picker("Search mode", selection: $libraryViewState.selectedSearchMode) {
             ForEach(LibrarySearchMode.allCases, id: \.self) {
                 searchMode in
@@ -282,16 +340,35 @@ struct LibraryView:View {
                     .tag(searchMode)
             }
         }
-        .pickerStyle(.radioGroup)
-        .horizontalRadioGroupLayout()
+        .pickerStyle(.segmented)
+        .labelsHidden()
     }
 
     private func pdfListView() -> some View{
-        List(selection: $libraryViewState.selectedPDFRowID) {
-            ForEach(displayedPDFFiles) { pdfFile in
+        let files = displayedPDFFiles
+
+        return List(selection: $libraryViewState.selectedPDFRowID) {
+            ForEach(files) {
+                pdfFile in
+                
                 pdfRow(pdfFile)
                     .tag(pdfFile.persistentModelID)
             }
+        }
+        .contextMenu(forSelectionType: PersistentIdentifier.self) {
+            selection in
+
+            if let id = selection.first, let pdfFile = files.first(where: { $0.persistentModelID == id }) {
+                pdfRowMenu(pdfFile)
+            }
+        } primaryAction: {
+            selection in
+
+            guard let id = selection.first, let pdfFile = files.first(where: { $0.persistentModelID == id }) else {
+                return
+            }
+
+            LibraryViewService.openPDF(libraryViewState, modelContext, pdfFile, librarySyncService)
         }
         .onExitCommand {
             libraryViewState.selectedPDFRowID = nil
@@ -363,7 +440,10 @@ struct LibraryView:View {
 
             if pdfFile.tags.isEmpty == false {
                 HStack(spacing: 6) {
-                    ForEach(rowTags(pdfFile)) { tag in
+                    ForEach(rowTags(pdfFile)) {
+                        
+                        tag in
+                        
                         PDFTagBadge(tag.name)
                     }
 
@@ -375,10 +455,7 @@ struct LibraryView:View {
                 }
             }
         }
-        .contentShape(Rectangle())
-        .simultaneousGesture(TapGesture(count: 2).onEnded {
-            LibraryViewService.openPDF(libraryViewState, modelContext, pdfFile, librarySyncService)
-        })
+        .frame(maxWidth: .infinity, alignment: .leading)
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
             Button("Delete", role: .destructive) {
                 LibraryViewService.requestDeletion(libraryViewState, modelContext, pdfFile, librarySyncService)
@@ -388,41 +465,39 @@ struct LibraryView:View {
                 LibraryViewService.copyFilePath(libraryViewState, pdfFile)
             }
         }
-        .contextMenu {
-            //
-            // Right click menu
-            //
-            
-            Button("Open PDF") {
-                LibraryViewService.openPDF(libraryViewState, modelContext, pdfFile, librarySyncService)
-            }
-            
-            Button("Preview") {
-                guard let requestPDFPreview else {
-                    return
-                }
+    }
 
-                requestPDFPreview( PDFPreviewRequest(pdfFile, storageSettings.first) )
-                
-                openWindow(id: PDFPreviewView.windowID)
-            }
-            .disabled(requestPDFPreview == nil)
-            
-            Button("Edit Tags…") {
-                editTags(pdfFile)
+    @ViewBuilder
+    private func pdfRowMenu(_ pdfFile: PDFFile) -> some View {
+        Button("Open PDF") {
+            LibraryViewService.openPDF(libraryViewState, modelContext, pdfFile, librarySyncService)
+        }
+
+        Button("Preview") {
+            guard let requestPDFPreview else {
+                return
             }
 
-            Button("Export PDF…") {
-                LibraryViewService.exportPDF(libraryViewState, pdfFile)
-            }
-            
-            Button("Copy File Path") {
-                LibraryViewService.copyFilePath(libraryViewState, pdfFile)
-            }
-            
-            Button("Delete", role: .destructive) {
-                LibraryViewService.requestDeletion(libraryViewState, modelContext, pdfFile, librarySyncService)
-            }
+            requestPDFPreview( PDFPreviewRequest(pdfFile, storageSettings.first) )
+
+            openWindow(id: PDFPreviewView.windowID)
+        }
+        .disabled(requestPDFPreview == nil)
+
+        Button("Edit Tags…") {
+            editTags(pdfFile)
+        }
+
+        Button("Export PDF…") {
+            LibraryViewService.exportPDF(libraryViewState, pdfFile)
+        }
+
+        Button("Copy File Path") {
+            LibraryViewService.copyFilePath(libraryViewState, pdfFile)
+        }
+
+        Button("Delete", role: .destructive) {
+            LibraryViewService.requestDeletion(libraryViewState, modelContext, pdfFile, librarySyncService)
         }
     }
 
@@ -430,6 +505,8 @@ struct LibraryView:View {
         
         VStack(spacing: 8){
             if let selectedPDFFile = libraryViewState.selectedPDFFile{
+                let snapshotHistoryViewState = SnapshotHistoryViewService.makeState(selectedPDFFile, existingPDFFiles)
+
                 HStack {
                     Button("Back",action: {
                         LibraryViewService.closeDisplayedPDF(libraryViewState)
@@ -450,7 +527,15 @@ struct LibraryView:View {
                         .lineLimit(1)
                     
                     Spacer()
-
+                    
+                    if snapshotHistoryViewState.hasHistory {
+                        Button("History") {
+                            libraryViewState.showSnapshotHistory = true
+                        }
+                        .popover(isPresented: $libraryViewState.showSnapshotHistory) {
+                            snapshotHistoryView(snapshotHistoryViewState, .popover)
+                        }
+                    }
                     Button("Export PDF…") {
                         LibraryViewService.exportPDF(libraryViewState, selectedPDFFile)
                     }
@@ -462,6 +547,8 @@ struct LibraryView:View {
                     Button("Delete", role: .destructive,action: {
                         LibraryViewService.requestDeletion(libraryViewState, modelContext, selectedPDFFile, librarySyncService)
                     })
+                    
+                    
 
 
                 }
@@ -493,7 +580,9 @@ struct LibraryView:View {
     }
 
     private func rowTags(_ pdfFile: PDFFile) -> [PDFTag] {
-        Array(pdfFile.tags.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }.prefix(5))
+        Array(pdfFile.tags.sorted {
+            $0.name.localizedStandardCompare($1.name) == .orderedAscending
+        }.prefix(5))
     }
 
 }
