@@ -3,7 +3,7 @@ import SwiftData
 
 @MainActor
 enum PDFFileService {
-    static func register(_ context: ModelContext, _ url: URL) throws {
+    static func register(_ context: ModelContext, _ url: URL, _ sourceURL: URL? = nil) throws {
        
         let bookmark = try URL.securityScopedBookmarkData(url)
         
@@ -21,9 +21,14 @@ enum PDFFileService {
             pdfFile.searchableText = nil
             
             pdfFile.contentFingerprint = nil
+
+            if let sourceURL {
+                pdfFile.sourceURL = sourceURL
+                pdfFile.addedAt = Date()
+            }
             
         } else {
-            context.insert(PDFFile(url, bookmark, Date()))
+            context.insert(PDFFile(url, bookmark, Date(), sourceURL))
         }
     }
 
