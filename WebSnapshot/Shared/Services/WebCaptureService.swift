@@ -19,8 +19,12 @@ enum WebCaptureService {
         try Task.checkCancellation()
         
         let settings = try context.fetch(FetchDescriptor<StorageSettings>())
+
+        let sourceURL = page.url
         
-        return try LibraryService.savePDF(document.data, URL.pdfFileName(page.title, page.url), context, settings, librarySyncService, chooseDestination: { name in
+        return try LibraryService.savePDF(document.data, URL.pdfFileName(page.title, sourceURL), context, settings, librarySyncService, sourceURL: sourceURL, chooseDestination: {
+            name in
+            
             let destination = chooseDestination(name)
 
             return Task.isCancelled ? nil : destination
