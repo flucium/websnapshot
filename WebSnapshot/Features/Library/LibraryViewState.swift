@@ -82,6 +82,8 @@ final class LibraryViewState:ObservableObject{
     
     @Published private(set) var translationRequest: TranslationRequest?
     
+    @Published var showSnapshotHistory = false
+
     @Published var selectedPDFFile: PDFFile? {
         didSet {
             if oldValue?.persistentModelID != selectedPDFFile?.persistentModelID {
