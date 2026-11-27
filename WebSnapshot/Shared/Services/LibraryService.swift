@@ -4,12 +4,12 @@ import SwiftData
 
 @MainActor
 enum LibraryService {
-    static func savePDF(_ data: Data, _ fileName: String, _ context: ModelContext, _ storageSettings: [StorageSettings], _ librarySyncService:LibrarySyncService, chooseDestination: ((String) -> URL?)? = nil) throws -> URL? {
+    static func savePDF(_ data: Data, _ fileName: String, _ context: ModelContext, _ storageSettings: [StorageSettings], _ librarySyncService:LibrarySyncService, sourceURL: URL? = nil, chooseDestination: ((String) -> URL?)? = nil) throws -> URL? {
         
         try librarySyncService.requireReady()
         
         if LibrarySyncService.isEnabled(context) {
-            return try saveSyncedPDF(data, fileName, context)
+            return try saveSyncedPDF(data, fileName, context, sourceURL: sourceURL)
         }
 
         switch StorageSettingsService.storage(storageSettings) {
@@ -21,7 +21,7 @@ enum LibraryService {
             try refreshLocations(context,  librarySyncService)
             
             try PDFFileStore.write(data, to: destination) {
-                try registerPDF(context, $0, librarySyncService)
+                try registerPDF(context, $0, librarySyncService, sourceURL: sourceURL)
             }
             
             return destination
@@ -42,21 +42,21 @@ enum LibraryService {
             try refreshLocations(context, librarySyncService)
             
             return try PDFFileStore.save(data, fileName, in: directory) {
-                try registerPDF(context, $0, librarySyncService)
+                try registerPDF(context, $0, librarySyncService, sourceURL: sourceURL)
             }
         }
     }
 
-    static func registerPDF(_ context: ModelContext, _ url: URL, _ librarySyncService: LibrarySyncService) throws {
+    static func registerPDF(_ context: ModelContext, _ url: URL, _ librarySyncService: LibrarySyncService, sourceURL: URL? = nil) throws {
         try librarySyncService.requireReady()
         
         
         try update(context, "The PDF could not be added to the library.") {
             
             if LibrarySyncService.isEnabled(context) {
-                try registerSyncedPDF(url, context)
+                try registerSyncedPDF(url, context, sourceURL: sourceURL)
             } else {
-                try PDFFileService.register(context, url)
+                try PDFFileService.register(context, url, sourceURL)
             }
             
             return true
@@ -243,7 +243,7 @@ enum LibraryService {
         }
     }
 
-    private static func saveSyncedPDF(_ data: Data, _ fileName: String, _ context: ModelContext) throws -> URL {
+    private static func saveSyncedPDF(_ data: Data, _ fileName: String, _ context: ModelContext, sourceURL: URL? = nil) throws -> URL {
         guard let setting = try LibrarySyncSettings.settings(context), setting.syncEnabled else {
             throw AppError.error("Sync is not enabled.")
         }
@@ -253,13 +253,13 @@ enum LibraryService {
 
         return try SyncFileStore(root: root).write(data, fileName, id) { url, hash in
             try update(context, "The PDF could not be added to the library.") {
-                try registerSyncedPDF(url, context, id: id, hash: hash)
+                try registerSyncedPDF(url, context, id: id, hash: hash, sourceURL: sourceURL)
                 return true
             }
         }
     }
 
-    private static func registerSyncedPDF(_ url: URL, _ context: ModelContext, id: UUID? = nil, hash: String? = nil) throws {
+    private static func registerSyncedPDF(_ url: URL, _ context: ModelContext, id: UUID? = nil, hash: String? = nil, sourceURL: URL? = nil) throws {
         guard let setting = try LibrarySyncSettings.settings(context), setting.syncEnabled else {
             return
         }
@@ -276,7 +276,7 @@ enum LibraryService {
         let path = try SyncFileStore(root: root).relativePath(url)
         let contentHash = try hash ?? SyncFileStore.contentHash(url)
 
-        try LibrarySyncRepository.registerPDF(url, context, setting, path, contentHash, id: id)
+        try LibrarySyncRepository.registerPDF(url, context, setting, path, contentHash, id, sourceURL)
     }
 
     private static func removeSyncedPDFRecords(_ context: ModelContext, _ url: URL, _ librarySyncService: LibrarySyncService, _ removeFile: ((URL) throws -> Void)?) throws {
@@ -461,9 +461,9 @@ enum LibrarySyncRepository {
         }
     }
 
-    static func registerPDF(_ url: URL, _ context: ModelContext, _ storageSettings: StorageSettings, _ path: String, _ hash: String, id: UUID? = nil) throws {
-        let entries = try context.fetch( FetchDescriptor<PDFFile>() )
+    static func registerPDF(_ url: URL, _ context: ModelContext, _ storageSettings: StorageSettings, _ path: String, _ hash: String, _ id: UUID? = nil, _ sourceURL: URL? = nil) throws {
         
+        let entries = try context.fetch( FetchDescriptor<PDFFile>() )
         
         let pdfFile = entries.first {
             $0.url.standardizedFileURL == url.standardizedFileURL
@@ -477,6 +477,10 @@ enum LibrarySyncRepository {
         
         
         pdfFile.libraryID = pdfFile.libraryID ?? id ?? UUID()
+
+        if let sourceURL {
+            pdfFile.sourceURL = sourceURL
+        }
         
         pdfFile.url = url
         
