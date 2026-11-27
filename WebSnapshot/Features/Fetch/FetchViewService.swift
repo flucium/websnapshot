@@ -83,7 +83,11 @@ final class FetchViewService {
                     return
                 }
                 
-                guard try LibraryService.savePDF(document.data, URL.pdfFileName(page.title, page.url), modelContext, storageSettings, librarySyncService, chooseDestination: { name in
+                let sourceURL = page.url
+
+                guard try LibraryService.savePDF(document.data, URL.pdfFileName(page.title, sourceURL), modelContext, storageSettings, librarySyncService, sourceURL: sourceURL, chooseDestination: {
+                    
+                    name in
                     
                     let destination = savePanel(name)
 
