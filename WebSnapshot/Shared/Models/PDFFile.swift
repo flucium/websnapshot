@@ -4,6 +4,8 @@ import SwiftData
 @Model
 final class PDFFile {
     var url: URL
+
+    var sourceURL: URL? = nil
     
     var bookmarkData: Data?
     
@@ -25,9 +27,11 @@ final class PDFFile {
 
     var syncBaselineContentHash: String? = nil
     
-    init(_ url: URL,_ bookmarkData:Data? = nil, _ addedAt: Date? = nil) {
+    init(_ url: URL,_ bookmarkData:Data? = nil, _ addedAt: Date? = nil, _ sourceURL: URL? = nil) {
     
         self.url = url
+
+        self.sourceURL = sourceURL
         
         self.bookmarkData = bookmarkData
         
